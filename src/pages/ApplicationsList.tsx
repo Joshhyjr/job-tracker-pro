@@ -1,20 +1,24 @@
 import { useMemo, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Search, ArrowUpDown } from "lucide-react";
-import type { JobApplication, CurrentStatus } from "@/lib/types";
+import { Search, ArrowUpDown, MoreHorizontal } from "lucide-react";
+import type { JobApplication, CurrentStatus, ActivityLogEntry } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { updateApplication, generateId } from "@/lib/storage";
+import { useToast } from "@/hooks/use-toast";
 
-export default function ApplicationsList({ applications, onSelect }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void }) {
+export default function ApplicationsList({ applications, onSelect, onUpdate }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: () => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
   const activeStatus = searchParams.get("status") as CurrentStatus | null;
+  const { toast } = useToast();
 
   const filtered = useMemo(() => {
     let list = applications;
@@ -31,6 +35,14 @@ export default function ApplicationsList({ applications, onSelect }: { applicati
     });
     return list;
   }, [applications, activeStatus, search, sortAsc]);
+
+  function handleChangeStatus(app: JobApplication, status: CurrentStatus) {
+    const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
+    const updatedApp = { ...app, currentStatus: status, activityLog: [entry, ...(app.activityLog || [])] };
+    updateApplication(updatedApp);
+    onUpdate();
+    toast({ title: "Status Updated", description: `Marked as ${status}` });
+  }
 
   return (
     <div className="space-y-4">
@@ -70,11 +82,12 @@ export default function ApplicationsList({ applications, onSelect }: { applicati
               <TableHead className="cursor-pointer select-none" onClick={() => setSortAsc(!sortAsc)}>
                 <span className="flex items-center gap-1">Date <ArrowUpDown className="h-3 w-3" /></span>
               </TableHead>
+              <TableHead className="w-12 text-right"><span className="sr-only">Actions</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No applications found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No applications found</TableCell></TableRow>
             ) : filtered.map((a) => (
               <TableRow key={a.id} className="cursor-pointer" onClick={() => onSelect(a)}>
                 <TableCell className="font-medium">{a.jobTitle}</TableCell>
@@ -82,6 +95,21 @@ export default function ApplicationsList({ applications, onSelect }: { applicati
                 <TableCell className="hidden md:table-cell">{a.location}</TableCell>
                 <TableCell><StatusBadge status={a.currentStatus} /></TableCell>
                 <TableCell className="text-muted-foreground text-sm">{a.dateApplied}</TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
+                        <MoreHorizontal className="h-4 w-4" />
+                        <span className="sr-only">Actions</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                      {CURRENT_STATUSES.map((s) => (
+                        <DropdownMenuItem key={s} onClick={() => handleChangeStatus(a, s)} disabled={a.currentStatus === s}>{s}</DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

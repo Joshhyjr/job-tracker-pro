@@ -13,13 +13,29 @@ import FollowUps from "@/pages/FollowUps";
 import NotFound from "./pages/NotFound";
 import { useApplications } from "@/hooks/useApplications";
 import { exportCSV, exportXLSX } from "@/lib/export";
+import { importApplicationsFromFile, markSeeded, saveApplications } from "@/lib/storage";
 import type { JobApplication } from "@/lib/types";
+import { useToast } from "@/hooks/use-toast";
 
 const queryClient = new QueryClient();
 
 function AppContent() {
   const { applications, loading, refresh } = useApplications();
   const [selectedApp, setSelectedApp] = useState<JobApplication | null>(null);
+  const { toast } = useToast();
+
+  async function handleImportXLSX(file: File) {
+    try {
+      const imported = await importApplicationsFromFile(file);
+      saveApplications(imported);
+      markSeeded();
+      refresh();
+      setSelectedApp(null);
+      toast({ title: "Import complete", description: `Loaded ${imported.length} applications from ${file.name}.` });
+    } catch {
+      toast({ title: "Import failed", description: "Could not read this file. Please verify the XLSX format.", variant: "destructive" });
+    }
+  }
 
   if (loading) {
     return (
@@ -31,7 +47,7 @@ function AppContent() {
 
   return (
     <>
-      <AppNavbar onExportCSV={() => exportCSV(applications)} onExportXLSX={() => exportXLSX(applications)} />
+      <AppNavbar onExportCSV={() => exportCSV(applications)} onExportXLSX={() => exportXLSX(applications)} onImportXLSX={handleImportXLSX} />
       <main className="container py-6">
         <Routes>
           <Route path="/" element={<Dashboard applications={applications} />} />
@@ -41,7 +57,7 @@ function AppContent() {
               selectedApp ? (
                 <ApplicationDetail application={selectedApp} onBack={() => setSelectedApp(null)} onUpdate={() => { refresh(); setSelectedApp(null); }} />
               ) : (
-                <ApplicationsList applications={applications} onSelect={setSelectedApp} />
+                <ApplicationsList applications={applications} onSelect={setSelectedApp} onUpdate={refresh} />
               )
             }
           />

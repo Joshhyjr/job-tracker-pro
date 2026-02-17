@@ -1,8 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download } from "lucide-react";
+import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { ChangeEvent, useRef, useState } from "react";
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -11,9 +10,26 @@ const links = [
   { to: "/add", label: "Add New", icon: PlusCircle },
 ];
 
-export default function AppNavbar({ onExportCSV, onExportXLSX }: { onExportCSV: () => void; onExportXLSX: () => void }) {
+export default function AppNavbar({
+  onExportCSV,
+  onExportXLSX,
+  onImportXLSX,
+}: {
+  onExportCSV: () => void;
+  onExportXLSX: () => void;
+  onImportXLSX: (file: File) => Promise<void>;
+}) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImportChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await onImportXLSX(file);
+    e.target.value = "";
+    setOpen(false);
+  }
 
   return (
     <nav className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -33,6 +49,7 @@ export default function AppNavbar({ onExportCSV, onExportXLSX }: { onExportCSV: 
             </Button>
           ))}
           <div className="ml-2 flex gap-1">
+            <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()}><Upload className="h-3.5 w-3.5 mr-1" />Import XLSX</Button>
             <Button variant="outline" size="sm" onClick={onExportCSV}><Download className="h-3.5 w-3.5 mr-1" />CSV</Button>
             <Button variant="outline" size="sm" onClick={onExportXLSX}><Download className="h-3.5 w-3.5 mr-1" />XLSX</Button>
           </div>
@@ -57,12 +74,20 @@ export default function AppNavbar({ onExportCSV, onExportXLSX }: { onExportCSV: 
               </Button>
             ))}
             <div className="flex gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => importInputRef.current?.click()}>Import</Button>
               <Button variant="outline" size="sm" className="flex-1" onClick={() => { onExportCSV(); setOpen(false); }}>CSV</Button>
               <Button variant="outline" size="sm" className="flex-1" onClick={() => { onExportXLSX(); setOpen(false); }}>XLSX</Button>
             </div>
           </div>
         </div>
       )}
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleImportChange}
+      />
     </nav>
   );
 }

@@ -4,7 +4,7 @@ import type { JobApplication, CurrentStatus, ResponseStatus } from "./types";
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
 
-function generateId(): string {
+export function generateId(): string {
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 }
 
@@ -52,6 +52,18 @@ export async function loadSeedData(): Promise<JobApplication[]> {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
 
+  return mapRowsToApplications(rows);
+}
+
+export async function importApplicationsFromFile(file: File): Promise<JobApplication[]> {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+  return mapRowsToApplications(rows);
+}
+
+function mapRowsToApplications(rows: Record<string, unknown>[]): JobApplication[] {
   return rows
     .filter((r) => r["Job Title"] && String(r["Job Title"]).trim())
     .map((r) => ({

@@ -5,14 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Clock, Edit2, Save, X } from "lucide-react";
+import { ArrowLeft, Clock, Edit2, Save, X, Trash2 } from "lucide-react";
 import type { JobApplication, CurrentStatus, ActivityLogEntry } from "@/lib/types";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
-import { updateApplication } from "@/lib/storage";
+import { updateApplication, deleteApplication, generateId } from "@/lib/storage";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-
-function generateId() { return Math.random().toString(36).substring(2, 9); }
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -47,6 +45,15 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
     toast({ title: "Follow-up Added" });
   }
 
+  function handleDelete() {
+    if (confirm("Are you sure you want to delete this application?")) {
+      deleteApplication(app.id);
+      onUpdate();
+      onBack();
+      toast({ title: "Deleted", description: "Application removed." });
+    }
+  }
+
   const fields = [
     { label: "Job Title", key: "jobTitle" as const },
     { label: "Company", key: "companyName" as const },
@@ -71,9 +78,16 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Details</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => editing ? save() : setEditing(true)}>
-              {editing ? <><Save className="h-3.5 w-3.5 mr-1" />Save</> : <><Edit2 className="h-3.5 w-3.5 mr-1" />Edit</>}
-            </Button>
+            <div className="flex gap-2">
+              {!editing && (
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />Delete
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => editing ? save() : setEditing(true)}>
+                {editing ? <><Save className="h-3.5 w-3.5 mr-1" />Save</> : <><Edit2 className="h-3.5 w-3.5 mr-1" />Edit</>}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             {fields.map((f) => (

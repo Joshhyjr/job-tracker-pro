@@ -6,7 +6,7 @@ import { Briefcase, CalendarDays, Clock, AlertTriangle } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import type { JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
-import { isAfter, subDays, startOfWeek, startOfMonth, parseISO, format, isValid } from "date-fns";
+import { isAfter, isBefore, subDays, startOfWeek, startOfMonth, parseISO, format, isValid } from "date-fns";
 
 const PIE_COLORS = [
   "hsl(213,94%,55%)", "hsl(271,76%,53%)", "hsl(142,71%,45%)",
@@ -33,8 +33,8 @@ export default function Dashboard({ applications }: { applications: JobApplicati
       statusCounts[a.currentStatus] = (statusCounts[a.currentStatus] || 0) + 1;
       const d = safeParseDate(a.dateApplied);
       if (d) {
-        if (isAfter(d, weekStart)) thisWeek++;
-        if (isAfter(d, monthStart)) thisMonth++;
+        if (!isBefore(d, weekStart)) thisWeek++;
+        if (!isBefore(d, monthStart)) thisMonth++;
       }
       // Overdue: applied/no-response > 7 days ago, no follow-up
       if (["Applied", "No Response"].includes(a.currentStatus) && !a.followUps) {
