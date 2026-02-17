@@ -1,8 +1,8 @@
 export type CurrentStatus = "Applied" | "Interview" | "Offer" | "Rejected" | "No Response" | "Withdrawn";
-export type ResponseStatus = "No response yet" | "Auto-reply received" | "Human reply received" | "Interview scheduled" | "Offer received" | "Rejected";
+export type ResponseStatus = string;
 
 export const CURRENT_STATUSES: CurrentStatus[] = ["Applied", "Interview", "Offer", "Rejected", "No Response", "Withdrawn"];
-export const RESPONSE_STATUSES: ResponseStatus[] = ["No response yet", "Auto-reply received", "Human reply received", "Interview scheduled", "Offer received", "Rejected"];
+export const RESPONSE_STATUSES: ResponseStatus[] = ["No Response", "Auto-reply received", "Human reply received", "Interview", "Offer", "Rejected", "Assessment"];
 
 export interface ActivityLogEntry {
   id: string;

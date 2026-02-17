@@ -35,7 +35,7 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
     resolver: zodResolver(schema),
     defaultValues: existing
       ? { jobTitle: existing.jobTitle, companyName: existing.companyName, location: existing.location, currentStatus: existing.currentStatus, responseStatus: existing.responseStatus, followUps: existing.followUps, dateApplied: existing.dateApplied, notes: existing.notes, followUpDate: existing.followUpDate }
-      : { jobTitle: "", companyName: "", location: "", currentStatus: "Applied", responseStatus: "No response yet", followUps: false, dateApplied: new Date().toISOString().split("T")[0], notes: "", followUpDate: "" },
+      : { jobTitle: "", companyName: "", location: "", currentStatus: "Applied", responseStatus: "No Response", followUps: false, dateApplied: new Date().toISOString().split("T")[0], notes: "", followUpDate: "" },
   });
 
   function onSubmit(data: FormData) {

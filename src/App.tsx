@@ -26,12 +26,15 @@ function AppContent() {
 
   async function handleImportXLSX(file: File) {
     try {
-      const imported = await importApplicationsFromFile(file);
+      const { applications: imported, warnings } = await importApplicationsFromFile(file);
       saveApplications(imported);
       markSeeded();
       refresh();
       setSelectedApp(null);
       toast({ title: "Import complete", description: `Loaded ${imported.length} applications from ${file.name}.` });
+      warnings.forEach((warning) => {
+        toast({ title: "Import warning", description: warning });
+      });
     } catch {
       toast({ title: "Import failed", description: "Could not read this file. Please verify the XLSX format.", variant: "destructive" });
     }

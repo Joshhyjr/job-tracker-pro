@@ -4,15 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Briefcase, CalendarDays, Clock, AlertTriangle } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
-import type { JobApplication, CurrentStatus } from "@/lib/types";
-import { CURRENT_STATUSES } from "@/lib/types";
+import type { JobApplication } from "@/lib/types";
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
-
-const PIE_COLORS = [
-  "hsl(213,94%,55%)", "hsl(271,76%,53%)", "hsl(142,71%,45%)",
-  "hsl(0,84%,60%)", "hsl(38,92%,50%)", "hsl(215,16%,47%)",
-];
+import { computeStatusBreakdown, getResponseStatusColor } from "@/lib/responseStatus";
+import { getPreferredResponseStatusOrder } from "@/lib/storage";
 
 function safeParseDate(d: string) {
   if (!d) return null;
@@ -28,10 +24,8 @@ export default function Dashboard({ applications }: { applications: JobApplicati
 
   const stats = useMemo(() => {
     let thisWeek = 0, thisMonth = 0, overdue = 0;
-    const statusCounts: Record<CurrentStatus, number> = { Applied: 0, Interview: 0, Offer: 0, Rejected: 0, "No Response": 0, Withdrawn: 0 };
 
     applications.forEach((a) => {
-      statusCounts[a.currentStatus] = (statusCounts[a.currentStatus] || 0) + 1;
       const d = safeParseDate(a.dateApplied);
       if (d) {
         if (!isBefore(d, weekStart)) thisWeek++;
@@ -40,10 +34,20 @@ export default function Dashboard({ applications }: { applications: JobApplicati
       if (isApplicationOverdue(a, now)) overdue++;
     });
 
-    return { total: applications.length, thisWeek, thisMonth, overdue, statusCounts };
+    return { total: applications.length, thisWeek, thisMonth, overdue };
   }, [applications]);
 
-  const pieData = CURRENT_STATUSES.map((s, i) => ({ name: s, value: stats.statusCounts[s], color: PIE_COLORS[i] })).filter((d) => d.value > 0);
+  const statusBreakdown = useMemo(
+    () => computeStatusBreakdown(applications, getPreferredResponseStatusOrder()),
+    [applications]
+  );
+
+  const pieData = statusBreakdown.map((item) => ({
+    name: item.label,
+    value: item.count,
+    color: getResponseStatusColor(item.key),
+    key: item.key,
+  }));
 
   const monthlyData = useMemo(() => {
     const map = new Map<string, { sortKey: string; label: string; count: number }>();
@@ -101,10 +105,16 @@ export default function Dashboard({ applications }: { applications: JobApplicati
                 </PieChart>
               </ResponsiveContainer>
               <div className="grid grid-cols-2 gap-2">
-                {CURRENT_STATUSES.map((s, i) => (
-                  <Button key={s} variant="ghost" size="sm" className="justify-start gap-2 text-xs" onClick={() => navigate(`/applications?status=${encodeURIComponent(s)}`)}>
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: PIE_COLORS[i] }} />
-                    {s} ({stats.statusCounts[s]})
+                {statusBreakdown.map((item) => (
+                  <Button
+                    key={item.key}
+                    variant="ghost"
+                    size="sm"
+                    className="justify-start gap-2 text-xs"
+                    onClick={() => navigate(`/applications?responseStatus=${encodeURIComponent(item.key)}`)}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: getResponseStatusColor(item.key) }} />
+                    {item.label} ({item.count})
                   </Button>
                 ))}
               </div>

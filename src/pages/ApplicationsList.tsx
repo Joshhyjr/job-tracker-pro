@@ -10,19 +10,28 @@ import { CURRENT_STATUSES } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { updateApplication, generateId } from "@/lib/storage";
+import { getPreferredResponseStatusOrder, updateApplication, generateId } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
+import { computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, normalizeResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationsList({ applications, onSelect, onUpdate }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: () => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
   const activeStatus = searchParams.get("status") as CurrentStatus | null;
+  const activeResponseStatus = searchParams.get("responseStatus");
   const { toast } = useToast();
+  const responseBreakdown = useMemo(
+    () => computeStatusBreakdown(applications, getPreferredResponseStatusOrder()),
+    [applications]
+  );
 
   const filtered = useMemo(() => {
     let list = applications;
-    if (activeStatus) list = list.filter((a) => a.currentStatus === activeStatus);
+    if (activeStatus) list = list.filter((a) => getEffectiveCurrentStatus(a) === activeStatus);
+    if (activeResponseStatus) {
+      list = list.filter((a) => normalizeResponseStatus(a.responseStatus) === activeResponseStatus);
+    }
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((a) =>
@@ -34,7 +43,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
       return sortAsc ? da.localeCompare(db) : db.localeCompare(da);
     });
     return list;
-  }, [applications, activeStatus, search, sortAsc]);
+  }, [applications, activeResponseStatus, activeStatus, search, sortAsc]);
 
   function handleChangeStatus(app: JobApplication, status: CurrentStatus) {
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
@@ -56,11 +65,15 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
 
       {/* Filter chips */}
       <div className="flex flex-wrap gap-2">
-        <Badge variant={!activeStatus ? "default" : "outline"} className="cursor-pointer" onClick={() => setSearchParams({})}>
+        <Badge
+          variant={!activeStatus && !activeResponseStatus ? "default" : "outline"}
+          className="cursor-pointer"
+          onClick={() => setSearchParams({})}
+        >
           All ({applications.length})
         </Badge>
         {CURRENT_STATUSES.map((s) => {
-          const count = applications.filter((a) => a.currentStatus === s).length;
+          const count = applications.filter((a) => getEffectiveCurrentStatus(a) === s).length;
           if (count === 0) return null;
           return (
             <Badge key={s} variant={activeStatus === s ? "default" : "outline"} className="cursor-pointer" onClick={() => setSearchParams({ status: s })}>
@@ -68,6 +81,18 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
             </Badge>
           );
         })}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {responseBreakdown.map((item) => (
+          <Badge
+            key={item.key}
+            variant="outline"
+            className={cn("cursor-pointer", getResponseStatusBadgeClass(item.key, activeResponseStatus === item.key))}
+            onClick={() => setSearchParams({ ...(activeStatus ? { status: activeStatus } : {}), responseStatus: item.key })}
+          >
+            {item.label} ({item.count})
+          </Badge>
+        ))}
       </div>
 
       {/* Table */}
@@ -93,7 +118,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
                 <TableCell className="font-medium">{a.jobTitle}</TableCell>
                 <TableCell className="hidden sm:table-cell">{a.companyName}</TableCell>
                 <TableCell className="hidden md:table-cell">{a.location}</TableCell>
-                <TableCell><StatusBadge status={a.currentStatus} /></TableCell>
+                <TableCell><StatusBadge status={getEffectiveCurrentStatus(a)} /></TableCell>
                 <TableCell className="text-muted-foreground text-sm">{formatDisplayDate(a.dateApplied)}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>

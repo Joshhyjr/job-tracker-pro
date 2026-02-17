@@ -39,16 +39,16 @@ All colors MUST be HSL.
     --radius: 0.5rem;
 
     --status-applied: 213 94% 55%;
-    --status-interview: 271 76% 53%;
+    --status-interview: 142 71% 45%;
     --status-offer: 142 71% 45%;
     --status-rejected: 0 84% 60%;
-    --status-no-response: 38 92% 50%;
+    --status-no-response: 215 10% 28%;
     --status-withdrawn: 215 16% 47%;
     --chart-1: 213 94% 55%;
-    --chart-2: 271 76% 53%;
+    --chart-2: 142 71% 45%;
     --chart-3: 142 71% 45%;
     --chart-4: 0 84% 60%;
-    --chart-5: 38 92% 50%;
+    --chart-5: 215 10% 28%;
     --chart-6: 215 16% 47%;
 
     --sidebar-background: 0 0% 98%;
