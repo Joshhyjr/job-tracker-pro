@@ -44,7 +44,7 @@ function mapResponseStatus(val: unknown): ResponseStatus {
   if (s.includes("rejected")) return "Rejected";
   return "No response yet";
 }
-
+/// Functions below handle parsing and mapping of Excel data to our application's data model.
 export async function loadSeedData(): Promise<JobApplication[]> {
   const resp = await fetch("/seed-data.xlsx");
   const buf = await resp.arrayBuffer();
@@ -55,6 +55,7 @@ export async function loadSeedData(): Promise<JobApplication[]> {
   return mapRowsToApplications(rows);
 }
 
+
 export async function importApplicationsFromFile(file: File): Promise<JobApplication[]> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
@@ -63,6 +64,7 @@ export async function importApplicationsFromFile(file: File): Promise<JobApplica
   return mapRowsToApplications(rows);
 }
 
+// Maps raw Excel rows to our JobApplication data structure, applying necessary transformations and defaults.
 function mapRowsToApplications(rows: Record<string, unknown>[]): JobApplication[] {
   return rows
     .filter((r) => r["Job Title"] && String(r["Job Title"]).trim())

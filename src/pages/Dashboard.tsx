@@ -123,7 +123,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
           <CardHeader><CardTitle className="text-base">Monthly Applications</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={monthlyData} barSize={18} barCategoryGap="60%">
+              <BarChart data={monthlyData} barSize={40} barCategoryGap="20%">
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border) / 0.4)" />
                 <XAxis
                   dataKey="label"
