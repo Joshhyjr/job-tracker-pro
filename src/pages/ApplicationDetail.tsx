@@ -11,6 +11,7 @@ import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { updateApplication, deleteApplication, generateId } from "@/lib/storage";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { formatDisplayDate } from "@/lib/utils";
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -96,7 +97,9 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
                 {editing ? (
                   <Input value={app[f.key]} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} className="mt-1" />
                 ) : (
-                  <p className="mt-1 text-sm">{app[f.key] || "—"}</p>
+                  <p className="mt-1 text-sm">
+                    {f.key === "dateApplied" || f.key === "followUpDate" ? formatDisplayDate(app[f.key]) : (app[f.key] || "—")}
+                  </p>
                 )}
               </div>
             ))}

@@ -8,7 +8,7 @@ import { Search, ArrowUpDown, MoreHorizontal } from "lucide-react";
 import type { JobApplication, CurrentStatus, ActivityLogEntry } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, formatDisplayDate } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { updateApplication, generateId } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
@@ -94,7 +94,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
                 <TableCell className="hidden sm:table-cell">{a.companyName}</TableCell>
                 <TableCell className="hidden md:table-cell">{a.location}</TableCell>
                 <TableCell><StatusBadge status={a.currentStatus} /></TableCell>
-                <TableCell className="text-muted-foreground text-sm">{a.dateApplied}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{formatDisplayDate(a.dateApplied)}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

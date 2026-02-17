@@ -7,13 +7,14 @@ import { Copy, Mail, Linkedin } from "lucide-react";
 import type { JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { isApplicationOverdue } from "@/lib/overdue";
+import { formatDisplayDate } from "@/lib/utils";
 
 function emailTemplate(a: JobApplication) {
   return `Subject: Following Up – ${a.jobTitle} Application
 
 Dear Hiring Team,
 
-I hope this message finds you well. I recently applied for the ${a.jobTitle} position at ${a.companyName} on ${a.dateApplied}, and I wanted to follow up to express my continued interest in this opportunity.
+I hope this message finds you well. I recently applied for the ${a.jobTitle} position at ${a.companyName} on ${formatDisplayDate(a.dateApplied)}, and I wanted to follow up to express my continued interest in this opportunity.
 
 I believe my skills and experience align well with the role, and I would welcome the chance to discuss how I can contribute to your team. Please let me know if there are any updates regarding my application.
 
@@ -23,7 +24,7 @@ Best regards`;
 }
 
 function linkedInTemplate(a: JobApplication) {
-  return `Hi! I recently applied for the ${a.jobTitle} role at ${a.companyName} (${a.dateApplied}) and wanted to follow up. I'm very excited about this opportunity and would love to connect. Looking forward to hearing from you!`;
+  return `Hi! I recently applied for the ${a.jobTitle} role at ${a.companyName} (${formatDisplayDate(a.dateApplied)}) and wanted to follow up. I'm very excited about this opportunity and would love to connect. Looking forward to hearing from you!`;
 }
 
 export default function FollowUps({ applications }: { applications: JobApplication[] }) {
@@ -65,7 +66,7 @@ export default function FollowUps({ applications }: { applications: JobApplicati
                 <TableRow key={a.id}>
                   <TableCell className="font-medium">{a.jobTitle}</TableCell>
                   <TableCell className="hidden sm:table-cell">{a.companyName}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{a.dateApplied}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{formatDisplayDate(a.dateApplied)}</TableCell>
                   <TableCell><StatusBadge status={a.currentStatus} /></TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
