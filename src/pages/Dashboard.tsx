@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Briefcase, CalendarDays, Clock, AlertTriangle } from "lucide-react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
 import { isAfter, isBefore, subDays, startOfWeek, startOfMonth, parseISO, format, isValid } from "date-fns";
@@ -122,21 +122,38 @@ export default function Dashboard({ applications }: { applications: JobApplicati
         <Card>
           <CardHeader><CardTitle className="text-base">Monthly Applications</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={monthlyData}>
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} angle={-35} textAnchor="end" height={50} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={monthlyData} barSize={18} barCategoryGap="60%">
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border) / 0.4)" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  angle={-35}
+                  textAnchor="end"
+                  height={50}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={30}
+                />
                 <Tooltip
+                  cursor={{ fill: "hsl(var(--muted) / 0.3)" }}
                   content={({ payload, label }) => {
                     if (!payload?.length) return null;
                     return (
-                      <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-xl">
-                        <p className="font-medium">{label}: {payload[0].value} applications</p>
+                      <div className="rounded-md border border-border/50 bg-popover px-3 py-1.5 text-xs shadow-sm">
+                        <p className="font-medium text-popover-foreground">{label}</p>
+                        <p className="text-muted-foreground">{payload[0].value} applications</p>
                       </div>
                     );
                   }}
                 />
-                <Bar dataKey="count" fill="hsl(213,94%,55%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill="hsl(213,94%,55%)" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
