@@ -6,7 +6,8 @@ import { Briefcase, CalendarDays, Clock, AlertTriangle } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
-import { isAfter, isBefore, subDays, startOfWeek, startOfMonth, parseISO, format, isValid } from "date-fns";
+import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid } from "date-fns";
+import { isApplicationOverdue } from "@/lib/overdue";
 
 const PIE_COLORS = [
   "hsl(213,94%,55%)", "hsl(271,76%,53%)", "hsl(142,71%,45%)",
@@ -36,14 +37,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
         if (!isBefore(d, weekStart)) thisWeek++;
         if (!isBefore(d, monthStart)) thisMonth++;
       }
-      // Overdue: applied/no-response > 7 days ago, no follow-up
-      if (["Applied", "No Response"].includes(a.currentStatus) && !a.followUps) {
-        const da = safeParseDate(a.dateApplied);
-        if (da && isAfter(subDays(now, 7), da)) overdue++;
-      }
-      // Or follow-up date is past
-      const fud = safeParseDate(a.followUpDate);
-      if (fud && isAfter(now, fud) && ["Applied", "No Response"].includes(a.currentStatus)) overdue++;
+      if (isApplicationOverdue(a, now)) overdue++;
     });
 
     return { total: applications.length, thisWeek, thisMonth, overdue, statusCounts };
@@ -70,7 +64,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     { label: "Total", value: stats.total, icon: Briefcase, color: "text-[hsl(var(--status-applied))]" },
     { label: "This Week", value: stats.thisWeek, icon: CalendarDays, color: "text-[hsl(var(--status-interview))]" },
     { label: "This Month", value: stats.thisMonth, icon: Clock, color: "text-[hsl(var(--status-offer))]" },
-    { label: "Overdue Follow-ups", value: stats.overdue, icon: AlertTriangle, color: "text-[hsl(var(--status-rejected))]" },
+    { label: "Jobs Followed Up To", value: stats.overdue, icon: AlertTriangle, color: "text-[hsl(var(--status-rejected))]" },
   ];
 
   return (

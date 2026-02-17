@@ -5,8 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatusBadge } from "@/components/StatusBadge";
 import { Copy, Mail, Linkedin } from "lucide-react";
 import type { JobApplication } from "@/lib/types";
-import { isAfter, subDays, parseISO, isValid } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { isApplicationOverdue } from "@/lib/overdue";
 
 function emailTemplate(a: JobApplication) {
   return `Subject: Following Up – ${a.jobTitle} Application
@@ -31,17 +31,8 @@ export default function FollowUps({ applications }: { applications: JobApplicati
   const now = new Date();
 
   const needsFollowUp = useMemo(() => {
-    return applications.filter((a) => {
-      if (!["Applied", "No Response"].includes(a.currentStatus)) return false;
-      // Applied > 7 days ago without follow-up
-      const d = a.dateApplied ? parseISO(a.dateApplied) : null;
-      if (d && isValid(d) && isAfter(subDays(now, 7), d) && !a.followUps) return true;
-      // Follow-up date is due/overdue
-      const fud = a.followUpDate ? parseISO(a.followUpDate) : null;
-      if (fud && isValid(fud) && isAfter(now, fud)) return true;
-      return false;
-    });
-  }, [applications]);
+    return applications.filter((a) => isApplicationOverdue(a, now));
+  }, [applications, now]);
 
   async function copyText(text: string, label: string) {
     await navigator.clipboard.writeText(text);
