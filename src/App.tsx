@@ -52,7 +52,8 @@ function AppContent() {
   return (
     <>
       <AppNavbar onExportCSV={() => exportCSV(applications)} onExportXLSX={() => exportXLSX(applications)} onImportXLSX={handleImportXLSX} />
-      <main className="container py-6">
+      {/* Main content area with generous padding */}
+      <main className="container py-8">
         <Routes>
           <Route path="/" element={<Dashboard applications={applications} />} />
           <Route

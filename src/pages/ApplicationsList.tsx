@@ -21,11 +21,14 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
   const activeStatus = searchParams.get("status") as CurrentStatus | null;
   const activeResponseStatus = searchParams.get("responseStatus");
   const { toast } = useToast();
+
+  // Dynamic response-status breakdown from current dataset
   const responseBreakdown = useMemo(
     () => computeStatusBreakdown(applications, getPreferredResponseStatusOrder()),
     [applications]
   );
 
+  // Filter + sort the applications list
   const filtered = useMemo(() => {
     let list = applications;
     if (activeStatus) list = list.filter((a) => getEffectiveCurrentStatus(a) === activeStatus);
@@ -48,7 +51,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
   function handleChangeStatus(app: JobApplication, status: CurrentStatus) {
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
     const mappedResponseStatus = mapCurrentStatusToResponseStatus(status);
-    const updatedApp = {
+    const updatedApp: JobApplication = {
       ...app,
       currentStatus: status,
       responseStatus: mappedResponseStatus ?? app.responseStatus,
@@ -60,52 +63,54 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Applications</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Applications</h1>
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
 
-      {/* Filter chips */}
-      <div className="flex flex-wrap gap-2">
-        <Badge
-          variant={!activeStatus && !activeResponseStatus ? "default" : "outline"}
-          className="cursor-pointer"
-          onClick={() => setSearchParams({})}
-        >
-          All ({applications.length})
-        </Badge>
-        {CURRENT_STATUSES.map((s) => {
-          const count = applications.filter((a) => getEffectiveCurrentStatus(a) === s).length;
-          if (count === 0) return null;
-          return (
-            <Badge key={s} variant={activeStatus === s ? "default" : "outline"} className="cursor-pointer" onClick={() => setSearchParams({ status: s })}>
-              {s} ({count})
-            </Badge>
-          );
-        })}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {responseBreakdown.map((item) => (
+      {/* Filter chips — glass toolbar */}
+      <div className="glass-subtle rounded-2xl px-4 py-3 space-y-2">
+        <div className="flex flex-wrap gap-2">
           <Badge
-            key={item.key}
-            variant="outline"
-            className={cn("cursor-pointer", getResponseStatusBadgeClass(item.key, activeResponseStatus === item.key))}
-            onClick={() => setSearchParams({ ...(activeStatus ? { status: activeStatus } : {}), responseStatus: item.key })}
+            variant={!activeStatus && !activeResponseStatus ? "default" : "outline"}
+            className="cursor-pointer"
+            onClick={() => setSearchParams({})}
           >
-            {item.label} ({item.count})
+            All ({applications.length})
           </Badge>
-        ))}
+          {CURRENT_STATUSES.map((s) => {
+            const count = applications.filter((a) => getEffectiveCurrentStatus(a) === s).length;
+            if (count === 0) return null;
+            return (
+              <Badge key={s} variant={activeStatus === s ? "default" : "outline"} className="cursor-pointer" onClick={() => setSearchParams({ status: s })}>
+                {s} ({count})
+              </Badge>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {responseBreakdown.map((item) => (
+            <Badge
+              key={item.key}
+              variant="outline"
+              className={cn("cursor-pointer", getResponseStatusBadgeClass(item.key, activeResponseStatus === item.key))}
+              onClick={() => setSearchParams({ ...(activeStatus ? { status: activeStatus } : {}), responseStatus: item.key })}
+            >
+              {item.label} ({item.count})
+            </Badge>
+          ))}
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border">
+      {/* Table — minimal borders */}
+      <div className="rounded-2xl border border-border/40 overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="border-border/40">
               <TableHead>Job Title</TableHead>
               <TableHead className="hidden sm:table-cell">Company</TableHead>
               <TableHead className="hidden md:table-cell">Location</TableHead>
@@ -120,7 +125,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
             {filtered.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No applications found</TableCell></TableRow>
             ) : filtered.map((a) => (
-              <TableRow key={a.id} className="cursor-pointer" onClick={() => onSelect(a)}>
+              <TableRow key={a.id} className="cursor-pointer border-border/30 hover:bg-muted/40" onClick={() => onSelect(a)}>
                 <TableCell className="font-medium">{a.jobTitle}</TableCell>
                 <TableCell className="hidden sm:table-cell">{a.companyName}</TableCell>
                 <TableCell className="hidden md:table-cell">{a.location}</TableCell>

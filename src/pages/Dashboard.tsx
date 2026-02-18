@@ -10,6 +10,7 @@ import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor } from "@/lib/responseStatus";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
 
+/** Safely parse an ISO date string, returning null for blank/invalid values */
 function safeParseDate(d: string) {
   if (!d) return null;
   const p = parseISO(d);
@@ -22,6 +23,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
   const monthStart = startOfMonth(now);
 
+  // Compute summary stats from the applications dataset
   const stats = useMemo(() => {
     let thisWeek = 0, thisMonth = 0, overdue = 0;
 
@@ -37,6 +39,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     return { total: applications.length, thisWeek, thisMonth, overdue };
   }, [applications]);
 
+  // Dynamic status breakdown based on responseStatus field
   const statusBreakdown = useMemo(
     () => computeStatusBreakdown(applications, getPreferredResponseStatusOrder()),
     [applications]
@@ -49,6 +52,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     key: item.key,
   }));
 
+  // Group applications by month for the bar chart
   const monthlyData = useMemo(() => {
     const map = new Map<string, { sortKey: string; label: string; count: number }>();
     applications.forEach((a) => {
@@ -72,39 +76,51 @@ export default function Dashboard({ applications }: { applications: JobApplicati
   ];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+    <div className="space-y-8">
+      <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
 
-      {/* Metric cards */}
+      {/* Metric cards — minimal, no heavy borders */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {metrics.map((m) => (
-          <Card key={m.label}>
+          <Card key={m.label} className="border-border/40 shadow-none">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{m.label}</CardTitle>
               <m.icon className={`h-4 w-4 ${m.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{m.value}</div>
+              <div className="text-2xl font-semibold">{m.value}</div>
             </CardContent>
           </Card>
         ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Status breakdown */}
-        <Card>
-          <CardHeader><CardTitle className="text-base">Status Breakdown</CardTitle></CardHeader>
+        {/* Status breakdown — clean card */}
+        <Card className="border-border/40 shadow-none">
+          <CardHeader><CardTitle className="text-base font-medium">Status Breakdown</CardTitle></CardHeader>
           <CardContent>
             <div className="flex flex-col items-center gap-4 sm:flex-row">
               <ResponsiveContainer width={180} height={180}>
                 <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" strokeWidth={2} stroke="hsl(var(--card))">
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={52} outerRadius={78} dataKey="value" strokeWidth={1.5} stroke="hsl(var(--card))">
                     {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Pie>
-                  <Tooltip />
+                  {/* Glass-styled tooltip */}
+                  <Tooltip
+                    content={({ payload }) => {
+                      if (!payload?.length) return null;
+                      const d = payload[0];
+                      return (
+                        <div className="glass rounded-xl px-3 py-1.5 text-xs">
+                          <p className="font-medium">{d.name}</p>
+                          <p className="text-muted-foreground">{d.value} applications</p>
+                        </div>
+                      );
+                    }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1">
                 {statusBreakdown.map((item) => (
                   <Button
                     key={item.key}
@@ -113,7 +129,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
                     className="justify-start gap-2 text-xs"
                     onClick={() => navigate(`/applications?responseStatus=${encodeURIComponent(item.key)}`)}
                   >
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: getResponseStatusColor(item.key) }} />
+                    <span className="h-2 w-2 rounded-full" style={{ background: getResponseStatusColor(item.key) }} />
                     {item.label} ({item.count})
                   </Button>
                 ))}
@@ -122,13 +138,14 @@ export default function Dashboard({ applications }: { applications: JobApplicati
           </CardContent>
         </Card>
 
-        {/* Monthly trend */}
-        <Card>
-          <CardHeader><CardTitle className="text-base">Monthly Applications</CardTitle></CardHeader>
+        {/* Monthly trend — minimalist bar chart */}
+        <Card className="border-border/40 shadow-none">
+          <CardHeader><CardTitle className="text-base font-medium">Monthly Applications</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={monthlyData} barSize={40} barCategoryGap="20%">
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border) / 0.4)" />
+              <BarChart data={monthlyData} barSize={18} barCategoryGap="60%">
+                {/* Subtle horizontal grid only */}
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
                 <XAxis
                   dataKey="label"
                   tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
@@ -145,19 +162,20 @@ export default function Dashboard({ applications }: { applications: JobApplicati
                   tickLine={false}
                   width={30}
                 />
+                {/* Glass tooltip for chart */}
                 <Tooltip
-                  cursor={{ fill: "hsl(var(--muted) / 0.3)" }}
+                  cursor={{ fill: "hsl(var(--muted) / 0.2)" }}
                   content={({ payload, label }) => {
                     if (!payload?.length) return null;
                     return (
-                      <div className="rounded-md border border-border/50 bg-popover px-3 py-1.5 text-xs shadow-sm">
-                        <p className="font-medium text-popover-foreground">{label}</p>
+                      <div className="glass rounded-xl px-3 py-1.5 text-xs">
+                        <p className="font-medium">{label}</p>
                         <p className="text-muted-foreground">{payload[0].value} applications</p>
                       </div>
                     );
                   }}
                 />
-                <Bar dataKey="count" fill="hsl(213,94%,55%)" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

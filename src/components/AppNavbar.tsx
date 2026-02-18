@@ -5,6 +5,7 @@ import { ChangeEvent, useRef, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTheme } from "next-themes";
 
+// Navigation link definitions
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/applications", label: "Applications", icon: List },
@@ -35,13 +36,14 @@ export default function AppNavbar({
   }
 
   return (
-    <nav className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+    /* Glass navbar — translucent + backdrop-blur */
+    <nav className="sticky top-0 z-50 glass rounded-none border-x-0 border-t-0">
       <div className="container flex h-14 items-center justify-between">
         <Link to="/" className="text-lg font-bold tracking-tight">
           🎯 Job Tracker
         </Link>
 
-        {/* Desktop */}
+        {/* Desktop navigation */}
         <div className="hidden items-center gap-1 md:flex">
           {links.map((l) => (
             <Button key={l.to} variant={location.pathname === l.to ? "secondary" : "ghost"} size="sm" asChild>
@@ -74,9 +76,9 @@ export default function AppNavbar({
         </Button>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu — also glass */}
       {open && (
-        <div className="border-t bg-card p-4 md:hidden">
+        <div className="glass-subtle rounded-none border-x-0 border-b p-4 md:hidden">
           <div className="flex flex-col gap-2">
             {links.map((l) => (
               <Button key={l.to} variant={location.pathname === l.to ? "secondary" : "ghost"} asChild className="justify-start" onClick={() => setOpen(false)}>
@@ -86,7 +88,7 @@ export default function AppNavbar({
                 </Link>
               </Button>
             ))}
-            <div className="flex gap-2 pt-2 border-t">
+            <div className="flex gap-2 pt-2 border-t border-border/40">
               <Select value={theme} onValueChange={setTheme}>
                 <SelectTrigger className="flex-1 h-9">
                   <SelectValue placeholder="Theme" />
@@ -104,6 +106,7 @@ export default function AppNavbar({
           </div>
         </div>
       )}
+      {/* Hidden file input for XLSX import */}
       <input
         ref={importInputRef}
         type="file"
