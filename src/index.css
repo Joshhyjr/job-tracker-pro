@@ -105,6 +105,20 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --status-applied: 213 90% 66%;
+    --status-pre-screen-call: 224 96% 69%;
+    --status-interview: 142 68% 58%;
+    --status-offer: 142 72% 50%;
+    --status-rejected: 0 86% 66%;
+    --status-no-response: 215 18% 74%;
+    --status-withdrawn: 215 12% 70%;
+    --chart-1: 213 90% 66%;
+    --chart-2: 142 68% 58%;
+    --chart-3: 142 72% 50%;
+    --chart-4: 0 86% 66%;
+    --chart-5: 215 18% 74%;
+    --chart-6: 215 12% 70%;
   }
 }
 

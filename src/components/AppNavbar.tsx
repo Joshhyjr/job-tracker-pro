@@ -2,6 +2,8 @@ import { Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChangeEvent, useRef, useState } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTheme } from "next-themes";
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -22,6 +24,7 @@ export default function AppNavbar({
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const { theme = "system", setTheme } = useTheme();
 
   async function handleImportChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -49,6 +52,16 @@ export default function AppNavbar({
             </Button>
           ))}
           <div className="ml-2 flex gap-1">
+            <Select value={theme} onValueChange={setTheme}>
+              <SelectTrigger className="w-[132px] h-9">
+                <SelectValue placeholder="Theme" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">System</SelectItem>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">Dark</SelectItem>
+              </SelectContent>
+            </Select>
             <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()}><Upload className="h-3.5 w-3.5 mr-1" />Import XLSX</Button>
             <Button variant="outline" size="sm" onClick={onExportCSV}><Download className="h-3.5 w-3.5 mr-1" />CSV</Button>
             <Button variant="outline" size="sm" onClick={onExportXLSX}><Download className="h-3.5 w-3.5 mr-1" />XLSX</Button>
@@ -74,6 +87,16 @@ export default function AppNavbar({
               </Button>
             ))}
             <div className="flex gap-2 pt-2 border-t">
+              <Select value={theme} onValueChange={setTheme}>
+                <SelectTrigger className="flex-1 h-9">
+                  <SelectValue placeholder="Theme" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">System</SelectItem>
+                  <SelectItem value="light">Light</SelectItem>
+                  <SelectItem value="dark">Dark</SelectItem>
+                </SelectContent>
+              </Select>
               <Button variant="outline" size="sm" className="flex-1" onClick={() => importInputRef.current?.click()}>Import</Button>
               <Button variant="outline" size="sm" className="flex-1" onClick={() => { onExportCSV(); setOpen(false); }}>CSV</Button>
               <Button variant="outline" size="sm" className="flex-1" onClick={() => { onExportXLSX(); setOpen(false); }}>XLSX</Button>
