@@ -12,7 +12,7 @@ import { cn, formatDisplayDate } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getPreferredResponseStatusOrder, updateApplication, generateId } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, normalizeResponseStatus } from "@/lib/responseStatus";
+import { computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, mapCurrentStatusToResponseStatus, normalizeResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationsList({ applications, onSelect, onUpdate }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: () => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -47,7 +47,13 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
 
   function handleChangeStatus(app: JobApplication, status: CurrentStatus) {
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
-    const updatedApp = { ...app, currentStatus: status, activityLog: [entry, ...(app.activityLog || [])] };
+    const mappedResponseStatus = mapCurrentStatusToResponseStatus(status);
+    const updatedApp = {
+      ...app,
+      currentStatus: status,
+      responseStatus: mappedResponseStatus ?? app.responseStatus,
+      activityLog: [entry, ...(app.activityLog || [])],
+    };
     updateApplication(updatedApp);
     onUpdate();
     toast({ title: "Status Updated", description: `Marked as ${status}` });
@@ -130,7 +136,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                       {CURRENT_STATUSES.map((s) => (
-                        <DropdownMenuItem key={s} onClick={() => handleChangeStatus(a, s)} disabled={a.currentStatus === s}>{s}</DropdownMenuItem>
+                        <DropdownMenuItem key={s} onClick={() => handleChangeStatus(a, s)} disabled={getEffectiveCurrentStatus(a) === s}>{s}</DropdownMenuItem>
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>

@@ -6,7 +6,7 @@ type OverdueCandidate = Pick<JobApplication, "dateApplied" | "currentStatus"> & 
 };
 
 const ELIGIBLE_STATUSES = new Set<CurrentStatus>(["Applied", "No Response"]);
-const INELIGIBLE_STATUSES = new Set<CurrentStatus>(["Rejected", "Withdrawn", "Offer"]);
+const INELIGIBLE_STATUSES = new Set<CurrentStatus>(["Rejected", "Withdrawn", "Offer", "Pre-screen call", "Interview"]);
 
 function hasYesFollowUp(value: OverdueCandidate["followUps"]): boolean {
   if (typeof value === "string") return value.trim().toLowerCase() === "yes";
@@ -24,4 +24,3 @@ export function isApplicationOverdue(application: OverdueCandidate, now: Date = 
 
   return isAfter(subDays(now, 7), appliedDate);
 }
-

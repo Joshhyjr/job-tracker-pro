@@ -108,14 +108,26 @@ export function computeStatusBreakdown(applications: JobApplication[], preferred
 
 export function mapResponseStatusToCurrentStatus(raw: string | null | undefined): CurrentStatus {
   const status = normalizeResponseStatus(raw);
+  if (status === "Pre-screen call") return "Pre-screen call";
   if (status === "Offer") return "Offer";
   if (status === "Rejected") return "Rejected";
   if (status === "No Response") return "No Response";
-  if (status === "Interview" || status === "Assessment" || status === "Pre-screen call") return "Interview";
+  if (status === "Interview" || status === "Assessment") return "Interview";
   return "Applied";
 }
 
 export function getEffectiveCurrentStatus(application: Pick<JobApplication, "currentStatus" | "responseStatus">): CurrentStatus {
-  if (application.currentStatus !== "Applied") return application.currentStatus;
-  return mapResponseStatusToCurrentStatus(application.responseStatus);
+  const responseDerivedStatus = mapResponseStatusToCurrentStatus(application.responseStatus);
+  if (responseDerivedStatus !== "Applied") return responseDerivedStatus;
+  return application.currentStatus;
+}
+
+export function mapCurrentStatusToResponseStatus(status: CurrentStatus): string | null {
+  if (status === "Applied") return "Applied";
+  if (status === "Pre-screen call") return "Pre-screen call";
+  if (status === "Interview") return "Interview";
+  if (status === "Offer") return "Offer";
+  if (status === "Rejected") return "Rejected";
+  if (status === "No Response") return "No Response";
+  return null;
 }

@@ -32,6 +32,7 @@ function parseExcelDate(val: unknown): string {
 function mapStatus(val: unknown): CurrentStatus {
   const s = String(val || "").trim();
   const map: Record<string, CurrentStatus> = {
+    "pre-screen call": "Pre-screen call", "prescreen call": "Pre-screen call", "pre screen call": "Pre-screen call",
     applied: "Applied", interview: "Interview", offer: "Offer",
     rejected: "Rejected", "no response": "No Response", withdrawn: "Withdrawn",
   };
