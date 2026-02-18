@@ -12,7 +12,6 @@ import { updateApplication, deleteApplication, generateId } from "@/lib/storage"
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { formatDisplayDate } from "@/lib/utils";
-import { getEffectiveCurrentStatus, mapCurrentStatusToResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -29,13 +28,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
 
   function changeStatus(status: CurrentStatus) {
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
-    const mappedResponseStatus = mapCurrentStatusToResponseStatus(status);
-    const updated = {
-      ...app,
-      currentStatus: status,
-      responseStatus: mappedResponseStatus ?? app.responseStatus,
-      activityLog: [entry, ...app.activityLog],
-    };
+    const updated = { ...app, currentStatus: status, activityLog: [entry, ...app.activityLog] };
     setApp(updated);
     updateApplication(updated);
     onUpdate();
@@ -78,7 +71,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
           <h1 className="text-2xl font-bold">{app.jobTitle}</h1>
           <p className="text-muted-foreground">{app.companyName} · {app.location}</p>
         </div>
-        <StatusBadge status={getEffectiveCurrentStatus(app)} />
+        <StatusBadge status={app.currentStatus} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -145,7 +138,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
           <Card>
             <CardHeader><CardTitle className="text-base">Quick Actions</CardTitle></CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {CURRENT_STATUSES.filter((s) => s !== getEffectiveCurrentStatus(app)).map((s) => (
+              {CURRENT_STATUSES.filter((s) => s !== app.currentStatus).map((s) => (
                 <Button key={s} variant="outline" size="sm" onClick={() => changeStatus(s)}>{s}</Button>
               ))}
             </CardContent>
