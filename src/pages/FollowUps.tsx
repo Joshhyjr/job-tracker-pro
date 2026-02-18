@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -41,19 +41,19 @@ export default function FollowUps({ applications }: { applications: JobApplicati
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Follow-ups</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Follow-ups</h1>
         <p className="text-muted-foreground mt-1">{needsFollowUp.length} applications need follow-up</p>
       </div>
 
       {needsFollowUp.length === 0 ? (
-        <Card><CardContent className="py-12 text-center text-muted-foreground">🎉 No pending follow-ups! You're all caught up.</CardContent></Card>
+        <Card className="border-border/40 shadow-none"><CardContent className="py-12 text-center text-muted-foreground">🎉 No pending follow-ups! You're all caught up.</CardContent></Card>
       ) : (
-        <div className="rounded-lg border">
+        <div className="rounded-2xl border border-border/40 overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="border-border/40">
                 <TableHead>Job Title</TableHead>
                 <TableHead className="hidden sm:table-cell">Company</TableHead>
                 <TableHead>Date Applied</TableHead>
@@ -63,7 +63,7 @@ export default function FollowUps({ applications }: { applications: JobApplicati
             </TableHeader>
             <TableBody>
               {needsFollowUp.map((a) => (
-                <TableRow key={a.id}>
+                <TableRow key={a.id} className="border-border/30">
                   <TableCell className="font-medium">{a.jobTitle}</TableCell>
                   <TableCell className="hidden sm:table-cell">{a.companyName}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{formatDisplayDate(a.dateApplied)}</TableCell>

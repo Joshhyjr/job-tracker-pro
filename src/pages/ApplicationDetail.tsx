@@ -64,21 +64,22 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{app.jobTitle}</h1>
+          <h1 className="text-2xl font-semibold">{app.jobTitle}</h1>
           <p className="text-muted-foreground">{app.companyName} · {app.location}</p>
         </div>
         <StatusBadge status={app.currentStatus} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Details */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Details</CardTitle>
+        {/* Details — glass card for the detail view */}
+        <div className="glass rounded-2xl p-6 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-medium">Details</h2>
             <div className="flex gap-2">
               {!editing && (
                 <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
@@ -89,8 +90,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
                 {editing ? <><Save className="h-3.5 w-3.5 mr-1" />Save</> : <><Edit2 className="h-3.5 w-3.5 mr-1" />Edit</>}
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
             {fields.map((f) => (
               <div key={f.key}>
                 <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
@@ -117,7 +118,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             <div>
               <label className="text-xs font-medium text-muted-foreground">Response Status</label>
               {editing ? (
-                <Select value={app.responseStatus} onValueChange={(v) => setApp({ ...app, responseStatus: v as any })}>
+                <Select value={app.responseStatus} onValueChange={(v) => setApp({ ...app, responseStatus: v })}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{RESPONSE_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
@@ -130,13 +131,13 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
                 <Textarea value={app.notes} onChange={(e) => setApp({ ...app, notes: e.target.value })} className="mt-1" />
               ) : <p className="mt-1 text-sm whitespace-pre-wrap">{app.notes || "—"}</p>}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Quick Actions + Follow-up */}
+        {/* Sidebar — Quick Actions + Follow-up */}
         <div className="space-y-4">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Quick Actions</CardTitle></CardHeader>
+          <Card className="border-border/40 shadow-none">
+            <CardHeader><CardTitle className="text-base font-medium">Quick Actions</CardTitle></CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {CURRENT_STATUSES.filter((s) => s !== app.currentStatus).map((s) => (
                 <Button key={s} variant="outline" size="sm" onClick={() => changeStatus(s)}>{s}</Button>
@@ -144,8 +145,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="text-base">Add Follow-up</CardTitle></CardHeader>
+          <Card className="border-border/40 shadow-none">
+            <CardHeader><CardTitle className="text-base font-medium">Add Follow-up</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <Textarea placeholder="Follow-up note..." value={followNote} onChange={(e) => setFollowNote(e.target.value)} rows={3} />
               <Button size="sm" onClick={addFollowUp} disabled={!followNote.trim()} className="w-full">Add Entry</Button>
@@ -156,8 +157,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
 
       {/* Activity Timeline */}
       {app.activityLog.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Activity Timeline</CardTitle></CardHeader>
+        <Card className="border-border/40 shadow-none">
+          <CardHeader><CardTitle className="text-base font-medium">Activity Timeline</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
               {app.activityLog.map((entry) => (

@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import type { JobApplication, CurrentStatus, ResponseStatus } from "./types";
+import type { JobApplication, CurrentStatus } from "./types";
 import { normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
 
 const STORAGE_KEY = "job-tracker-data";
@@ -39,7 +39,8 @@ function mapStatus(val: unknown): CurrentStatus {
   return map[s.toLowerCase()] || "Applied";
 }
 
-function mapResponseStatus(val: unknown): ResponseStatus {
+// Maps raw value to a normalised response-status string
+function mapResponseStatus(val: unknown): string {
   return normalizeResponseStatus(val == null ? "" : String(val));
 }
 

@@ -2,13 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/* ── Design System ──
+   All colors MUST be HSL. Liquid-glass + minimal aesthetic.
 */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 0 0% 97%;
     --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
@@ -24,7 +24,7 @@ All colors MUST be HSL.
     --secondary-foreground: 222.2 47.4% 11.2%;
 
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 215.4 16.3% 52%;
 
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
@@ -32,40 +32,42 @@ All colors MUST be HSL.
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 214.3 20% 93%;
+    --input: 214.3 20% 93%;
     --ring: 222.2 84% 4.9%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --status-applied: 213 94% 55%;
-    --status-pre-screen-call: 241 100% 49%;
-    --status-interview: 142 71% 45%;
-    --status-offer: 142 71% 45%;
-    --status-rejected: 0 84% 60%;
-    --status-no-response: 215 10% 28%;
-    --status-withdrawn: 215 16% 47%;
-    --chart-1: 213 94% 55%;
-    --chart-2: 142 71% 45%;
-    --chart-3: 142 71% 45%;
-    --chart-4: 0 84% 60%;
-    --chart-5: 215 10% 28%;
-    --chart-6: 215 16% 47%;
+    /* Status palette — intentionally softer */
+    --status-applied: 213 80% 58%;
+    --status-pre-screen-call: 241 70% 60%;
+    --status-interview: 152 55% 48%;
+    --status-offer: 152 60% 40%;
+    --status-rejected: 0 65% 55%;
+    --status-no-response: 215 12% 50%;
+    --status-withdrawn: 215 16% 58%;
+    --status-assessment: 45 80% 50%;
+
+    /* Chart palette */
+    --chart-1: 213 80% 58%;
+    --chart-2: 152 55% 48%;
+    --chart-3: 152 60% 40%;
+    --chart-4: 0 65% 55%;
+    --chart-5: 215 12% 50%;
+    --chart-6: 215 16% 58%;
+
+    /* Glass tokens */
+    --glass-bg: 0 0% 100% / 0.55;
+    --glass-border: 0 0% 100% / 0.45;
+    --glass-shadow: 0 4px 24px -2px hsl(220 20% 10% / 0.06);
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
@@ -73,30 +75,53 @@ All colors MUST be HSL.
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 222 60% 7%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 222 60% 7%;
     --popover-foreground: 210 40% 98%;
 
     --primary: 210 40% 98%;
     --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 217.2 32.6% 14%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 217.2 32.6% 14%;
+    --muted-foreground: 215 20.2% 60%;
 
-    --accent: 217.2 32.6% 17.5%;
+    --accent: 217.2 32.6% 14%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 217.2 20% 16%;
+    --input: 217.2 20% 16%;
     --ring: 212.7 26.8% 83.9%;
+
+    /* Status palette — dark mode, slightly luminous */
+    --status-applied: 213 85% 65%;
+    --status-pre-screen-call: 224 80% 68%;
+    --status-interview: 152 60% 55%;
+    --status-offer: 152 65% 48%;
+    --status-rejected: 0 75% 62%;
+    --status-no-response: 215 18% 68%;
+    --status-withdrawn: 215 12% 65%;
+    --status-assessment: 45 75% 55%;
+
+    --chart-1: 213 85% 65%;
+    --chart-2: 152 60% 55%;
+    --chart-3: 152 65% 48%;
+    --chart-4: 0 75% 62%;
+    --chart-5: 215 18% 68%;
+    --chart-6: 215 12% 65%;
+
+    /* Glass tokens — dark */
+    --glass-bg: 220 30% 10% / 0.45;
+    --glass-border: 220 20% 20% / 0.4;
+    --glass-shadow: 0 4px 24px -2px hsl(220 40% 4% / 0.3);
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -105,20 +130,6 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
-
-    --status-applied: 213 90% 66%;
-    --status-pre-screen-call: 224 96% 69%;
-    --status-interview: 142 68% 58%;
-    --status-offer: 142 72% 50%;
-    --status-rejected: 0 86% 66%;
-    --status-no-response: 215 18% 74%;
-    --status-withdrawn: 215 12% 70%;
-    --chart-1: 213 90% 66%;
-    --chart-2: 142 68% 58%;
-    --chart-3: 142 72% 50%;
-    --chart-4: 0 86% 66%;
-    --chart-5: 215 18% 74%;
-    --chart-6: 215 12% 70%;
   }
 }
 
@@ -128,6 +139,24 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* ── Reusable glass utility ── */
+@layer utilities {
+  .glass {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(22px) saturate(1.4);
+    -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow: var(--glass-shadow);
+  }
+
+  .glass-subtle {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    border: 1px solid hsl(var(--glass-border));
   }
 }
