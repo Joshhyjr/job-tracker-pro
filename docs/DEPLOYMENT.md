@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This site is a Lovable-generated Vite, React, TypeScript, shadcn-ui, and Tailwind CSS application. Vercel can host it as a static frontend by running the Vite build and serving the generated `dist` directory.
+This site is a Vite, React, TypeScript, shadcn-ui, and Tailwind CSS application. Vercel hosts it as a static frontend by running the Vite build and serving the generated `dist` directory.
 
 ## Current Vercel Setup
 
@@ -40,16 +40,15 @@ This site is a Lovable-generated Vite, React, TypeScript, shadcn-ui, and Tailwin
 
 Use Git as the source of truth for future updates.
 
-1. Make changes locally or in Lovable.
-2. If changes are made in Lovable, make sure they are synced or committed back to this repository.
-3. Run the local checks:
+1. Make changes locally.
+2. Run the local checks:
 
    ```sh
    npm run test
    npm run build
    ```
 
-4. Commit the changes:
+3. Commit the changes:
 
    ```sh
    git status
@@ -57,13 +56,13 @@ Use Git as the source of truth for future updates.
    git commit -m "change: describe the site update"
    ```
 
-5. Push to the branch connected to Vercel:
+4. Push to the branch connected to Vercel:
 
    ```sh
    git push
    ```
 
-6. Vercel will create a new deployment from the pushed commit if the repository is connected to a Vercel project.
+5. Vercel will create a new deployment from the pushed commit if the repository is connected to a Vercel project.
 
 ## Notes
 
