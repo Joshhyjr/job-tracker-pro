@@ -215,7 +215,6 @@ export default function Dashboard({ applications }: { applications: JobApplicati
               </div>
             </div>
           </CardContent>
-          </CardContent>
         </Card>
 
         {/* Monthly trend — minimalist bar chart */}
