@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Briefcase, CalendarDays, Clock, AlertTriangle } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
-import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid } from "date-fns";
+import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor } from "@/lib/responseStatus";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
+import { formatDisplayDate } from "@/lib/utils";
 
 /** Safely parse an ISO date string, returning null for blank/invalid values */
 function safeParseDate(d: string) {
@@ -66,6 +67,15 @@ export default function Dashboard({ applications }: { applications: JobApplicati
       }
     });
     return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [applications]);
+
+  // 5 most recently applied jobs sorted by date descending
+  const recentApplications = useMemo(() => {
+    const withDate = applications
+      .map((a) => ({ app: a, date: safeParseDate(a.dateApplied) }))
+      .filter((item): item is { app: JobApplication; date: Date } => item.date !== null);
+    withDate.sort((a, b) => compareDesc(a.date, b.date));
+    return withDate.slice(0, 5).map((item) => item.app);
   }, [applications]);
 
   const metrics = [
@@ -181,6 +191,43 @@ export default function Dashboard({ applications }: { applications: JobApplicati
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Applications — compact, minimal, clickable rows */}
+      <Card className="border-border/40 shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base font-medium">Recent Applications</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recentApplications.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No recent applications yet</p>
+          ) : (
+            <div className="space-y-1">
+              {recentApplications.map((app) => (
+                <button
+                  key={app.id}
+                  onClick={() => navigate(`/applications/${app.id}`)}
+                  className="flex w-full flex-col items-start justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{app.companyName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{app.jobTitle}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="flex items-center gap-1.5 rounded-full border border-border/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ background: getResponseStatusColor(app.responseStatus) }}
+                      />
+                      {app.responseStatus}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{formatDisplayDate(app.dateApplied)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

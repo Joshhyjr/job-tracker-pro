@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams, useNavigate } from "react-router-dom";
 import AppNavbar from "@/components/AppNavbar";
 import Dashboard from "@/pages/Dashboard";
 import ApplicationsList from "@/pages/ApplicationsList";
@@ -19,6 +19,14 @@ import { useToast } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 
 const queryClient = new QueryClient();
+
+function ApplicationDetailRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: () => void }) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const app = applications.find((a) => a.id === id);
+  if (!app) return <NotFound />;
+  return <ApplicationDetail application={app} onBack={() => navigate("/applications")} onUpdate={onUpdate} />;
+}
 
 function AppContent() {
   const { applications, loading, refresh } = useApplications();
@@ -66,6 +74,7 @@ function AppContent() {
               )
             }
           />
+          <Route path="/applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={refresh} />} />
           <Route path="/follow-ups" element={<FollowUps applications={applications} />} />
           <Route path="/add" element={<ApplicationForm onSaved={refresh} />} />
           <Route path="*" element={<NotFound />} />
