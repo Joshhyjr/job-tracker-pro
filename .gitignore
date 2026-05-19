@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Temporary workspace and Python artifacts
+tmp/
+__pycache__/
+*.py[cod]
