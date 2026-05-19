@@ -69,6 +69,15 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }, [applications]);
 
+  // 5 most recently applied jobs sorted by date descending
+  const recentApplications = useMemo(() => {
+    const withDate = applications
+      .map((a) => ({ app: a, date: safeParseDate(a.dateApplied) }))
+      .filter((item): item is { app: JobApplication; date: Date } => item.date !== null);
+    withDate.sort((a, b) => compareDesc(a.date, b.date));
+    return withDate.slice(0, 5).map((item) => item.app);
+  }, [applications]);
+
   const metrics = [
     { label: "Total", value: stats.total, icon: Briefcase, color: "text-[hsl(var(--status-applied))]" },
     { label: "This Week", value: stats.thisWeek, icon: CalendarDays, color: "text-[hsl(var(--status-interview))]" },
