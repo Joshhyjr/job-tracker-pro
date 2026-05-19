@@ -16,6 +16,7 @@ export function normalizeResponseStatus(raw: string | null | undefined): string 
   if (lower === "assessment") return "Assessment";
   if (lower === "auto-reply received" || lower === "auto reply received") return "Auto-reply received";
   if (lower === "human reply received" || lower === "human-reply received") return "Human reply received";
+  if (lower === "role cancelled" || lower === "role canceled") return "Role Cancelled";
 
   return value
     .replace(COLLAPSE_SPACES, " ")
@@ -113,6 +114,8 @@ export function mapResponseStatusToCurrentStatus(raw: string | null | undefined)
   if (status === "Rejected") return "Rejected";
   if (status === "No Response") return "No Response";
   if (status === "Interview" || status === "Assessment") return "Interview";
+  // Cancelled roles are no longer active, so keep them out of the generic Applied bucket.
+  if (status === "Role Cancelled") return "Withdrawn";
   return "Applied";
 }
 

@@ -1,11 +1,22 @@
 import * as XLSX from "xlsx";
 import type { JobApplication, CurrentStatus } from "./types";
-import { normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
+import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
 
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
 const RESPONSE_STATUS_ORDER_KEY = "job-tracker-response-status-order";
 const IMPORT_WARNINGS_KEY = "job-tracker-import-warnings";
+
+// Import aliases let existing trackers use their natural column names without losing status data.
+const JOB_TITLE_HEADERS = ["Job Title", "Position", "Position Title", "Role", "Title"];
+const COMPANY_HEADERS = ["Company Name", "Company", "Organization", "Employer"];
+const LOCATION_HEADERS = ["Location", "Job Location"];
+const CURRENT_STATUS_HEADERS = ["Current Status", "Status"];
+const RESPONSE_STATUS_HEADERS = ["Response Status", "Decision Status", "Decision", "Outcome"];
+const FOLLOW_UP_HEADERS = ["Follow Ups", "Follow-Ups", "Follow Up", "Follow-Up"];
+const DATE_APPLIED_HEADERS = ["Date Applied", "Application Date", "Applied Date"];
+const NOTES_HEADERS = ["Notes", "Comments"];
+const FOLLOW_UP_DATE_HEADERS = ["Follow-Up Date", "Follow Up Date", "Follow-up Date"];
 
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
@@ -62,6 +73,10 @@ function getCellByHeader(row: Record<string, unknown>, headerCandidates: string[
   return "";
 }
 
+function hasHeader(headers: string[], headerCandidates: string[]): boolean {
+  return headerCandidates.some((candidate) => headers.includes(normalizeHeaderName(candidate)));
+}
+
 function extractResponseStatusOrderFromListSheet(sheet?: XLSX.WorkSheet): string[] {
   if (!sheet) return [];
 
@@ -106,7 +121,7 @@ function parseWorkbook(wb: XLSX.WorkBook): WorkbookParseResult {
   const matrix = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(applicationsSheet, { header: 1, defval: "" });
   const headers = (matrix[0] ?? []).map((value) => normalizeHeaderName(value));
   const preferredOrder = extractResponseStatusOrderFromListSheet(listsSheet);
-  const missingResponseStatusColumn = !headers.includes("response status");
+  const missingResponseStatusColumn = !hasHeader(headers, RESPONSE_STATUS_HEADERS);
 
   return {
     applications: mapRowsToApplications(rows),
@@ -171,22 +186,27 @@ export async function importApplicationsFromFile(file: File): Promise<{ applicat
 }
 
 // Maps raw Excel rows to our JobApplication data structure, applying necessary transformations and defaults.
-function mapRowsToApplications(rows: Record<string, unknown>[]): JobApplication[] {
+export function mapRowsToApplications(rows: Record<string, unknown>[]): JobApplication[] {
   return rows
-    .filter((r) => getCellByHeader(r, ["Job Title"]) && String(getCellByHeader(r, ["Job Title"])).trim())
-    .map((r) => ({
-      id: generateId(),
-      jobTitle: String(getCellByHeader(r, ["Job Title"]) || "").trim(),
-      companyName: String(getCellByHeader(r, ["Company Name"]) || "").trim(),
-      location: String(getCellByHeader(r, ["Location"]) || "").trim(),
-      currentStatus: mapStatus(getCellByHeader(r, ["Current Status"])),
-      responseStatus: mapResponseStatus(getCellByHeader(r, ["Response Status"])),
-      followUps: String(getCellByHeader(r, ["Follow Ups"]) || "").toLowerCase() === "yes",
-      dateApplied: parseExcelDate(getCellByHeader(r, ["Date Applied"])),
-      notes: String(getCellByHeader(r, ["Notes"]) || "").trim(),
-      followUpDate: parseExcelDate(getCellByHeader(r, ["Follow-Up Date", "Follow Up Date"])),
-      activityLog: [],
-    }));
+    .filter((r) => getCellByHeader(r, JOB_TITLE_HEADERS) && String(getCellByHeader(r, JOB_TITLE_HEADERS)).trim())
+    .map((r) => {
+      const responseStatus = mapResponseStatus(getCellByHeader(r, RESPONSE_STATUS_HEADERS));
+      const rawCurrentStatus = getCellByHeader(r, CURRENT_STATUS_HEADERS);
+
+      return {
+        id: generateId(),
+        jobTitle: String(getCellByHeader(r, JOB_TITLE_HEADERS) || "").trim(),
+        companyName: String(getCellByHeader(r, COMPANY_HEADERS) || "").trim(),
+        location: String(getCellByHeader(r, LOCATION_HEADERS) || "").trim(),
+        currentStatus: rawCurrentStatus ? mapStatus(rawCurrentStatus) : mapResponseStatusToCurrentStatus(responseStatus),
+        responseStatus,
+        followUps: String(getCellByHeader(r, FOLLOW_UP_HEADERS) || "").toLowerCase() === "yes",
+        dateApplied: parseExcelDate(getCellByHeader(r, DATE_APPLIED_HEADERS)),
+        notes: String(getCellByHeader(r, NOTES_HEADERS) || "").trim(),
+        followUpDate: parseExcelDate(getCellByHeader(r, FOLLOW_UP_DATE_HEADERS)),
+        activityLog: [],
+      };
+    });
 }
 
 export function getApplications(): JobApplication[] {
