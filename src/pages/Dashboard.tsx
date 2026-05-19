@@ -2,10 +2,10 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Briefcase, CalendarDays, Clock, AlertTriangle } from "lucide-react";
+import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown, Building2, BarChart3, Timer, Lightbulb } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
-import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc } from "date-fns";
+import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor } from "@/lib/responseStatus";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
@@ -77,6 +77,75 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     withDate.sort((a, b) => compareDesc(a.date, b.date));
     return withDate.slice(0, 5).map((item) => item.app);
   }, [applications]);
+
+  // Lightweight insights derived from existing application data only
+  const insights = useMemo(() => {
+    const items: { icon: typeof Briefcase; label: string; tone: "neutral" | "positive" | "warning" }[] = [];
+    if (applications.length === 0) return items;
+
+    // Most applied-to company
+    const companyCounts = new Map<string, number>();
+    applications.forEach((a) => {
+      const c = (a.companyName || "").trim();
+      if (c) companyCounts.set(c, (companyCounts.get(c) || 0) + 1);
+    });
+    const topCompany = [...companyCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (topCompany && topCompany[1] > 1) {
+      items.push({ icon: Building2, label: `Most applications sent to: ${topCompany[0]} (${topCompany[1]})`, tone: "neutral" });
+    }
+
+    // Most common response status
+    if (statusBreakdown.length) {
+      const top = [...statusBreakdown].sort((a, b) => b.count - a.count)[0];
+      if (top && top.count > 0) {
+        const isWarn = /no response|rejected/i.test(top.label);
+        items.push({ icon: BarChart3, label: `Most common status: ${top.label} (${top.count})`, tone: isWarn ? "warning" : "neutral" });
+      }
+    }
+
+    // Interview rate
+    const interviewCount = applications.filter((a) => /interview|offer/i.test(a.responseStatus || "")).length;
+    if (applications.length >= 3) {
+      const rate = Math.round((interviewCount / applications.length) * 100);
+      items.push({
+        icon: rate >= 15 ? TrendingUp : TrendingDown,
+        label: `Your interview rate: ${rate}%`,
+        tone: rate >= 15 ? "positive" : "warning",
+      });
+    }
+
+    // No response after 14+ days
+    const stale = applications.filter((a) => {
+      const d = safeParseDate(a.dateApplied);
+      if (!d) return false;
+      return /no response/i.test(a.responseStatus || "") && differenceInDays(now, d) >= 14;
+    }).length;
+    if (stale > 0) {
+      items.push({ icon: Timer, label: `No response after 14+ days: ${stale}`, tone: "warning" });
+    }
+
+    // This week vs last week
+    const lastWeekStart = subDays(weekStart, 7);
+    let thisWeekCount = 0, lastWeekCount = 0;
+    applications.forEach((a) => {
+      const d = safeParseDate(a.dateApplied);
+      if (!d) return;
+      if (!isBefore(d, weekStart)) thisWeekCount++;
+      else if (!isBefore(d, lastWeekStart)) lastWeekCount++;
+    });
+    if (thisWeekCount || lastWeekCount) {
+      const diff = thisWeekCount - lastWeekCount;
+      const tone: "positive" | "warning" | "neutral" = diff > 0 ? "positive" : diff < 0 ? "warning" : "neutral";
+      const verb = diff > 0 ? "more" : diff < 0 ? "fewer" : "same as";
+      const label =
+        diff === 0
+          ? `You applied to ${thisWeekCount} jobs this week (same as last week)`
+          : `You applied to ${thisWeekCount} this week — ${Math.abs(diff)} ${verb} than last week`;
+      items.push({ icon: diff >= 0 ? TrendingUp : TrendingDown, label, tone });
+    }
+
+    return items.slice(0, 4);
+  }, [applications, statusBreakdown, weekStart, now]);
 
   const metrics = [
     { label: "Total", value: stats.total, icon: Briefcase, color: "text-[hsl(var(--status-applied))]" },
@@ -228,6 +297,37 @@ export default function Dashboard({ applications }: { applications: JobApplicati
           )}
         </CardContent>
       </Card>
+
+      {/* Insights & Recommendations — compact, glass-style, derived from existing data */}
+      {insights.length > 0 && (
+        <Card className="glass-subtle border-border/40 shadow-none">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base font-medium">
+              <Lightbulb className="h-4 w-4 text-[hsl(var(--status-offer))]" />
+              Insights & Recommendations
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {insights.map((ins, i) => {
+                // Tone-based subtle color: green=positive, red/amber=warning
+                const toneColor =
+                  ins.tone === "positive"
+                    ? "text-[hsl(var(--status-offer))]"
+                    : ins.tone === "warning"
+                    ? "text-[hsl(var(--status-rejected))]"
+                    : "text-muted-foreground";
+                return (
+                  <div key={i} className="glass flex items-start gap-3 rounded-xl px-3 py-2.5">
+                    <ins.icon className={`mt-0.5 h-4 w-4 shrink-0 ${toneColor}`} />
+                    <p className="text-sm leading-snug">{ins.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
