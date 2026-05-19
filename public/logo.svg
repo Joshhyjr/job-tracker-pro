@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Job Tracker Pro logo</title>
+  <desc id="desc">Briefcase and growth arrow logo with the Job Tracker Pro wordmark.</desc>
+  <defs>
+    <linearGradient id="card-bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f7fbfb" />
+      <stop offset="1" stop-color="#e9f6f4" />
+    </linearGradient>
+    <linearGradient id="briefcase" x1="333" y1="156" x2="559" y2="392" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f5d8d" />
+      <stop offset="1" stop-color="#0a2743" />
+    </linearGradient>
+    <linearGradient id="growth" x1="505" y1="399" x2="730" y2="152" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12b9aa" />
+      <stop offset="1" stop-color="#123b63" />
+    </linearGradient>
+    <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0b2742" flood-opacity=".14" />
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="url(#card-bg)" />
+  <rect x="195" y="72" width="810" height="486" rx="44" fill="#ffffff" opacity=".74" />
+  <g filter="url(#soft-shadow)">
+    <path d="M380 184h196c40 0 72 32 72 72v154c0 28-22 50-50 50H356c-28 0-50-22-50-50V256c0-40 32-72 74-72Z" fill="url(#briefcase)" />
+    <path d="M386 184v-37c0-45 36-81 81-81h75c45 0 81 36 81 81v37h-54v-37c0-15-12-27-27-27h-75c-15 0-27 12-27 27v37h-54Z" fill="#104b75" />
+    <path d="M318 292h318" stroke="#9bdbe5" stroke-width="14" stroke-linecap="round" opacity=".72" />
+    <path d="M450 430 547 316l67 68 170-228" fill="none" stroke="#ffffff" stroke-width="62" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M450 430 547 316l67 68 170-228" fill="none" stroke="url(#growth)" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M705 154h92v92" fill="none" stroke="#123b63" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+  <text x="600" y="528" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="900" letter-spacing="3" fill="#0b2742">JOB TRACKER <tspan fill="#0aa6a6">PRO</tspan></text>
+</svg>

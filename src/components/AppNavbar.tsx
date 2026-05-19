@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ChangeEvent, useRef, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTheme } from "next-themes";
+import { BrandLogo } from "@/components/BrandLogo";
 
 // Navigation link definitions
 const links = [
@@ -39,8 +40,8 @@ export default function AppNavbar({
     /* Glass navbar — translucent + backdrop-blur */
     <nav className="sticky top-0 z-50 glass rounded-none border-x-0 border-t-0">
       <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="text-lg font-bold tracking-tight">
-          🎯 Job Tracker
+        <Link to="/" className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <BrandLogo />
         </Link>
 
         {/* Desktop navigation */}
