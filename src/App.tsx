@@ -20,6 +20,14 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 const queryClient = new QueryClient();
 
+function ApplicationDetailRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: () => void }) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const app = applications.find((a) => a.id === id);
+  if (!app) return <NotFound />;
+  return <ApplicationDetail application={app} onBack={() => navigate("/applications")} onUpdate={onUpdate} />;
+}
+
 function AppContent() {
   const { applications, loading, refresh } = useApplications();
   const [selectedApp, setSelectedApp] = useState<JobApplication | null>(null);
