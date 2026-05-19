@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Briefcase, CalendarDays, Clock, AlertTriangle } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
-import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid } from "date-fns";
+import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor } from "@/lib/responseStatus";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
+import { formatDisplayDate } from "@/lib/utils";
 
 /** Safely parse an ISO date string, returning null for blank/invalid values */
 function safeParseDate(d: string) {
