@@ -191,6 +191,43 @@ export default function Dashboard({ applications }: { applications: JobApplicati
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Applications — compact, minimal, clickable rows */}
+      <Card className="border-border/40 shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base font-medium">Recent Applications</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recentApplications.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No recent applications yet</p>
+          ) : (
+            <div className="space-y-1">
+              {recentApplications.map((app) => (
+                <button
+                  key={app.id}
+                  onClick={() => navigate(`/applications/${app.id}`)}
+                  className="flex w-full flex-col items-start justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{app.companyName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{app.jobTitle}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="flex items-center gap-1.5 rounded-full border border-border/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ background: getResponseStatusColor(app.responseStatus) }}
+                      />
+                      {app.responseStatus}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{formatDisplayDate(app.dateApplied)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
