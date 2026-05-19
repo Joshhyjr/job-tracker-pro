@@ -78,6 +78,75 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     return withDate.slice(0, 5).map((item) => item.app);
   }, [applications]);
 
+  // Lightweight insights derived from existing application data only
+  const insights = useMemo(() => {
+    const items: { icon: typeof Briefcase; label: string; tone: "neutral" | "positive" | "warning" }[] = [];
+    if (applications.length === 0) return items;
+
+    // Most applied-to company
+    const companyCounts = new Map<string, number>();
+    applications.forEach((a) => {
+      const c = (a.companyName || "").trim();
+      if (c) companyCounts.set(c, (companyCounts.get(c) || 0) + 1);
+    });
+    const topCompany = [...companyCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (topCompany && topCompany[1] > 1) {
+      items.push({ icon: Building2, label: `Most applications sent to: ${topCompany[0]} (${topCompany[1]})`, tone: "neutral" });
+    }
+
+    // Most common response status
+    if (statusBreakdown.length) {
+      const top = [...statusBreakdown].sort((a, b) => b.count - a.count)[0];
+      if (top && top.count > 0) {
+        const isWarn = /no response|rejected/i.test(top.label);
+        items.push({ icon: BarChart3, label: `Most common status: ${top.label} (${top.count})`, tone: isWarn ? "warning" : "neutral" });
+      }
+    }
+
+    // Interview rate
+    const interviewCount = applications.filter((a) => /interview|offer/i.test(a.responseStatus || "")).length;
+    if (applications.length >= 3) {
+      const rate = Math.round((interviewCount / applications.length) * 100);
+      items.push({
+        icon: rate >= 15 ? TrendingUp : TrendingDown,
+        label: `Your interview rate: ${rate}%`,
+        tone: rate >= 15 ? "positive" : "warning",
+      });
+    }
+
+    // No response after 14+ days
+    const stale = applications.filter((a) => {
+      const d = safeParseDate(a.dateApplied);
+      if (!d) return false;
+      return /no response/i.test(a.responseStatus || "") && differenceInDays(now, d) >= 14;
+    }).length;
+    if (stale > 0) {
+      items.push({ icon: Timer, label: `No response after 14+ days: ${stale}`, tone: "warning" });
+    }
+
+    // This week vs last week
+    const lastWeekStart = subDays(weekStart, 7);
+    let thisWeekCount = 0, lastWeekCount = 0;
+    applications.forEach((a) => {
+      const d = safeParseDate(a.dateApplied);
+      if (!d) return;
+      if (!isBefore(d, weekStart)) thisWeekCount++;
+      else if (!isBefore(d, lastWeekStart)) lastWeekCount++;
+    });
+    if (thisWeekCount || lastWeekCount) {
+      const diff = thisWeekCount - lastWeekCount;
+      const tone: "positive" | "warning" | "neutral" = diff > 0 ? "positive" : diff < 0 ? "warning" : "neutral";
+      const verb = diff > 0 ? "more" : diff < 0 ? "fewer" : "same as";
+      const label =
+        diff === 0
+          ? `You applied to ${thisWeekCount} jobs this week (same as last week)`
+          : `You applied to ${thisWeekCount} this week — ${Math.abs(diff)} ${verb} than last week`;
+      items.push({ icon: diff >= 0 ? TrendingUp : TrendingDown, label, tone });
+    }
+
+    return items.slice(0, 4);
+  }, [applications, statusBreakdown, weekStart, now]);
+
   const metrics = [
     { label: "Total", value: stats.total, icon: Briefcase, color: "text-[hsl(var(--status-applied))]" },
     { label: "This Week", value: stats.thisWeek, icon: CalendarDays, color: "text-[hsl(var(--status-interview))]" },
