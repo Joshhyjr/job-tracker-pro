@@ -74,6 +74,7 @@ function AppContent() {
               )
             }
           />
+          <Route path="/applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={refresh} />} />
           <Route path="/follow-ups" element={<FollowUps applications={applications} />} />
           <Route path="/add" element={<ApplicationForm onSaved={refresh} />} />
           <Route path="*" element={<NotFound />} />
