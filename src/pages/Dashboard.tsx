@@ -297,6 +297,37 @@ export default function Dashboard({ applications }: { applications: JobApplicati
           )}
         </CardContent>
       </Card>
+
+      {/* Insights & Recommendations — compact, glass-style, derived from existing data */}
+      {insights.length > 0 && (
+        <Card className="glass-subtle border-border/40 shadow-none">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base font-medium">
+              <Lightbulb className="h-4 w-4 text-[hsl(var(--status-offer))]" />
+              Insights & Recommendations
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {insights.map((ins, i) => {
+                // Tone-based subtle color: green=positive, red/amber=warning
+                const toneColor =
+                  ins.tone === "positive"
+                    ? "text-[hsl(var(--status-offer))]"
+                    : ins.tone === "warning"
+                    ? "text-[hsl(var(--status-rejected))]"
+                    : "text-muted-foreground";
+                return (
+                  <div key={i} className="glass flex items-start gap-3 rounded-xl px-3 py-2.5">
+                    <ins.icon className={`mt-0.5 h-4 w-4 shrink-0 ${toneColor}`} />
+                    <p className="text-sm leading-snug">{ins.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
