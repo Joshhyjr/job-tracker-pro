@@ -1,66 +1,83 @@
 # Job Tracker Pro
 
-Job Tracker Pro is a Vite, React, TypeScript, shadcn-ui, and Tailwind CSS app for tracking job applications, follow-ups, and interview progress.
+[![CI](https://github.com/Joshhyjr/job-tracker-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/Joshhyjr/job-tracker-pro/actions/workflows/ci.yml)
+[![Security](https://github.com/Joshhyjr/job-tracker-pro/actions/workflows/security.yml/badge.svg)](https://github.com/Joshhyjr/job-tracker-pro/actions/workflows/security.yml)
 
-## Project Info
+A modern job application tracking platform designed to help users organise applications, monitor progress, and gain intelligent insights into their job search.
 
-Production URL: https://job-tracker-pro-nine.vercel.app
+Production: [job-tracker-pro-nine.vercel.app](https://job-tracker-pro-nine.vercel.app)
 
-## Local Development
+## Features
 
-The only requirement is having Node.js and npm installed. Using `nvm` is recommended.
+- Dashboard analytics for application progress, outcomes, and follow-up activity
+- Recent Applications section for quick access to the latest opportunities
+- Insights & Recommendations based on current job search activity
+- Application status tracking across applied, interview, offer, rejection, and withdrawn stages
+- Follow-up management with dates and overdue visibility
+- XLSX import/export powered by ExcelJS
+- Responsive design for desktop and mobile workflows
+- Dark mode UI with polished Job Tracker Pro branding
+- Security hardening through headers, dependency checks, and safer data handling
+- Future AI-powered career insights foundation
 
-Follow these steps:
+## Recent Improvements
 
-```sh
-# Step 1: Clone the repository.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd job-tracker-pro
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-## Editing In GitHub
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-## GitHub Codespaces
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- Added Recent Applications to the dashboard
+- Added Insights & Recommendations
+- Added Job Tracker Pro branding and logo
+- Removed Lovable branding
+- Added CI/CD workflows for linting, typechecking, tests, and builds
+- Added automated security scans with npm audit, CodeQL, dependency review, and Gitleaks
+- Added sanitisation and safer imports for user-entered and spreadsheet data
+- Replaced the vulnerable `xlsx` package with ExcelJS
 
 ## Tech Stack
 
-This project is built with:
-
-- Vite
-- TypeScript
 - React
-- shadcn-ui
+- TypeScript
+- Vite
 - Tailwind CSS
+- Vercel
+- ExcelJS
+- GitHub Actions
 
-## Deployment
+## Security
 
-This project is deployed on Vercel. Run these checks before deploying:
+Job Tracker Pro includes practical security controls for a frontend portfolio app:
+
+- Secret protection with `.env` ignore rules and a safe `.env.example`
+- Dependabot updates for npm packages and GitHub Actions
+- CodeQL scanning for JavaScript and TypeScript security issues
+- Gitleaks secret scanning before deployment
+- Sanitisation for manual and imported job application data
+- Vercel security headers, including CSP, referrer policy, permissions policy, and `nosniff`
+
+Private API keys, including future AI provider keys, must stay server-side only and must not use `VITE_` environment variables.
+
+## Future Roadmap
+
+- Background AI-generated career insights
+- Resume analysis
+- Salary expectations
+- Suggested job roles
+- AI productivity recommendations
+
+## Installation
 
 ```sh
-npm run test
+npm install
+npm run dev
+```
+
+## Build
+
+```sh
 npm run build
 ```
 
-Deploy the linked project with:
+## Quality Checks
 
 ```sh
-vercel --prod
+npm run lint
+npm test
 ```
