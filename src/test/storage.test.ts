@@ -53,4 +53,23 @@ describe("mapRowsToApplications", () => {
     expect(application.currentStatus).toBe("Withdrawn");
     expect(application.responseStatus).toBe("Role Cancelled");
   });
+
+  it("sanitizes imported text fields before storage", () => {
+    const [application] = mapRowsToApplications([
+      {
+        "Job Title": "  Security\u0000 Engineer  ",
+        Company: "Acme\u0007 Corp",
+        Notes: " Follow up after screen.\u0001 ",
+        "Date Applied": "not-a-date",
+      },
+    ]);
+
+    // Imported spreadsheets are untrusted input, so hidden control characters are stripped at the boundary.
+    expect(application).toMatchObject({
+      jobTitle: "Security Engineer",
+      companyName: "Acme Corp",
+      notes: "Follow up after screen.",
+      dateApplied: "",
+    });
+  });
 });

@@ -10,19 +10,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { addApplication, updateApplication } from "@/lib/storage";
-import type { JobApplication } from "@/lib/types";
+import type { CurrentStatus, JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
 const schema = z.object({
   jobTitle: z.string().trim().min(1, "Required").max(200),
   companyName: z.string().trim().min(1, "Required").max(200),
   location: z.string().trim().max(200),
-  currentStatus: z.string(),
-  responseStatus: z.string(),
+  currentStatus: z.enum(CURRENT_STATUSES as [CurrentStatus, ...CurrentStatus[]]),
+  responseStatus: z.string().trim().min(1, "Required").max(200),
   followUps: z.boolean(),
   dateApplied: z.string().min(1, "Required"),
-  notes: z.string().max(2000).optional(),
-  followUpDate: z.string().optional(),
+  notes: z.string().trim().max(2000).optional(),
+  followUpDate: z.string().max(10).optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -39,11 +39,24 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
   });
 
   function onSubmit(data: FormData) {
+    // Storage performs the final sanitisation pass; future AI/API calls must stay server-side with private keys off the Vite client.
+    const applicationInput: Omit<JobApplication, "id" | "activityLog"> = {
+      jobTitle: data.jobTitle,
+      companyName: data.companyName,
+      location: data.location,
+      currentStatus: data.currentStatus,
+      responseStatus: data.responseStatus,
+      followUps: data.followUps,
+      dateApplied: data.dateApplied,
+      notes: data.notes ?? "",
+      followUpDate: data.followUpDate ?? "",
+    };
+
     if (existing) {
-      updateApplication({ ...existing, ...data } as JobApplication);
+      updateApplication({ ...existing, ...applicationInput });
       toast({ title: "Updated", description: "Application updated." });
     } else {
-      addApplication(data as any);
+      addApplication(applicationInput);
       toast({ title: "Added", description: "New application added." });
     }
     onSaved();

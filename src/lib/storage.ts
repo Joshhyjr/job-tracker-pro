@@ -1,6 +1,7 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import type { JobApplication, CurrentStatus } from "./types";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
+import { sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
 
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
@@ -24,6 +25,7 @@ export function generateId(): string {
 
 function parseExcelDate(val: unknown): string {
   if (!val) return "";
+  if (val instanceof Date) return val.toISOString().split("T")[0];
   if (typeof val === "number") {
     // Excel serial date
     const date = new Date((val - 25569) * 86400 * 1000);
@@ -77,10 +79,54 @@ function hasHeader(headers: string[], headerCandidates: string[]): boolean {
   return headerCandidates.some((candidate) => headers.includes(normalizeHeaderName(candidate)));
 }
 
-function extractResponseStatusOrderFromListSheet(sheet?: XLSX.WorkSheet): string[] {
+function getCellValue(value: ExcelJS.CellValue): unknown {
+  // Excel cells can contain formulas, rich text, hyperlinks, or plain values; keep only displayable content.
+  if (value == null) return "";
+  if (value instanceof Date) return value;
+  if (typeof value !== "object") return value;
+  if ("result" in value) return getCellValue(value.result as ExcelJS.CellValue);
+  if ("text" in value) return value.text;
+  if ("richText" in value) return value.richText.map((part) => part.text).join("");
+  if ("hyperlink" in value && "text" in value) return value.text;
+  return "";
+}
+
+function worksheetToMatrix(sheet: ExcelJS.Worksheet): unknown[][] {
+  const matrix: unknown[][] = [];
+  sheet.eachRow({ includeEmpty: true }, (row) => {
+    const values: unknown[] = [];
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      values[colNumber - 1] = getCellValue(cell.value);
+    });
+    matrix.push(values);
+  });
+  return matrix;
+}
+
+function worksheetToRows(sheet: ExcelJS.Worksheet): Record<string, unknown>[] {
+  const matrix = worksheetToMatrix(sheet);
+  const headers = (matrix[0] ?? []).map((value) => String(value ?? ""));
+
+  return matrix.slice(1).map((row) => {
+    const record: Record<string, unknown> = {};
+    headers.forEach((header, index) => {
+      if (header) record[header] = row[index] ?? "";
+    });
+    return record;
+  });
+}
+
+async function loadWorkbook(buffer: ArrayBuffer): Promise<ExcelJS.Workbook> {
+  // Keep spreadsheet parsing client-side without the vulnerable xlsx package.
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  return workbook;
+}
+
+function extractResponseStatusOrderFromListSheet(sheet?: ExcelJS.Worksheet): string[] {
   if (!sheet) return [];
 
-  const matrix = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(sheet, { header: 1, defval: "" });
+  const matrix = worksheetToMatrix(sheet);
   let anchorRow = -1;
   let anchorCol = -1;
 
@@ -114,11 +160,11 @@ type WorkbookParseResult = {
   missingResponseStatusColumn: boolean;
 };
 
-function parseWorkbook(wb: XLSX.WorkBook): WorkbookParseResult {
-  const applicationsSheet = wb.Sheets["Applications"] ?? wb.Sheets[wb.SheetNames[0]];
-  const listsSheet = wb.Sheets["Lists"];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(applicationsSheet, { defval: "" });
-  const matrix = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(applicationsSheet, { header: 1, defval: "" });
+function parseWorkbook(wb: ExcelJS.Workbook): WorkbookParseResult {
+  const applicationsSheet = wb.getWorksheet("Applications") ?? wb.worksheets[0];
+  const listsSheet = wb.getWorksheet("Lists");
+  const rows = worksheetToRows(applicationsSheet);
+  const matrix = worksheetToMatrix(applicationsSheet);
   const headers = (matrix[0] ?? []).map((value) => normalizeHeaderName(value));
   const preferredOrder = extractResponseStatusOrderFromListSheet(listsSheet);
   const missingResponseStatusColumn = !hasHeader(headers, RESPONSE_STATUS_HEADERS);
@@ -165,7 +211,7 @@ export function getPreferredResponseStatusOrder(): string[] {
 export async function loadSeedData(): Promise<JobApplication[]> {
   const resp = await fetch("/seed-data.xlsx");
   const buf = await resp.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
+  const wb = await loadWorkbook(buf);
   const parsed = parseWorkbook(wb);
   setPreferredResponseStatusOrder(parsed.preferredOrder);
   return parsed.applications;
@@ -173,7 +219,7 @@ export async function loadSeedData(): Promise<JobApplication[]> {
 
 export async function importApplicationsFromFile(file: File): Promise<{ applications: JobApplication[]; warnings: string[] }> {
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
+  const wb = await loadWorkbook(buf);
   const parsed = parseWorkbook(wb);
 
   setPreferredResponseStatusOrder(parsed.preferredOrder);
@@ -195,15 +241,15 @@ export function mapRowsToApplications(rows: Record<string, unknown>[]): JobAppli
 
       return {
         id: generateId(),
-        jobTitle: String(getCellByHeader(r, JOB_TITLE_HEADERS) || "").trim(),
-        companyName: String(getCellByHeader(r, COMPANY_HEADERS) || "").trim(),
-        location: String(getCellByHeader(r, LOCATION_HEADERS) || "").trim(),
+        jobTitle: sanitizeSingleLineText(getCellByHeader(r, JOB_TITLE_HEADERS)),
+        companyName: sanitizeSingleLineText(getCellByHeader(r, COMPANY_HEADERS)),
+        location: sanitizeSingleLineText(getCellByHeader(r, LOCATION_HEADERS)),
         currentStatus: rawCurrentStatus ? mapStatus(rawCurrentStatus) : mapResponseStatusToCurrentStatus(responseStatus),
         responseStatus,
         followUps: String(getCellByHeader(r, FOLLOW_UP_HEADERS) || "").toLowerCase() === "yes",
-        dateApplied: parseExcelDate(getCellByHeader(r, DATE_APPLIED_HEADERS)),
-        notes: String(getCellByHeader(r, NOTES_HEADERS) || "").trim(),
-        followUpDate: parseExcelDate(getCellByHeader(r, FOLLOW_UP_DATE_HEADERS)),
+        dateApplied: sanitizeDateInput(parseExcelDate(getCellByHeader(r, DATE_APPLIED_HEADERS))),
+        notes: sanitizeMultilineText(getCellByHeader(r, NOTES_HEADERS)),
+        followUpDate: sanitizeDateInput(parseExcelDate(getCellByHeader(r, FOLLOW_UP_DATE_HEADERS))),
         activityLog: [],
       };
     });
@@ -215,7 +261,7 @@ export function getApplications(): JobApplication[] {
   const parsed = JSON.parse(raw) as JobApplication[];
   return parsed.map((app) => ({
     ...app,
-    currentStatus: mapStatus(app.currentStatus),
+    currentStatus: sanitizeCurrentStatus(mapStatus(app.currentStatus)),
     responseStatus: mapResponseStatus(app.responseStatus),
   }));
 }
@@ -233,7 +279,7 @@ export function markSeeded() {
 }
 
 export function addApplication(app: Omit<JobApplication, "id" | "activityLog">): JobApplication {
-  const newApp: JobApplication = { ...app, id: generateId(), activityLog: [{ id: generateId(), date: new Date().toISOString(), type: "note", message: "Application created" }] };
+  const newApp: JobApplication = { ...sanitizeApplicationInput(app), id: generateId(), activityLog: [{ id: generateId(), date: new Date().toISOString(), type: "note", message: "Application created" }] };
   const apps = getApplications();
   apps.unshift(newApp);
   saveApplications(apps);
@@ -241,7 +287,7 @@ export function addApplication(app: Omit<JobApplication, "id" | "activityLog">):
 }
 
 export function updateApplication(updated: JobApplication) {
-  const apps = getApplications().map((a) => (a.id === updated.id ? updated : a));
+  const apps = getApplications().map((a) => (a.id === updated.id ? { ...updated, ...sanitizeApplicationInput(updated) } : a));
   saveApplications(apps);
 }
 
