@@ -12,23 +12,46 @@ function toRows(apps: JobApplication[]) {
     "Date Applied": a.dateApplied,
     Notes: a.notes,
     "Follow-Up Date": a.followUpDate,
+    "Job Link": a.jobLink ?? "",
+    Salary: a.salary ?? "",
+    "Days Since Applied": a.daysSinceApplied ?? "",
+    "Cover Letter Included": a.coverLetterIncluded == null ? "" : a.coverLetterIncluded ? "Yes" : "No",
+    "Recruiter/Contact Name": a.recruiterContactName ?? "",
+    "Interview Date": a.interviewDate ?? "",
+    Tags: a.tags ?? "",
+    // Re-export custom spreadsheet columns so flexible imports remain round-trippable.
+    ...(a.customFields ?? {}),
   }));
+}
+
+function getExportHeaders(rows: ReturnType<typeof toRows>) {
+  const headers = new Set<string>([
+    "Job Title",
+    "Company Name",
+    "Location",
+    "Current Status",
+    "Response Status",
+    "Follow Ups",
+    "Date Applied",
+    "Notes",
+    "Follow-Up Date",
+    "Job Link",
+    "Salary",
+    "Days Since Applied",
+    "Cover Letter Included",
+    "Recruiter/Contact Name",
+    "Interview Date",
+    "Tags",
+  ]);
+
+  rows.forEach((row) => Object.keys(row).forEach((header) => headers.add(header)));
+  return Array.from(headers);
 }
 
 export function exportCSV(apps: JobApplication[]) {
   // CSV export avoids spreadsheet formulas and escapes cells before handing data to the browser download API.
   const rows = toRows(apps);
-  const headers = Object.keys(rows[0] ?? {
-    "Job Title": "",
-    "Company Name": "",
-    Location: "",
-    "Current Status": "",
-    "Response Status": "",
-    "Follow Ups": "",
-    "Date Applied": "",
-    Notes: "",
-    "Follow-Up Date": "",
-  });
+  const headers = getExportHeaders(rows);
   const csv = [headers, ...rows.map((row) => headers.map((header) => row[header as keyof typeof row] ?? ""))]
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
     .join("\n");
@@ -40,17 +63,7 @@ export async function exportXLSX(apps: JobApplication[]) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Applications");
   const rows = toRows(apps);
-  const headers = Object.keys(rows[0] ?? {
-    "Job Title": "",
-    "Company Name": "",
-    Location: "",
-    "Current Status": "",
-    "Response Status": "",
-    "Follow Ups": "",
-    "Date Applied": "",
-    Notes: "",
-    "Follow-Up Date": "",
-  });
+  const headers = getExportHeaders(rows);
 
   worksheet.addRow(headers);
   rows.forEach((row) => worksheet.addRow(headers.map((header) => row[header as keyof typeof row] ?? "")));

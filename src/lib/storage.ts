@@ -8,16 +8,75 @@ const SEEDED_KEY = "job-tracker-seeded";
 const RESPONSE_STATUS_ORDER_KEY = "job-tracker-response-status-order";
 const IMPORT_WARNINGS_KEY = "job-tracker-import-warnings";
 
-// Import aliases let existing trackers use their natural column names without losing status data.
-const JOB_TITLE_HEADERS = ["Job Title", "Position", "Position Title", "Role", "Title"];
-const COMPANY_HEADERS = ["Company Name", "Company", "Organization", "Employer"];
-const LOCATION_HEADERS = ["Location", "Job Location"];
-const CURRENT_STATUS_HEADERS = ["Current Status", "Status"];
-const RESPONSE_STATUS_HEADERS = ["Response Status", "Decision Status", "Decision", "Outcome"];
-const FOLLOW_UP_HEADERS = ["Follow Ups", "Follow-Ups", "Follow Up", "Follow-Up"];
-const DATE_APPLIED_HEADERS = ["Date Applied", "Application Date", "Applied Date"];
-const NOTES_HEADERS = ["Notes", "Comments"];
-const FOLLOW_UP_DATE_HEADERS = ["Follow-Up Date", "Follow Up Date", "Follow-up Date"];
+type ImportField =
+  | "jobTitle"
+  | "companyName"
+  | "location"
+  | "currentStatus"
+  | "responseStatus"
+  | "followUps"
+  | "dateApplied"
+  | "notes"
+  | "followUpDate"
+  | "jobLink"
+  | "salary"
+  | "daysSinceApplied"
+  | "coverLetterIncluded"
+  | "recruiterContactName"
+  | "interviewDate"
+  | "tags";
+
+type ColumnMapping = {
+  byField: Partial<Record<ImportField, string>>;
+  knownHeaders: Set<string>;
+  warnings: string[];
+};
+
+type RowsParseResult = {
+  applications: JobApplication[];
+  warnings: string[];
+};
+
+const REQUIRED_IMPORT_FIELDS: ImportField[] = ["jobTitle", "companyName"];
+
+const FIELD_LABELS: Record<ImportField, string> = {
+  jobTitle: "Job Title",
+  companyName: "Company",
+  location: "Location",
+  currentStatus: "Current Status",
+  responseStatus: "Application Status",
+  followUps: "Follow Ups",
+  dateApplied: "Date Applied",
+  notes: "Notes",
+  followUpDate: "Follow-Up Date",
+  jobLink: "Job Link",
+  salary: "Salary",
+  daysSinceApplied: "Days Since Applied",
+  coverLetterIncluded: "Cover Letter Included",
+  recruiterContactName: "Recruiter/Contact Name",
+  interviewDate: "Interview Date",
+  tags: "Tags",
+};
+
+// Header aliases let user-created templates keep their own language while mapping into stable app fields.
+const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
+  jobTitle: ["Job Title", "Position", "Position Title", "Role", "Title", "Job Role", "Job Name", "Opening", "Opportunity"],
+  companyName: ["Company Name", "Company", "Organization", "Organisation", "Employer", "Company/Employer", "Hiring Company"],
+  location: ["Location", "Job Location", "Office Location", "City", "Work Location"],
+  currentStatus: ["Current Status", "Tracker Status", "Internal Status"],
+  responseStatus: ["Response Status", "Decision Status", "Decision", "Outcome", "Application Status", "Status", "Stage"],
+  followUps: ["Follow Ups", "Follow-Ups", "Follow Up", "Follow-Up", "Follow Up Needed", "Needs Follow Up"],
+  dateApplied: ["Date Applied", "Application Date", "Applied Date", "Applied On", "Submission Date", "Submitted Date"],
+  notes: ["Notes", "Comments", "Comment", "Application Notes", "Custom Notes"],
+  followUpDate: ["Follow-Up Date", "Follow Up Date", "Follow-up Date", "Next Follow Up", "Follow Up On"],
+  jobLink: ["Job Link", "Job URL", "Job Url", "Posting Link", "Application Link", "Posting URL", "URL", "Link"],
+  salary: ["Salary", "Compensation", "Pay", "Salary Range", "Compensation Range", "Rate"],
+  daysSinceApplied: ["Days Since Applied", "Days Applied", "Days Since Application", "Days Outstanding"],
+  coverLetterIncluded: ["Cover Letter Included", "Cover Letter", "Cover Letter Sent", "Cover Letter Submitted"],
+  recruiterContactName: ["Recruiter/Contact Name", "Recruiter", "Contact", "Contact Name", "Recruiter Name", "Hiring Manager"],
+  interviewDate: ["Interview Date", "Next Interview", "Screen Date", "Phone Screen Date", "Interview Scheduled"],
+  tags: ["Tags", "Tag", "Labels", "Custom Tags", "Notes/Tags", "Notes Tags", "Notes or Tags", "Custom Notes or Tags"],
+};
 
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
@@ -59,24 +118,78 @@ function mapResponseStatus(val: unknown): string {
 
 function normalizeHeaderName(value: unknown): string {
   return String(value ?? "")
+    .normalize("NFKC")
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, " ");
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function getCellByHeader(row: Record<string, unknown>, headerCandidates: string[]): unknown {
-  const entries = Object.entries(row);
-  for (const [key, value] of entries) {
-    const normalized = normalizeHeaderName(key);
-    if (headerCandidates.some((candidate) => normalizeHeaderName(candidate) === normalized)) {
-      return value;
+function getHeadersFromRows(rows: Record<string, unknown>[]): string[] {
+  const seen = new Set<string>();
+  const headers: string[] = [];
+
+  rows.forEach((row) => {
+    Object.keys(row).forEach((header) => {
+      if (!header || seen.has(header)) return;
+      seen.add(header);
+      headers.push(header);
+    });
+  });
+
+  return headers;
+}
+
+function createColumnMapping(headers: string[]): ColumnMapping {
+  const aliases = new Map<string, ImportField>();
+  (Object.entries(FIELD_HEADER_ALIASES) as [ImportField, string[]][]).forEach(([field, candidates]) => {
+    candidates.forEach((candidate) => aliases.set(normalizeHeaderName(candidate), field));
+  });
+
+  const byField: Partial<Record<ImportField, string>> = {};
+  const knownHeaders = new Set<string>();
+  const warnings: string[] = [];
+
+  headers.forEach((header) => {
+    const normalizedHeader = normalizeHeaderName(header);
+    if (!normalizedHeader) return;
+
+    const field = aliases.get(normalizedHeader);
+    if (!field) return;
+
+    if (byField[field]) {
+      warnings.push(`Column "${header}" also maps to ${FIELD_LABELS[field]}; using "${byField[field]}" and preserving "${header}" as a custom field.`);
+      return;
     }
-  }
-  return "";
+
+    byField[field] = header;
+    knownHeaders.add(header);
+  });
+
+  return { byField, knownHeaders, warnings };
 }
 
-function hasHeader(headers: string[], headerCandidates: string[]): boolean {
-  return headerCandidates.some((candidate) => headers.includes(normalizeHeaderName(candidate)));
+function getMappedCell(row: Record<string, unknown>, mapping: ColumnMapping, field: ImportField): unknown {
+  const header = mapping.byField[field];
+  return header ? row[header] : "";
+}
+
+function hasMeaningfulValue(value: unknown): boolean {
+  return String(value ?? "").trim() !== "";
+}
+
+function isBlankRow(row: Record<string, unknown>): boolean {
+  return Object.values(row).every((value) => !hasMeaningfulValue(value));
+}
+
+function missingRequiredFields(row: Record<string, unknown>, mapping: ColumnMapping): ImportField[] {
+  return REQUIRED_IMPORT_FIELDS.filter((field) => !hasMeaningfulValue(getMappedCell(row, mapping, field)));
+}
+
+function joinFieldLabels(fields: ImportField[]): string {
+  return fields.map((field) => FIELD_LABELS[field]).join(", ");
 }
 
 function getCellValue(value: ExcelJS.CellValue): unknown {
@@ -89,6 +202,48 @@ function getCellValue(value: ExcelJS.CellValue): unknown {
   if ("richText" in value) return value.richText.map((part) => part.text).join("");
   if ("hyperlink" in value && "text" in value) return value.text;
   return "";
+}
+
+function getCellHyperlinkTarget(value: ExcelJS.CellValue): string {
+  if (value == null || value instanceof Date || typeof value !== "object") return "";
+  // Excel stores hyperlink targets separately from display text, so link columns should prefer the target URL.
+  if ("hyperlink" in value && typeof value.hyperlink === "string") return value.hyperlink;
+  return "";
+}
+
+function parseBooleanFlag(value: unknown): boolean | undefined {
+  const normalized = normalizeHeaderName(value);
+  if (!normalized) return undefined;
+  if (["yes", "y", "true", "1", "included", "sent", "submitted"].includes(normalized)) return true;
+  if (["no", "n", "false", "0", "not included", "none"].includes(normalized)) return false;
+  return undefined;
+}
+
+function parseDaysSinceApplied(value: unknown): number | undefined {
+  if (!hasMeaningfulValue(value)) return undefined;
+  const parsed = Number(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function addTextField(application: JobApplication, key: "jobLink" | "salary" | "recruiterContactName" | "tags", value: unknown) {
+  const sanitized = sanitizeSingleLineText(value, key === "jobLink" ? 2048 : undefined);
+  if (sanitized) application[key] = sanitized;
+}
+
+function addDateField(application: JobApplication, key: "interviewDate", value: unknown) {
+  const sanitized = sanitizeDateInput(parseExcelDate(value));
+  if (sanitized) application[key] = sanitized;
+}
+
+function getCustomFields(row: Record<string, unknown>, mapping: ColumnMapping): Record<string, string> | undefined {
+  const customFields: Record<string, string> = {};
+
+  Object.entries(row).forEach(([header, value]) => {
+    if (!header || mapping.knownHeaders.has(header) || !hasMeaningfulValue(value)) return;
+    customFields[header] = sanitizeMultilineText(value);
+  });
+
+  return Object.keys(customFields).length > 0 ? customFields : undefined;
 }
 
 function worksheetToMatrix(sheet: ExcelJS.Worksheet): unknown[][] {
@@ -104,16 +259,22 @@ function worksheetToMatrix(sheet: ExcelJS.Worksheet): unknown[][] {
 }
 
 function worksheetToRows(sheet: ExcelJS.Worksheet): Record<string, unknown>[] {
-  const matrix = worksheetToMatrix(sheet);
-  const headers = (matrix[0] ?? []).map((value) => String(value ?? ""));
+  const headers = Array.from({ length: sheet.columnCount }, (_, index) => String(getCellValue(sheet.getCell(1, index + 1).value) ?? ""));
+  const linkHeader = createColumnMapping(headers).byField.jobLink;
+  const rows: Record<string, unknown>[] = [];
 
-  return matrix.slice(1).map((row) => {
+  for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber++) {
+    const row = sheet.getRow(rowNumber);
     const record: Record<string, unknown> = {};
     headers.forEach((header, index) => {
-      if (header) record[header] = row[index] ?? "";
+      if (!header) return;
+      const cellValue = row.getCell(index + 1).value;
+      record[header] = header === linkHeader ? getCellHyperlinkTarget(cellValue) || getCellValue(cellValue) : getCellValue(cellValue);
     });
-    return record;
-  });
+    rows.push(record);
+  }
+
+  return rows;
 }
 
 async function loadWorkbook(buffer: ArrayBuffer): Promise<ExcelJS.Workbook> {
@@ -158,21 +319,28 @@ type WorkbookParseResult = {
   applications: JobApplication[];
   preferredOrder: string[];
   missingResponseStatusColumn: boolean;
+  warnings: string[];
 };
 
 function parseWorkbook(wb: ExcelJS.Workbook): WorkbookParseResult {
   const applicationsSheet = wb.getWorksheet("Applications") ?? wb.worksheets[0];
+  // Empty workbooks cannot be mapped safely, so surface a clear import failure instead of a vague parser error.
+  if (!applicationsSheet) throw new Error("Workbook does not contain any worksheets.");
+
   const listsSheet = wb.getWorksheet("Lists");
   const rows = worksheetToRows(applicationsSheet);
   const matrix = worksheetToMatrix(applicationsSheet);
-  const headers = (matrix[0] ?? []).map((value) => normalizeHeaderName(value));
+  const headers = (matrix[0] ?? []).map((value) => String(value ?? ""));
+  const mapping = createColumnMapping(headers);
+  const parsedRows = mapRowsToApplicationsWithValidation(rows, headers);
   const preferredOrder = extractResponseStatusOrderFromListSheet(listsSheet);
-  const missingResponseStatusColumn = !hasHeader(headers, RESPONSE_STATUS_HEADERS);
+  const missingResponseStatusColumn = !mapping.byField.responseStatus;
 
   return {
-    applications: mapRowsToApplications(rows),
+    applications: parsedRows.applications,
     preferredOrder,
     missingResponseStatusColumn,
+    warnings: parsedRows.warnings,
   };
 }
 
@@ -226,33 +394,72 @@ export async function importApplicationsFromFile(file: File): Promise<{ applicat
   const warnings = parsed.missingResponseStatusColumn
     ? ["Missing 'Response Status' column in 'Applications' sheet. Defaulting all response statuses to Applied."]
     : [];
+  warnings.push(...parsed.warnings);
   setImportWarnings(warnings);
 
   return { applications: parsed.applications, warnings };
 }
 
-// Maps raw Excel rows to our JobApplication data structure, applying necessary transformations and defaults.
-export function mapRowsToApplications(rows: Record<string, unknown>[]): JobApplication[] {
-  return rows
-    .filter((r) => getCellByHeader(r, JOB_TITLE_HEADERS) && String(getCellByHeader(r, JOB_TITLE_HEADERS)).trim())
-    .map((r) => {
-      const responseStatus = mapResponseStatus(getCellByHeader(r, RESPONSE_STATUS_HEADERS));
-      const rawCurrentStatus = getCellByHeader(r, CURRENT_STATUS_HEADERS);
+export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown>[], headers = getHeadersFromRows(rows)): RowsParseResult {
+  const mapping = createColumnMapping(headers);
+  const warnings = [...mapping.warnings];
+  const missingColumns = REQUIRED_IMPORT_FIELDS.filter((field) => !mapping.byField[field]);
 
-      return {
-        id: generateId(),
-        jobTitle: sanitizeSingleLineText(getCellByHeader(r, JOB_TITLE_HEADERS)),
-        companyName: sanitizeSingleLineText(getCellByHeader(r, COMPANY_HEADERS)),
-        location: sanitizeSingleLineText(getCellByHeader(r, LOCATION_HEADERS)),
-        currentStatus: rawCurrentStatus ? mapStatus(rawCurrentStatus) : mapResponseStatusToCurrentStatus(responseStatus),
-        responseStatus,
-        followUps: String(getCellByHeader(r, FOLLOW_UP_HEADERS) || "").toLowerCase() === "yes",
-        dateApplied: sanitizeDateInput(parseExcelDate(getCellByHeader(r, DATE_APPLIED_HEADERS))),
-        notes: sanitizeMultilineText(getCellByHeader(r, NOTES_HEADERS)),
-        followUpDate: sanitizeDateInput(parseExcelDate(getCellByHeader(r, FOLLOW_UP_DATE_HEADERS))),
-        activityLog: [],
-      };
-    });
+  if (missingColumns.length > 0) {
+    warnings.push(`Missing required column(s): ${joinFieldLabels(missingColumns)}. Rows without those values were skipped.`);
+  }
+
+  const applications: JobApplication[] = [];
+
+  rows.forEach((row, index) => {
+    if (isBlankRow(row)) return;
+
+    const missingFields = missingRequiredFields(row, mapping);
+    if (missingFields.length > 0) {
+      warnings.push(`Row ${index + 2} skipped because it is missing ${joinFieldLabels(missingFields)}.`);
+      return;
+    }
+
+    const responseStatus = mapResponseStatus(getMappedCell(row, mapping, "responseStatus"));
+    const rawCurrentStatus = getMappedCell(row, mapping, "currentStatus");
+    const coverLetterIncluded = parseBooleanFlag(getMappedCell(row, mapping, "coverLetterIncluded"));
+    const daysSinceApplied = parseDaysSinceApplied(getMappedCell(row, mapping, "daysSinceApplied"));
+    const customFields = getCustomFields(row, mapping);
+
+    // Build the stable application shape first, then hydrate optional fields from flexible templates.
+    const application: JobApplication = {
+      id: generateId(),
+      jobTitle: sanitizeSingleLineText(getMappedCell(row, mapping, "jobTitle")),
+      companyName: sanitizeSingleLineText(getMappedCell(row, mapping, "companyName")),
+      location: sanitizeSingleLineText(getMappedCell(row, mapping, "location")),
+      currentStatus: rawCurrentStatus ? mapStatus(rawCurrentStatus) : mapResponseStatusToCurrentStatus(responseStatus),
+      responseStatus,
+      followUps: parseBooleanFlag(getMappedCell(row, mapping, "followUps")) ?? false,
+      dateApplied: sanitizeDateInput(parseExcelDate(getMappedCell(row, mapping, "dateApplied"))),
+      notes: sanitizeMultilineText(getMappedCell(row, mapping, "notes")),
+      followUpDate: sanitizeDateInput(parseExcelDate(getMappedCell(row, mapping, "followUpDate"))),
+      activityLog: [],
+    };
+
+    addTextField(application, "jobLink", getMappedCell(row, mapping, "jobLink"));
+    addTextField(application, "salary", getMappedCell(row, mapping, "salary"));
+    addTextField(application, "recruiterContactName", getMappedCell(row, mapping, "recruiterContactName"));
+    addTextField(application, "tags", getMappedCell(row, mapping, "tags"));
+    addDateField(application, "interviewDate", getMappedCell(row, mapping, "interviewDate"));
+
+    if (daysSinceApplied !== undefined) application.daysSinceApplied = daysSinceApplied;
+    if (coverLetterIncluded !== undefined) application.coverLetterIncluded = coverLetterIncluded;
+    if (customFields) application.customFields = customFields;
+
+    applications.push(application);
+  });
+
+  return { applications, warnings };
+}
+
+// Maps raw Excel rows to our JobApplication data structure, preserving the existing public helper signature.
+export function mapRowsToApplications(rows: Record<string, unknown>[]): JobApplication[] {
+  return mapRowsToApplicationsWithValidation(rows).applications;
 }
 
 export function getApplications(): JobApplication[] {

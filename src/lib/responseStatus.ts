@@ -116,6 +116,7 @@ export function mapResponseStatusToCurrentStatus(raw: string | null | undefined)
   if (status === "Interview" || status === "Assessment") return "Interview";
   // Cancelled roles are no longer active, so keep them out of the generic Applied bucket.
   if (status === "Role Cancelled") return "Withdrawn";
+  if (status === "Withdrawn") return "Withdrawn";
   return "Applied";
 }
 

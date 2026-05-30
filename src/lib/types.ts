@@ -25,6 +25,16 @@ export interface JobApplication {
   dateApplied: string;
   notes: string;
   followUpDate: string;
+  /** Optional fields captured from flexible spreadsheet templates. */
+  jobLink?: string;
+  salary?: string;
+  daysSinceApplied?: number;
+  coverLetterIncluded?: boolean;
+  recruiterContactName?: string;
+  interviewDate?: string;
+  tags?: string;
+  /** Unknown spreadsheet columns are preserved here using their original header names. */
+  customFields?: Record<string, string>;
   activityLog: ActivityLogEntry[];
 }
 

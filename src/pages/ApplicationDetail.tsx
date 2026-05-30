@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Clock, Edit2, Save, X, Trash2 } from "lucide-react";
+import { ArrowLeft, Clock, Edit2, ExternalLink, Save, Trash2 } from "lucide-react";
 import type { JobApplication, CurrentStatus, ActivityLogEntry } from "@/lib/types";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { updateApplication, deleteApplication, generateId } from "@/lib/storage";
@@ -63,6 +63,17 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
     { label: "Follow-Up Date", key: "followUpDate" as const },
   ];
 
+  function getSafeExternalHref(value: string | undefined): string {
+    if (!value) return "";
+    try {
+      // Imported links are untrusted, so only render clickable http(s) destinations.
+      const url = new URL(value);
+      return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+    } catch {
+      return "";
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -96,11 +107,28 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
               <div key={f.key}>
                 <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
                 {editing ? (
-                  <Input value={app[f.key]} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} className="mt-1" />
+                  <div className="mt-1 space-y-2">
+                    <Input value={app[f.key] ?? ""} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} />
+                    {f.key === "jobTitle" && (
+                      <Input value={app.jobLink ?? ""} onChange={(e) => setApp({ ...app, jobLink: e.target.value })} placeholder="Job posting URL" />
+                    )}
+                  </div>
                 ) : (
-                  <p className="mt-1 text-sm">
-                    {f.key === "dateApplied" || f.key === "followUpDate" ? formatDisplayDate(app[f.key]) : (app[f.key] || "—")}
-                  </p>
+                  <div className="mt-1 space-y-1">
+                    <p className="text-sm">
+                      {f.key === "dateApplied" || f.key === "followUpDate" ? formatDisplayDate(app[f.key]) : (app[f.key] || "—")}
+                    </p>
+                    {f.key === "jobTitle" && getSafeExternalHref(app.jobLink) && (
+                      <a
+                        href={getSafeExternalHref(app.jobLink)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                      >
+                        Open posting <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
