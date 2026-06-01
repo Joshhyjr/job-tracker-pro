@@ -45,21 +45,51 @@ export type StatusBreakdownItem = {
   count: number;
 };
 
+// Central colour mapping for all application statuses — single source of truth
+// used by the pie chart, legend, badges, recent applications list, and insights.
+// Keeps colours consistent across the app and readable on light + dark themes.
 const RESPONSE_STATUS_COLORS: Record<string, string> = {
-  Applied: "hsl(213 94% 55%)",
-  Interview: "hsl(142, 100%, 50%)",
-  Offer: "hsl(127, 98%, 16%)",
-  Rejected: "hsl(0 84% 60%)",
-  "No Response": "hsl(217, 15%, 29%)",
-  Assessment: "hsl(48 96% 53%)",
-  "Auto-reply received": "hsl(213 94% 55%)",
-  "Human reply received": "hsl(271 76% 53%)",
-  "Pre-screen call": "hsl(241, 100%, 49%)",
+  Applied: "hsl(213 90% 56%)",                // blue
+  Active: "hsl(213 90% 56%)",                  // blue (alias)
+  Assessment: "hsl(45 95% 55%)",               // yellow
+  "Auto-reply received": "hsl(200 85% 65%)",   // light blue
+  "Human reply received": "hsl(271 70% 55%)",  // purple — distinct human reply
+  Interview: "hsl(142 65% 45%)",               // green
+  Offer: "hsl(152 75% 40%)",                   // emerald
+  "No Response": "hsl(215 14% 50%)",           // slate / grey
+  "Pre-screen call": "hsl(243 75% 58%)",       // indigo
+  Rejected: "hsl(0 72% 55%)",                  // red
+  "Role Cancelled": "hsl(220 10% 30%)",        // dark grey
+  Withdrawn: "hsl(28 85% 55%)",                // orange
+  "Not Applied": "hsl(215 12% 70%)",           // muted grey
 };
+
+// Fallback colour for unknown/custom statuses imported from external data.
+const FALLBACK_STATUS_COLOR = "hsl(215 16% 47%)";
 
 export function getResponseStatusColor(raw: string): string {
   const normalized = normalizeResponseStatus(raw);
-  return RESPONSE_STATUS_COLORS[normalized] ?? "hsl(215 16% 47%)";
+  return RESPONSE_STATUS_COLORS[normalized] ?? FALLBACK_STATUS_COLOR;
+}
+
+/**
+ * Inline style for a soft, glass-friendly status pill driven by the central colour map.
+ * Used where statuses are dynamic (e.g. Recent Applications, Insights) and can't rely
+ * on the fixed STATUS_BADGE_CLASSES enum.
+ */
+export function getResponseStatusBadgeStyle(raw: string): {
+  backgroundColor: string;
+  color: string;
+  borderColor: string;
+} {
+  const color = getResponseStatusColor(raw);
+  // Convert "hsl(h s% l%)" → tinted variants with alpha for bg + border.
+  const inner = color.replace(/^hsl\(|\)$/g, "");
+  return {
+    backgroundColor: `hsl(${inner} / 0.14)`,
+    color,
+    borderColor: `hsl(${inner} / 0.3)`,
+  };
 }
 
 export function getResponseStatusBadgeClass(raw: string, active: boolean): string {
