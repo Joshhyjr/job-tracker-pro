@@ -7,7 +7,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGri
 import type { JobApplication } from "@/lib/types";
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
-import { computeStatusBreakdown, getResponseStatusColor } from "@/lib/responseStatus";
+import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle } from "@/lib/responseStatus";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
 import { formatDisplayDate } from "@/lib/utils";
 
@@ -282,7 +282,11 @@ export default function Dashboard({ applications }: { applications: JobApplicati
                     <p className="truncate text-xs text-muted-foreground">{app.jobTitle}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <span className="flex items-center gap-1.5 rounded-full border border-border/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    {/* Status pill uses the central colour helper so it matches the pie + legend */}
+                    <span
+                      className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium"
+                      style={getResponseStatusBadgeStyle(app.responseStatus)}
+                    >
                       <span
                         className="h-2 w-2 rounded-full"
                         style={{ background: getResponseStatusColor(app.responseStatus) }}
