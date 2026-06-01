@@ -18,6 +18,12 @@ export interface JobApplication {
   jobTitle: string;
   companyName: string;
   location: string;
+  /** Optional parsed geography used by the locations map without changing the table's location field. */
+  city?: string;
+  region?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
   currentStatus: CurrentStatus;
   /** Dynamic — can be any string from the imported dataset */
   responseStatus: string;

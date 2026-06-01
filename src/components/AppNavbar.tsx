@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download, Upload } from "lucide-react";
+import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download, Upload, Globe2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChangeEvent, useRef, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,6 +10,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/applications", label: "Applications", icon: List },
+  { to: "/locations", label: "Locations", icon: Globe2 },
   { to: "/follow-ups", label: "Follow-ups", icon: Bell },
   { to: "/add", label: "Add New", icon: PlusCircle },
 ];

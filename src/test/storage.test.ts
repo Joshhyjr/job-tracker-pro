@@ -74,6 +74,18 @@ describe("mapRowsToApplications", () => {
     });
   });
 
+  it("maps headers with quote separators to the same fields as spaced headers", () => {
+    const [application] = mapRowsToApplications([
+      {
+        Role: "Engineer",
+        Organisation: "Acme",
+        "Job'Link": "https://jobs.example/engineer",
+      },
+    ]);
+
+    expect(application.jobLink).toBe("https://jobs.example/engineer");
+  });
+
   it("maps user template synonyms and preserves unknown columns", () => {
     const [application] = mapRowsToApplications([
       {
@@ -107,6 +119,66 @@ describe("mapRowsToApplications", () => {
       customFields: {
         "Portfolio Notes": "Sent case study link",
       },
+    });
+  });
+
+  it("maps parsed geography fields without replacing the display location", () => {
+    const [application] = mapRowsToApplications([
+      {
+        Position: "Platform Engineer",
+        Employer: "Atlas",
+        Location: "Remote - Americas",
+        City: "Toronto",
+        Country: "Canada",
+        Latitude: "43.6532",
+        Longitude: "-79.3832",
+      },
+    ]);
+
+    // Geography enriches the map while the legacy Location value remains available to the table.
+    expect(application).toMatchObject({
+      location: "Remote - Americas",
+      city: "Toronto",
+      country: "Canada",
+      latitude: 43.6532,
+      longitude: -79.3832,
+    });
+  });
+
+  it("maps province or region fields as location enrichment", () => {
+    const [application] = mapRowsToApplications([
+      {
+        Position: "Systems Analyst",
+        Employer: "Forvan Tech",
+        City: "Woodstock",
+        Province: "Ontario",
+        Country: "Canada",
+      },
+    ]);
+
+    expect(application).toMatchObject({
+      location: "Woodstock, Ontario, Canada",
+      city: "Woodstock",
+      region: "Ontario",
+      country: "Canada",
+    });
+  });
+
+  it("derives the display location from city and country when location is absent", () => {
+    const [application] = mapRowsToApplications([
+      {
+        Position: "Backend Engineer",
+        Employer: "Atlas",
+        City: "Halifax",
+        Country: "Canada",
+      },
+    ]);
+
+    // City/Country-only templates still leave the existing table Location column populated.
+    expect(application).toMatchObject({
+      location: "Halifax, Canada",
+      city: "Halifax",
+      country: "Canada",
     });
   });
 

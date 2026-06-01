@@ -12,6 +12,11 @@ type ImportField =
   | "jobTitle"
   | "companyName"
   | "location"
+  | "city"
+  | "region"
+  | "country"
+  | "latitude"
+  | "longitude"
   | "currentStatus"
   | "responseStatus"
   | "followUps"
@@ -43,6 +48,11 @@ const FIELD_LABELS: Record<ImportField, string> = {
   jobTitle: "Job Title",
   companyName: "Company",
   location: "Location",
+  city: "City",
+  region: "Province/Region",
+  country: "Country",
+  latitude: "Latitude",
+  longitude: "Longitude",
   currentStatus: "Current Status",
   responseStatus: "Application Status",
   followUps: "Follow Ups",
@@ -62,7 +72,12 @@ const FIELD_LABELS: Record<ImportField, string> = {
 const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
   jobTitle: ["Job Title", "Position", "Position Title", "Role", "Title", "Job Role", "Job Name", "Opening", "Opportunity"],
   companyName: ["Company Name", "Company", "Organization", "Organisation", "Employer", "Company/Employer", "Hiring Company"],
-  location: ["Location", "Job Location", "Office Location", "City", "Work Location"],
+  location: ["Location", "Job Location", "Office Location", "Work Location"],
+  city: ["City", "Job City", "Office City", "Location City"],
+  region: ["Province/Region", "Province", "Region", "State", "Admin Region", "Administrative Region", "Location Region"],
+  country: ["Country", "Job Country", "Office Country", "Location Country"],
+  latitude: ["Latitude", "Lat"],
+  longitude: ["Longitude", "Lng", "Long", "Lon"],
   currentStatus: ["Current Status", "Tracker Status", "Internal Status"],
   responseStatus: ["Response Status", "Decision Status", "Decision", "Outcome", "Application Status", "Status", "Stage"],
   followUps: ["Follow Ups", "Follow-Ups", "Follow Up", "Follow-Up", "Follow Up Needed", "Needs Follow Up"],
@@ -121,7 +136,7 @@ function normalizeHeaderName(value: unknown): string {
     .normalize("NFKC")
     .trim()
     .toLowerCase()
-    .replace(/['’]/g, "")
+    .replace(/['’"]/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -225,7 +240,13 @@ function parseDaysSinceApplied(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function addTextField(application: JobApplication, key: "jobLink" | "salary" | "recruiterContactName" | "tags", value: unknown) {
+function parseGeographicCoordinate(value: unknown, min: number, max: number): number | undefined {
+  if (!hasMeaningfulValue(value)) return undefined;
+  const parsed = Number(String(value).trim());
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
+}
+
+function addTextField(application: JobApplication, key: "jobLink" | "salary" | "recruiterContactName" | "tags" | "city" | "country", value: unknown) {
   const sanitized = sanitizeSingleLineText(value, key === "jobLink" ? 2048 : undefined);
   if (sanitized) application[key] = sanitized;
 }
@@ -424,6 +445,12 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
     const rawCurrentStatus = getMappedCell(row, mapping, "currentStatus");
     const coverLetterIncluded = parseBooleanFlag(getMappedCell(row, mapping, "coverLetterIncluded"));
     const daysSinceApplied = parseDaysSinceApplied(getMappedCell(row, mapping, "daysSinceApplied"));
+    const latitude = parseGeographicCoordinate(getMappedCell(row, mapping, "latitude"), -90, 90);
+    const longitude = parseGeographicCoordinate(getMappedCell(row, mapping, "longitude"), -180, 180);
+    const city = sanitizeSingleLineText(getMappedCell(row, mapping, "city"));
+    const region = sanitizeSingleLineText(getMappedCell(row, mapping, "region"));
+    const country = sanitizeSingleLineText(getMappedCell(row, mapping, "country"));
+    const location = sanitizeSingleLineText(getMappedCell(row, mapping, "location")) || [city, region, country].filter(Boolean).join(", ");
     const customFields = getCustomFields(row, mapping);
 
     // Build the stable application shape first, then hydrate optional fields from flexible templates.
@@ -431,7 +458,7 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
       id: generateId(),
       jobTitle: sanitizeSingleLineText(getMappedCell(row, mapping, "jobTitle")),
       companyName: sanitizeSingleLineText(getMappedCell(row, mapping, "companyName")),
-      location: sanitizeSingleLineText(getMappedCell(row, mapping, "location")),
+      location,
       currentStatus: rawCurrentStatus ? mapStatus(rawCurrentStatus) : mapResponseStatusToCurrentStatus(responseStatus),
       responseStatus,
       followUps: parseBooleanFlag(getMappedCell(row, mapping, "followUps")) ?? false,
@@ -449,6 +476,12 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
 
     if (daysSinceApplied !== undefined) application.daysSinceApplied = daysSinceApplied;
     if (coverLetterIncluded !== undefined) application.coverLetterIncluded = coverLetterIncluded;
+    // Parsed geography is optional enrichment; the legacy location string remains the table's source of truth.
+    if (city) application.city = city;
+    if (region) application.region = region;
+    if (country) application.country = country;
+    if (latitude !== undefined) application.latitude = latitude;
+    if (longitude !== undefined) application.longitude = longitude;
     if (customFields) application.customFields = customFields;
 
     applications.push(application);

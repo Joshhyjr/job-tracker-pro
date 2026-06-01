@@ -10,6 +10,7 @@ import ApplicationsList from "@/pages/ApplicationsList";
 import ApplicationDetail from "@/pages/ApplicationDetail";
 import ApplicationForm from "@/pages/ApplicationForm";
 import FollowUps from "@/pages/FollowUps";
+import Locations from "@/pages/Locations";
 import NotFound from "./pages/NotFound";
 import { useApplications } from "@/hooks/useApplications";
 import { exportCSV, exportXLSX } from "@/lib/export";
@@ -74,6 +75,7 @@ function AppContent() {
               )
             }
           />
+          <Route path="/locations" element={<Locations applications={applications} />} />
           <Route path="/applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={refresh} />} />
           <Route path="/follow-ups" element={<FollowUps applications={applications} />} />
           <Route path="/add" element={<ApplicationForm onSaved={refresh} />} />
