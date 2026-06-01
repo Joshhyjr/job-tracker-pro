@@ -7,7 +7,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGri
 import type { JobApplication } from "@/lib/types";
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
-import { computeStatusBreakdown, getResponseStatusColor } from "@/lib/responseStatus";
+import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle } from "@/lib/responseStatus";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
 import { formatDisplayDate } from "@/lib/utils";
 
