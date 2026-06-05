@@ -7,6 +7,7 @@ const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
 const RESPONSE_STATUS_ORDER_KEY = "job-tracker-response-status-order";
 const IMPORT_WARNINGS_KEY = "job-tracker-import-warnings";
+const LAST_IMPORT_METADATA_KEY = "job-tracker-last-import";
 
 type ImportField =
   | "jobTitle"
@@ -41,6 +42,13 @@ type RowsParseResult = {
   applications: JobApplication[];
   warnings: string[];
 };
+
+export interface LastImportMetadata {
+  fileName: string;
+  importedAt: string;
+  rowCount: number;
+  warningCount: number;
+}
 
 const REQUIRED_IMPORT_FIELDS: ImportField[] = ["jobTitle", "companyName"];
 
@@ -373,6 +381,35 @@ function setImportWarnings(warnings: string[]) {
   localStorage.setItem(IMPORT_WARNINGS_KEY, JSON.stringify(warnings));
 }
 
+export function saveLastImportMetadata(metadata: LastImportMetadata) {
+  // Keep a lightweight import breadcrumb without retaining the original workbook.
+  localStorage.setItem(LAST_IMPORT_METADATA_KEY, JSON.stringify(metadata));
+}
+
+export function getLastImportMetadata(): LastImportMetadata | null {
+  const raw = localStorage.getItem(LAST_IMPORT_METADATA_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<LastImportMetadata>;
+    if (
+      typeof parsed.fileName !== "string" ||
+      typeof parsed.importedAt !== "string" ||
+      typeof parsed.rowCount !== "number" ||
+      typeof parsed.warningCount !== "number"
+    ) {
+      return null;
+    }
+    return {
+      fileName: parsed.fileName,
+      importedAt: parsed.importedAt,
+      rowCount: parsed.rowCount,
+      warningCount: parsed.warningCount,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function consumeImportWarnings(): string[] {
   const raw = localStorage.getItem(IMPORT_WARNINGS_KEY);
   localStorage.removeItem(IMPORT_WARNINGS_KEY);
@@ -417,6 +454,12 @@ export async function importApplicationsFromFile(file: File): Promise<{ applicat
     : [];
   warnings.push(...parsed.warnings);
   setImportWarnings(warnings);
+  saveLastImportMetadata({
+    fileName: sanitizeSingleLineText(file.name, 255) || "Imported workbook",
+    importedAt: new Date().toISOString(),
+    rowCount: parsed.applications.length,
+    warningCount: warnings.length,
+  });
 
   return { applications: parsed.applications, warnings };
 }

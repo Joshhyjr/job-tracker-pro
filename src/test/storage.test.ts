@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation } from "@/lib/storage";
+import { getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation } from "@/lib/storage";
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 describe("mapRowsToApplications", () => {
   it("reads Decision Status as the imported response status", () => {
@@ -227,5 +231,12 @@ describe("mapRowsToApplications", () => {
       },
     });
     expect(result.warnings).toContain("Missing 'Response Status' column in 'Applications' sheet. Defaulting all response statuses to Applied.");
+    // Import metadata helps the app resume from saved rows without keeping a copy of the XLSX file.
+    expect(getLastImportMetadata()).toMatchObject({
+      fileName: "custom-template.xlsx",
+      rowCount: 1,
+      warningCount: result.warnings.length,
+    });
+    expect(getLastImportMetadata()?.importedAt).toEqual(expect.any(String));
   });
 });
