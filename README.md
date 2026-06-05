@@ -12,6 +12,7 @@ Production: [job-tracker-pro-nine.vercel.app](https://job-tracker-pro-nine.verce
 - Dashboard analytics for application progress, outcomes, and follow-up activity
 - Recent Applications section for quick access to the latest opportunities
 - Insights & Recommendations based on current job search activity
+- Local Ollama AI insights for privacy-first job-search coaching
 - Application status tracking across applied, interview, offer, rejection, and withdrawn stages
 - Follow-up management with dates and overdue visibility
 - XLSX import/export powered by ExcelJS
@@ -24,6 +25,7 @@ Production: [job-tracker-pro-nine.vercel.app](https://job-tracker-pro-nine.verce
 
 - Added Recent Applications to the dashboard
 - Added Insights & Recommendations
+- Added local-only Ollama AI insight generation
 - Added Job Tracker Pro branding and logo
 - Removed Lovable branding
 - Added CI/CD workflows for linting, typechecking, tests, and builds
@@ -67,6 +69,21 @@ Private API keys, including future AI provider keys, must stay server-side only 
 ```sh
 npm install
 npm run dev
+```
+
+## Local AI Insights
+
+AI insights are generated manually through local Ollama, so job-search summaries stay on your machine and no hosted API key is required.
+
+```sh
+ollama pull qwen2.5:7b
+ollama serve
+```
+
+If Ollama blocks browser requests, start it with an origin that allows the app:
+
+```sh
+OLLAMA_ORIGINS=http://localhost:8080 ollama serve
 ```
 
 ## Build

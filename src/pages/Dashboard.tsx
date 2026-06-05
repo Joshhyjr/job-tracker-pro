@@ -1,10 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown, Building2, BarChart3, Timer, Lightbulb } from "lucide-react";
+import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown, Building2, BarChart3, Timer, Lightbulb, Sparkles, Loader2 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
+import type { AiInsights } from "@/lib/aiInsights";
+import { buildAiInsightSummary, generateLocalAiInsights, getConfiguredOllamaModel } from "@/lib/aiInsights";
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle } from "@/lib/responseStatus";
@@ -20,9 +22,12 @@ function safeParseDate(d: string) {
 
 export default function Dashboard({ applications }: { applications: JobApplication[] }) {
   const navigate = useNavigate();
-  const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const monthStart = startOfMonth(now);
+  const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const now = useMemo(() => new Date(), []);
+  const weekStart = useMemo(() => startOfWeek(now, { weekStartsOn: 1 }), [now]);
+  const monthStart = useMemo(() => startOfMonth(now), [now]);
 
   // Compute summary stats from the applications dataset
   const stats = useMemo(() => {
@@ -38,7 +43,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     });
 
     return { total: applications.length, thisWeek, thisMonth, overdue };
-  }, [applications]);
+  }, [applications, monthStart, now, weekStart]);
 
   // Dynamic status breakdown based on responseStatus field
   const statusBreakdown = useMemo(
@@ -153,6 +158,23 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     { label: "This Month", value: stats.thisMonth, icon: Clock, color: "text-[hsl(var(--status-offer))]" },
     { label: "Jobs Followed Up To", value: stats.overdue, icon: AlertTriangle, color: "text-[hsl(var(--status-rejected))]" },
   ];
+
+  async function handleGenerateAiInsights() {
+    setAiLoading(true);
+    setAiError("");
+
+    try {
+      // Only summary fields are sent to the local model; notes, links, recruiters, and custom fields stay out of the prompt.
+      const summary = buildAiInsightSummary(applications, now);
+      const generated = await generateLocalAiInsights(summary);
+      setAiInsights(generated);
+    } catch (error) {
+      setAiInsights(null);
+      setAiError(error instanceof Error ? error.message : `Start Ollama and pull the configured model (${getConfiguredOllamaModel()}).`);
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -302,33 +324,79 @@ export default function Dashboard({ applications }: { applications: JobApplicati
         </CardContent>
       </Card>
 
-      {/* Insights & Recommendations — compact, glass-style, derived from existing data */}
-      {insights.length > 0 && (
+      {/* Insights & Recommendations — deterministic fallback plus optional local Ollama coaching */}
+      {(insights.length > 0 || aiInsights || applications.length > 0) && (
         <Card className="glass-subtle border-border/40 shadow-none">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base font-medium">
-              <Lightbulb className="h-4 w-4 text-[hsl(var(--status-offer))]" />
-              Insights & Recommendations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {insights.map((ins, i) => {
-                // Tone-based subtle color: green=positive, red/amber=warning
-                const toneColor =
-                  ins.tone === "positive"
-                    ? "text-[hsl(var(--status-offer))]"
-                    : ins.tone === "warning"
-                    ? "text-[hsl(var(--status-rejected))]"
-                    : "text-muted-foreground";
-                return (
-                  <div key={i} className="glass flex items-start gap-3 rounded-xl px-3 py-2.5">
-                    <ins.icon className={`mt-0.5 h-4 w-4 shrink-0 ${toneColor}`} />
-                    <p className="text-sm leading-snug">{ins.label}</p>
-                  </div>
-                );
-              })}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="flex items-center gap-2 text-base font-medium">
+                <Lightbulb className="h-4 w-4 text-[hsl(var(--status-offer))]" />
+                Insights & Recommendations
+              </CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleGenerateAiInsights}
+                disabled={aiLoading || applications.length === 0}
+                className="w-full gap-2 sm:w-auto"
+              >
+                {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {aiInsights ? "Regenerate AI insights" : "Generate AI insights"}
+              </Button>
             </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {aiError && (
+              <div className="rounded-md border border-[hsl(var(--status-rejected)/0.25)] bg-[hsl(var(--status-rejected)/0.08)] px-3 py-2 text-sm text-[hsl(var(--status-rejected))]">
+                {aiError}
+              </div>
+            )}
+
+            {aiInsights && (
+              <div className="space-y-3">
+                {aiInsights.summary && (
+                  <div className="glass rounded-xl px-3 py-3">
+                    <p className="text-sm leading-relaxed">{aiInsights.summary}</p>
+                  </div>
+                )}
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {[
+                    { title: "Strengths", items: aiInsights.strengths },
+                    { title: "Improve", items: aiInsights.improvementAreas },
+                    { title: "Next Actions", items: aiInsights.recommendedNextActions },
+                  ].map((section) => (
+                    <div key={section.title} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                      <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">{section.title}</p>
+                      <ul className="space-y-1.5">
+                        {section.items.map((item) => (
+                          <li key={item} className="text-sm leading-snug">{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {insights.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {insights.map((ins, i) => {
+                  // Tone-based subtle color: green=positive, red/amber=warning
+                  const toneColor =
+                    ins.tone === "positive"
+                      ? "text-[hsl(var(--status-offer))]"
+                      : ins.tone === "warning"
+                      ? "text-[hsl(var(--status-rejected))]"
+                      : "text-muted-foreground";
+                  return (
+                    <div key={i} className="glass flex items-start gap-3 rounded-xl px-3 py-2.5">
+                      <ins.icon className={`mt-0.5 h-4 w-4 shrink-0 ${toneColor}`} />
+                      <p className="text-sm leading-snug">{ins.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
