@@ -29,6 +29,36 @@ export default function AppNavbar({
   const importInputRef = useRef<HTMLInputElement>(null);
   const { theme = "system", setTheme } = useTheme();
 
+  function handleImportClick() {
+    importInputRef.current?.click();
+  }
+
+  function handleExportCSV() {
+    onExportCSV();
+    setOpen(false);
+  }
+
+  function handleExportXLSX() {
+    onExportXLSX();
+    setOpen(false);
+  }
+
+  // Keep theme selection markup in one place so desktop and mobile stay aligned.
+  function renderThemeSelect(triggerClassName: string) {
+    return (
+      <Select value={theme} onValueChange={setTheme}>
+        <SelectTrigger className={triggerClassName}>
+          <SelectValue placeholder="Theme" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="system">System</SelectItem>
+          <SelectItem value="light">Light</SelectItem>
+          <SelectItem value="dark">Dark</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
   async function handleImportChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -56,31 +86,30 @@ export default function AppNavbar({
             </Button>
           ))}
           <div className="ml-2 flex gap-1">
-            <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-[132px] h-9">
-                <SelectValue placeholder="Theme" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="system">System</SelectItem>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="dark">Dark</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()}><Upload className="h-3.5 w-3.5 mr-1" />Import XLSX</Button>
-            <Button variant="outline" size="sm" onClick={onExportCSV}><Download className="h-3.5 w-3.5 mr-1" />CSV</Button>
-            <Button variant="outline" size="sm" onClick={onExportXLSX}><Download className="h-3.5 w-3.5 mr-1" />XLSX</Button>
+            {renderThemeSelect("h-9 w-[132px]")}
+            <Button variant="outline" size="sm" onClick={handleImportClick}><Upload className="h-3.5 w-3.5 mr-1" />Import XLSX</Button>
+            <Button variant="outline" size="sm" onClick={handleExportCSV}><Download className="h-3.5 w-3.5 mr-1" />CSV</Button>
+            <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-3.5 w-3.5 mr-1" />XLSX</Button>
           </div>
         </div>
 
         {/* Mobile toggle */}
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setOpen(!open)}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+          aria-controls="mobile-navigation"
+          aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+        >
           {open ? <X /> : <Menu />}
         </Button>
       </div>
 
       {/* Mobile menu — also glass */}
       {open && (
-        <div className="glass-subtle rounded-none border-x-0 border-b p-4 md:hidden">
+        <div id="mobile-navigation" className="glass-subtle rounded-none border-x-0 border-b p-4 md:hidden">
           <div className="flex flex-col gap-2">
             {links.map((l) => (
               <Button key={l.to} variant={location.pathname === l.to ? "secondary" : "ghost"} asChild className="justify-start" onClick={() => setOpen(false)}>
@@ -91,19 +120,10 @@ export default function AppNavbar({
               </Button>
             ))}
             <div className="flex gap-2 pt-2 border-t border-border/40">
-              <Select value={theme} onValueChange={setTheme}>
-                <SelectTrigger className="flex-1 h-9">
-                  <SelectValue placeholder="Theme" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="system">System</SelectItem>
-                  <SelectItem value="light">Light</SelectItem>
-                  <SelectItem value="dark">Dark</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => importInputRef.current?.click()}>Import</Button>
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => { onExportCSV(); setOpen(false); }}>CSV</Button>
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => { onExportXLSX(); setOpen(false); }}>XLSX</Button>
+              {renderThemeSelect("h-9 flex-1")}
+              <Button variant="outline" size="sm" className="flex-1" onClick={handleImportClick}>Import</Button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={handleExportCSV}>CSV</Button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={handleExportXLSX}>XLSX</Button>
             </div>
           </div>
         </div>

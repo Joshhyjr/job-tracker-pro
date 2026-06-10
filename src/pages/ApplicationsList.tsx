@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Search, ArrowUpDown, MoreHorizontal } from "lucide-react";
 import type { JobApplication, CurrentStatus, ActivityLogEntry } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
-import { Badge } from "@/components/ui/badge";
+import { badgeVariants } from "@/components/ui/badge";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getPreferredResponseStatusOrder, updateApplication, generateId } from "@/lib/storage";
@@ -21,6 +21,14 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
   const activeStatus = searchParams.get("status") as CurrentStatus | null;
   const activeResponseStatus = searchParams.get("responseStatus");
   const { toast } = useToast();
+
+  // Centralize filter param updates so the filter controls stay declarative.
+  function setFilters(next: { status?: CurrentStatus; responseStatus?: string }) {
+    const nextParams = new URLSearchParams();
+    if (next.status) nextParams.set("status", next.status);
+    if (next.responseStatus) nextParams.set("responseStatus", next.responseStatus);
+    setSearchParams(nextParams);
+  }
 
   // Dynamic response-status breakdown from current dataset
   const responseBreakdown = useMemo(
@@ -75,33 +83,38 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
       {/* Filter chips — glass toolbar */}
       <div className="glass-subtle rounded-2xl px-4 py-3 space-y-2">
         <div className="flex flex-wrap gap-2">
-          <Badge
+          <Button
+            type="button"
             variant={!activeStatus && !activeResponseStatus ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => setSearchParams({})}
+            size="sm"
+            onClick={() => setFilters({})}
           >
             All ({applications.length})
-          </Badge>
+          </Button>
           {CURRENT_STATUSES.map((s) => {
             const count = applications.filter((a) => getEffectiveCurrentStatus(a) === s).length;
             if (count === 0) return null;
             return (
-              <Badge key={s} variant={activeStatus === s ? "default" : "outline"} className="cursor-pointer" onClick={() => setSearchParams({ status: s })}>
+              <Button key={s} type="button" variant={activeStatus === s ? "default" : "outline"} size="sm" onClick={() => setFilters({ status: s })}>
                 {s} ({count})
-              </Badge>
+              </Button>
             );
           })}
         </div>
         <div className="flex flex-wrap gap-2">
           {responseBreakdown.map((item) => (
-            <Badge
+            <button
               key={item.key}
-              variant="outline"
-              className={cn("cursor-pointer", getResponseStatusBadgeClass(item.key, activeResponseStatus === item.key))}
-              onClick={() => setSearchParams({ ...(activeStatus ? { status: activeStatus } : {}), responseStatus: item.key })}
+              type="button"
+              className={cn(
+                badgeVariants({ variant: "outline" }),
+                "rounded-full px-3 py-1",
+                getResponseStatusBadgeClass(item.key, activeResponseStatus === item.key)
+              )}
+              onClick={() => setFilters({ ...(activeStatus ? { status: activeStatus } : {}), responseStatus: item.key })}
             >
               {item.label} ({item.count})
-            </Badge>
+            </button>
           ))}
         </div>
       </div>
@@ -115,8 +128,14 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
               <TableHead className="hidden sm:table-cell">Company</TableHead>
               <TableHead className="hidden md:table-cell">Location</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="cursor-pointer select-none" onClick={() => setSortAsc(!sortAsc)}>
-                <span className="flex items-center gap-1">Date <ArrowUpDown className="h-3 w-3" /></span>
+              <TableHead className="select-none">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-left"
+                  onClick={() => setSortAsc((current) => !current)}
+                >
+                  Date <ArrowUpDown className="h-3 w-3" />
+                </button>
               </TableHead>
               <TableHead className="w-12 text-right"><span className="sr-only">Actions</span></TableHead>
             </TableRow>
