@@ -5,7 +5,7 @@
 
 A modern job application tracking platform designed to help users organise applications, monitor progress, and gain intelligent insights into their job search.
 
-Production: [job-tracker-pro-nine.vercel.app](https://job-tracker-pro-nine.vercel.app)
+Production: [www.jkivaria.com](https://www.jkivaria.com))
 
 ## Features
 
