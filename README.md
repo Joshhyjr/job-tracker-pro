@@ -12,7 +12,7 @@ Production: [job-tracker-pro-nine.vercel.app](https://job-tracker-pro-nine.verce
 - Dashboard analytics for application progress, outcomes, and follow-up activity
 - Recent Applications section for quick access to the latest opportunities
 - Insights & Recommendations based on current job search activity
-- Local Ollama AI insights for privacy-first job-search coaching
+- Hosted Gemini AI insights with a privacy-first local Ollama fallback
 - Application status tracking across applied, interview, offer, rejection, and withdrawn stages
 - Follow-up management with dates and overdue visibility
 - XLSX import/export powered by ExcelJS
@@ -25,7 +25,7 @@ Production: [job-tracker-pro-nine.vercel.app](https://job-tracker-pro-nine.verce
 
 - Added Recent Applications to the dashboard
 - Added Insights & Recommendations
-- Added local-only Ollama AI insight generation
+- Added hosted Gemini AI insights with local Ollama fallback
 - Added Job Tracker Pro branding and logo
 - Removed Lovable branding
 - Added CI/CD workflows for linting, typechecking, tests, and builds
@@ -54,7 +54,7 @@ Job Tracker Pro includes practical security controls for a frontend portfolio ap
 - Sanitisation for manual and imported job application data
 - Vercel security headers, including CSP, referrer policy, permissions policy, and `nosniff`
 
-Private API keys, including future AI provider keys, must stay server-side only and must not use `VITE_` environment variables.
+Private API keys, including `GEMINI_API_KEY`, must stay server-side only and must not use `VITE_` environment variables.
 
 ## Future Roadmap
 
@@ -71,9 +71,24 @@ npm install
 npm run dev
 ```
 
-## Local AI Insights
+## AI Insights
 
-AI insights are generated manually through local Ollama, so job-search summaries stay on your machine and no hosted API key is required.
+AI insights use Google Gemini through the server-side `/api/ai-insights` Vercel Function. Only the dashboard's summarized application metrics are sent; notes, links, recruiter names, custom fields, and complete application records remain in the browser.
+
+Add these server-side environment variables locally and in Vercel:
+
+```sh
+GEMINI_API_KEY="your-google-ai-studio-key"
+GEMINI_MODEL="gemini-3.5-flash"
+```
+
+`GEMINI_MODEL` selects the primary model. Capacity failures automatically retry with `gemini-3.1-flash-lite` before using Ollama. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products. Never prefix the API key with `VITE_`, because Vite exposes those variables to browser code.
+
+Use `vercel dev` to run the frontend and Gemini function together locally. Plain `npm run dev` runs only Vite, so hosted requests will fall back to Ollama.
+
+### Ollama Fallback
+
+When Gemini is unavailable or not configured, AI insights fall back to local Ollama so summaries can stay on your machine.
 
 ```sh
 ollama pull qwen2.5:7b

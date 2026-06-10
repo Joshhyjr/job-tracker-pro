@@ -36,6 +36,7 @@ const OLLAMA_TAGS_URL = "http://localhost:11434/api/tags";
 const DEFAULT_OLLAMA_MODEL = "qwen2.5:7b";
 const MAX_LIST_ITEMS = 3;
 const MAX_RESPONSE_ITEMS = 4;
+const HOSTED_AI_INSIGHTS_URL = "/api/ai-insights";
 
 function safeParseDate(value: string): Date | null {
   const parsed = value ? parseISO(value) : null;
@@ -165,7 +166,7 @@ function normalizeSummary(value: unknown): string {
     .replace(/^(up|down|flat)$/i, "");
 }
 
-function normalizeInsights(value: unknown): AiInsights {
+export function normalizeAiInsights(value: unknown): AiInsights {
   const record = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 
   return {
@@ -185,7 +186,44 @@ function extractJsonObject(content: string): unknown {
 }
 
 export function parseLocalAiInsightsContent(content: string): AiInsights {
-  return normalizeInsights(extractJsonObject(content));
+  return normalizeAiInsights(extractJsonObject(content));
+}
+
+function hasAiInsights(insights: AiInsights): boolean {
+  return Boolean(insights.summary || insights.strengths.length || insights.improvementAreas.length || insights.recommendedNextActions.length);
+}
+
+export async function generateHostedAiInsights(summary: AiInsightSummary): Promise<AiInsights> {
+  let response: Response;
+
+  try {
+    // The server endpoint owns the Gemini key; the browser sends only the pre-filtered summary.
+    response = await fetch(HOSTED_AI_INSIGHTS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ summary }),
+    });
+  } catch {
+    throw new Error("Hosted AI insights are unavailable.");
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("Hosted AI insights returned an unexpected response.");
+  }
+
+  if (!response.ok) {
+    const message = typeof payload === "object" && payload !== null && typeof (payload as { error?: unknown }).error === "string"
+      ? (payload as { error: string }).error
+      : "Hosted AI insights are unavailable.";
+    throw new Error(message);
+  }
+
+  const insights = normalizeAiInsights(payload);
+  if (!hasAiInsights(insights)) throw new Error("Hosted AI insights returned an empty response.");
+  return insights;
 }
 
 export async function generateLocalAiInsights(summary: AiInsightSummary): Promise<AiInsights> {
@@ -241,7 +279,7 @@ export async function generateLocalAiInsights(summary: AiInsightSummary): Promis
   if (typeof content !== "string") throw new Error("Ollama returned an unexpected response.");
 
   const insights = parseLocalAiInsightsContent(content);
-  if (!insights.summary && insights.strengths.length === 0 && insights.improvementAreas.length === 0 && insights.recommendedNextActions.length === 0) {
+  if (!hasAiInsights(insights)) {
     throw new Error("Ollama returned empty insights.");
   }
 
@@ -250,4 +288,23 @@ export async function generateLocalAiInsights(summary: AiInsightSummary): Promis
 
 export function getConfiguredOllamaModel(): string {
   return import.meta.env.VITE_OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
+}
+
+export async function generateAiInsightsWithFallback(
+  summary: AiInsightSummary,
+  hostedGenerator = generateHostedAiInsights,
+  localGenerator = generateLocalAiInsights,
+): Promise<AiInsights> {
+  try {
+    return await hostedGenerator(summary);
+  } catch (hostedError) {
+    try {
+      // Ollama preserves a privacy-first path when Gemini is not configured or temporarily unavailable.
+      return await localGenerator(summary);
+    } catch (localError) {
+      const hostedMessage = hostedError instanceof Error ? hostedError.message : "Hosted AI insights failed.";
+      const localMessage = localError instanceof Error ? localError.message : "Local Ollama insights failed.";
+      throw new Error(`Gemini failed: ${hostedMessage} Ollama fallback failed: ${localMessage}`);
+    }
+  }
 }

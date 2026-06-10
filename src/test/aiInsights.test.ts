@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAiInsightSummary, parseLocalAiInsightsContent } from "@/lib/aiInsights";
+import { buildAiInsightSummary, generateAiInsightsWithFallback, generateHostedAiInsights, parseLocalAiInsightsContent } from "@/lib/aiInsights";
 import type { JobApplication } from "@/lib/types";
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
@@ -87,5 +87,49 @@ describe("parseLocalAiInsightsContent", () => {
 
     expect(insights.summary).toBe("Your search has volume but needs better follow-up discipline.");
     expect(insights.summary).not.toBe("[object Object]");
+  });
+});
+
+describe("hosted AI insights", () => {
+  const summary = buildAiInsightSummary([application()], new Date("2026-06-02T12:00:00Z"));
+  const hostedInsights = {
+    summary: "Hosted summary",
+    strengths: ["Consistent applications"],
+    improvementAreas: ["Follow up sooner"],
+    recommendedNextActions: ["Schedule a follow-up"],
+  };
+
+  it("sends only the privacy-filtered summary to the hosted endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(hostedInsights), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(generateHostedAiInsights(summary)).resolves.toEqual(hostedInsights);
+
+    const [, request] = fetchMock.mock.calls[0];
+    const body = JSON.parse(request.body);
+    expect(body).toEqual({ summary });
+    expect(JSON.stringify(body)).not.toContain("Private note");
+    expect(JSON.stringify(body)).not.toContain("Private recruiter");
+    vi.unstubAllGlobals();
+  });
+
+  it("uses Ollama when hosted insights fail", async () => {
+    const hostedGenerator = vi.fn().mockRejectedValue(new Error("Hosted unavailable"));
+    const localGenerator = vi.fn().mockResolvedValue(hostedInsights);
+
+    await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).resolves.toEqual(hostedInsights);
+    expect(localGenerator).toHaveBeenCalledWith(summary);
+  });
+
+  it("reports both failures when hosted and local insights fail", async () => {
+    const hostedGenerator = vi.fn().mockRejectedValue(new Error("Hosted unavailable"));
+    const localGenerator = vi.fn().mockRejectedValue(new Error("Ollama unavailable"));
+
+    await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).rejects.toThrow(
+      "Gemini failed: Hosted unavailable Ollama fallback failed: Ollama unavailable",
+    );
   });
 });

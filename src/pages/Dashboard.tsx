@@ -6,7 +6,7 @@ import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
 import type { AiInsights } from "@/lib/aiInsights";
-import { buildAiInsightSummary, generateLocalAiInsights, getConfiguredOllamaModel } from "@/lib/aiInsights";
+import { buildAiInsightSummary, generateAiInsightsWithFallback, getConfiguredOllamaModel } from "@/lib/aiInsights";
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle } from "@/lib/responseStatus";
@@ -164,9 +164,9 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     setAiError("");
 
     try {
-      // Only summary fields are sent to the local model; notes, links, recruiters, and custom fields stay out of the prompt.
+      // Only summary fields are sent to Gemini or Ollama; notes, links, recruiters, and custom fields stay out of the prompt.
       const summary = buildAiInsightSummary(applications, now);
-      const generated = await generateLocalAiInsights(summary);
+      const generated = await generateAiInsightsWithFallback(summary);
       setAiInsights(generated);
     } catch (error) {
       setAiInsights(null);

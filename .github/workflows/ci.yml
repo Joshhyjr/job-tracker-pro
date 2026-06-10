@@ -34,7 +34,8 @@ jobs:
         run: npm run lint --if-present
 
       - name: Typecheck
-        run: npx tsc -p tsconfig.app.json --noEmit && npx tsc -p tsconfig.node.json --noEmit
+        # Keep browser, build-config, and Vercel Function boundaries type-safe.
+        run: npx tsc -p tsconfig.app.json --noEmit && npx tsc -p tsconfig.node.json --noEmit && npx tsc -p tsconfig.api.json --noEmit
 
       - name: Test
         run: npm test --if-present
