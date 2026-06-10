@@ -19,7 +19,7 @@ jobs:
     steps:
       # Trusted first-party actions use Node 24-compatible major versions.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v5
