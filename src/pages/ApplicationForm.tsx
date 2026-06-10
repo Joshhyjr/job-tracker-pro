@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { addApplication, updateApplication } from "@/lib/storage";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
@@ -27,15 +27,42 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+// Keep form defaults in a helper so create and edit modes stay easy to compare.
+function getDefaultValues(existing?: JobApplication): FormData {
+  if (existing) {
+    return {
+      jobTitle: existing.jobTitle,
+      companyName: existing.companyName,
+      location: existing.location,
+      currentStatus: existing.currentStatus,
+      responseStatus: existing.responseStatus,
+      followUps: existing.followUps,
+      dateApplied: existing.dateApplied,
+      notes: existing.notes,
+      followUpDate: existing.followUpDate,
+    };
+  }
+
+  return {
+    jobTitle: "",
+    companyName: "",
+    location: "",
+    currentStatus: "Applied",
+    responseStatus: "No Response",
+    followUps: false,
+    dateApplied: new Date().toISOString().split("T")[0],
+    notes: "",
+    followUpDate: "",
+  };
+}
+
 export default function ApplicationForm({ existing, onSaved }: { existing?: JobApplication; onSaved: () => void }) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: existing
-      ? { jobTitle: existing.jobTitle, companyName: existing.companyName, location: existing.location, currentStatus: existing.currentStatus, responseStatus: existing.responseStatus, followUps: existing.followUps, dateApplied: existing.dateApplied, notes: existing.notes, followUpDate: existing.followUpDate }
-      : { jobTitle: "", companyName: "", location: "", currentStatus: "Applied", responseStatus: "No Response", followUps: false, dateApplied: new Date().toISOString().split("T")[0], notes: "", followUpDate: "" },
+    defaultValues: getDefaultValues(existing),
   });
 
   function onSubmit(data: FormData) {

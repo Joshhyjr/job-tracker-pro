@@ -19,9 +19,15 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   const [followNote, setFollowNote] = useState("");
   const { toast } = useToast();
 
-  function save() {
-    updateApplication(app);
+  // Keep local state, storage, and parent data synchronized after every mutation.
+  function persistApplication(next: JobApplication) {
+    setApp(next);
+    updateApplication(next);
     onUpdate();
+  }
+
+  function save() {
+    persistApplication(app);
     setEditing(false);
     toast({ title: "Saved", description: "Application updated." });
   }
@@ -29,9 +35,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   function changeStatus(status: CurrentStatus) {
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
     const updated = { ...app, currentStatus: status, activityLog: [entry, ...app.activityLog] };
-    setApp(updated);
-    updateApplication(updated);
-    onUpdate();
+    persistApplication(updated);
     toast({ title: "Status Updated", description: `Marked as ${status}` });
   }
 
@@ -39,9 +43,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
     if (!followNote.trim()) return;
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "follow_up", message: followNote };
     const updated = { ...app, followUps: true, activityLog: [entry, ...app.activityLog] };
-    setApp(updated);
-    updateApplication(updated);
-    onUpdate();
+    persistApplication(updated);
     setFollowNote("");
     toast({ title: "Follow-up Added" });
   }
@@ -73,6 +75,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
       return "";
     }
   }
+
+  const jobPostingHref = getSafeExternalHref(app.jobLink);
 
   return (
     <div className="space-y-8">
@@ -118,9 +122,9 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
                     <p className="text-sm">
                       {f.key === "dateApplied" || f.key === "followUpDate" ? formatDisplayDate(app[f.key]) : (app[f.key] || "—")}
                     </p>
-                    {f.key === "jobTitle" && getSafeExternalHref(app.jobLink) && (
+                    {f.key === "jobTitle" && jobPostingHref && (
                       <a
-                        href={getSafeExternalHref(app.jobLink)}
+                        href={jobPostingHref}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"

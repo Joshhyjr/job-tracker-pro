@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -29,9 +28,21 @@ function ApplicationDetailRoute({ applications, onUpdate }: { applications: JobA
   return <ApplicationDetail application={app} onBack={() => navigate("/applications")} onUpdate={onUpdate} />;
 }
 
+// Keep application selection in the URL so details remain shareable and refresh-safe.
+function ApplicationsListRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: () => void }) {
+  const navigate = useNavigate();
+
+  return (
+    <ApplicationsList
+      applications={applications}
+      onSelect={(application) => navigate(`/applications/${application.id}`)}
+      onUpdate={onUpdate}
+    />
+  );
+}
+
 function AppContent() {
   const { applications, loading, refresh } = useApplications();
-  const [selectedApp, setSelectedApp] = useState<JobApplication | null>(null);
   const { toast } = useToast();
 
   async function handleImportXLSX(file: File) {
@@ -40,7 +51,6 @@ function AppContent() {
       saveApplications(imported);
       markSeeded();
       refresh();
-      setSelectedApp(null);
       toast({ title: "Import complete", description: `Loaded ${imported.length} applications from ${file.name}.` });
       warnings.forEach((warning) => {
         toast({ title: "Import warning", description: warning });
@@ -65,16 +75,7 @@ function AppContent() {
       <main className="container py-8">
         <Routes>
           <Route path="/" element={<Dashboard applications={applications} />} />
-          <Route
-            path="/applications"
-            element={
-              selectedApp ? (
-                <ApplicationDetail application={selectedApp} onBack={() => setSelectedApp(null)} onUpdate={() => { refresh(); setSelectedApp(null); }} />
-              ) : (
-                <ApplicationsList applications={applications} onSelect={setSelectedApp} onUpdate={refresh} />
-              )
-            }
-          />
+          <Route path="/applications" element={<ApplicationsListRoute applications={applications} onUpdate={refresh} />} />
           <Route path="/locations" element={<Locations applications={applications} />} />
           <Route path="/applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={refresh} />} />
           <Route path="/follow-ups" element={<FollowUps applications={applications} />} />
