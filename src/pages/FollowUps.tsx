@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Copy, Mail, Linkedin } from "lucide-react";
+import { Mail, Linkedin } from "lucide-react";
 import type { JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { isApplicationOverdue } from "@/lib/overdue";
@@ -29,11 +29,12 @@ function linkedInTemplate(a: JobApplication) {
 
 export default function FollowUps({ applications }: { applications: JobApplication[] }) {
   const { toast } = useToast();
-  const now = new Date();
 
   const needsFollowUp = useMemo(() => {
+    // Capture the current time when application data changes instead of invalidating memoization every render.
+    const now = new Date();
     return applications.filter((a) => isApplicationOverdue(a, now));
-  }, [applications, now]);
+  }, [applications]);
 
   async function copyText(text: string, label: string) {
     await navigator.clipboard.writeText(text);

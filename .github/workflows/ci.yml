@@ -17,12 +17,12 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # Trusted first-party actions are pinned to major versions for security fixes.
+      # Trusted first-party actions use Node 24-compatible major versions.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm

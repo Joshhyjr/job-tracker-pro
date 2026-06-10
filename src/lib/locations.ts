@@ -32,7 +32,8 @@ type CoordinateResolution = {
   source: LocationResolutionSource;
 };
 
-type CachedCoordinate = Pick<CoordinateResolution, "latitude" | "longitude" | "city" | "country">;
+// Cached and indexed coordinates retain region data so city and regional matches resolve consistently.
+type CachedCoordinate = Pick<CoordinateResolution, "latitude" | "longitude" | "city" | "region" | "country">;
 
 type WorldCityRecord = {
   city: string;
