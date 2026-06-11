@@ -57,9 +57,17 @@ describe("POST /api/ai-insights", () => {
   it("rejects unsupported methods and cross-origin requests", async () => {
     const getResponse = await handleAiInsightsRequest(new Request("https://job-tracker.example/api/ai-insights"));
     const crossOriginResponse = await handleAiInsightsRequest(request({ summary: createSummary() }, { Origin: "https://attacker.example" }));
+    // Requests without an Origin header (curl/scripts) must also be rejected to prevent Gemini key abuse.
+    const noOriginRequest = new Request("https://job-tracker.example/api/ai-insights", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Host: "job-tracker.example" },
+      body: JSON.stringify({ summary: createSummary() }),
+    });
+    const noOriginResponse = await handleAiInsightsRequest(noOriginRequest);
 
     expect(getResponse.status).toBe(405);
     expect(crossOriginResponse.status).toBe(403);
+    expect(noOriginResponse.status).toBe(403);
   });
 
   it("rejects malformed payloads and missing configuration", async () => {
