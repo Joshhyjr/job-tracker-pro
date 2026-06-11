@@ -28,6 +28,8 @@ function request(body: unknown, headers: Record<string, string> = {}): Request {
     headers: {
       "Content-Type": "application/json",
       Host: "job-tracker.example",
+      // Default to a same-origin request so the endpoint's Origin check passes in tests.
+      Origin: "https://job-tracker.example",
       ...headers,
     },
     body: JSON.stringify(body),
