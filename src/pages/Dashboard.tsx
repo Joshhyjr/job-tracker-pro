@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown, Building2, BarChart3, Timer, Lightbulb, Sparkles, Loader2 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
 import type { AiInsights } from "@/lib/aiInsights";
-import { buildAiInsightSummary, generateAiInsightsWithFallback, getConfiguredOllamaModel } from "@/lib/aiInsights";
+import { buildAiInsightSummary, generateAiInsightsWithFallback, getConfiguredOllamaModel, getHostedAiAccessToken, setHostedAiAccessToken } from "@/lib/aiInsights";
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle } from "@/lib/responseStatus";
@@ -25,6 +26,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
   const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [aiAccessToken, setAiAccessToken] = useState(getHostedAiAccessToken);
   const now = useMemo(() => new Date(), []);
   const weekStart = useMemo(() => startOfWeek(now, { weekStartsOn: 1 }), [now]);
   const monthStart = useMemo(() => startOfMonth(now), [now]);
@@ -165,6 +167,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
 
     try {
       // Only summary fields are sent to Gemini or Ollama; notes, links, recruiters, and custom fields stay out of the prompt.
+      setHostedAiAccessToken(aiAccessToken);
       const summary = buildAiInsightSummary(applications, now);
       const generated = await generateAiInsightsWithFallback(summary);
       setAiInsights(generated);
@@ -346,6 +349,18 @@ export default function Dashboard({ applications }: { applications: JobApplicati
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                type="password"
+                autoComplete="off"
+                value={aiAccessToken}
+                onChange={(event) => setAiAccessToken(event.target.value)}
+                placeholder="Hosted AI access token (session only)"
+                aria-label="Hosted AI access token"
+              />
+              <p className="text-xs text-muted-foreground sm:max-w-56">Required for hosted Gemini; never bundled or persisted after this browser session.</p>
+            </div>
+
             {aiError && (
               <div className="rounded-md border border-[hsl(var(--status-rejected)/0.25)] bg-[hsl(var(--status-rejected)/0.08)] px-3 py-2 text-sm text-[hsl(var(--status-rejected))]">
                 {aiError}

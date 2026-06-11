@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { buildAiInsightSummary, generateAiInsightsWithFallback, generateHostedAiInsights, parseLocalAiInsightsContent } from "@/lib/aiInsights";
+import { beforeEach, describe, expect, it } from "vitest";
+import { buildAiInsightSummary, generateAiInsightsWithFallback, generateHostedAiInsights, parseLocalAiInsightsContent, setHostedAiAccessToken } from "@/lib/aiInsights";
 import type { JobApplication } from "@/lib/types";
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
@@ -99,6 +99,12 @@ describe("hosted AI insights", () => {
     recommendedNextActions: ["Schedule a follow-up"],
   };
 
+  beforeEach(() => {
+    // Hosted calls authenticate with a session-only token instead of a secret embedded in the Vite bundle.
+    sessionStorage.clear();
+    setHostedAiAccessToken("test-access-token");
+  });
+
   it("sends only the privacy-filtered summary to the hosted endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(hostedInsights), {
       status: 200,
@@ -110,6 +116,7 @@ describe("hosted AI insights", () => {
 
     const [, request] = fetchMock.mock.calls[0];
     const body = JSON.parse(request.body);
+    expect(request.headers.Authorization).toBe("Bearer test-access-token");
     expect(body).toEqual({ summary });
     expect(JSON.stringify(body)).not.toContain("Private note");
     expect(JSON.stringify(body)).not.toContain("Private recruiter");

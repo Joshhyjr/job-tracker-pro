@@ -37,6 +37,19 @@ const DEFAULT_OLLAMA_MODEL = "qwen2.5:7b";
 const MAX_LIST_ITEMS = 3;
 const MAX_RESPONSE_ITEMS = 4;
 const HOSTED_AI_INSIGHTS_URL = "/api/ai-insights";
+const HOSTED_AI_ACCESS_TOKEN_KEY = "job-tracker-ai-access-token";
+
+export function getHostedAiAccessToken(): string {
+  // Keep the operator-provided token session-only so it is neither bundled nor retained across browser restarts.
+  return typeof sessionStorage === "undefined" ? "" : sessionStorage.getItem(HOSTED_AI_ACCESS_TOKEN_KEY) || "";
+}
+
+export function setHostedAiAccessToken(token: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  const normalized = token.trim();
+  if (normalized) sessionStorage.setItem(HOSTED_AI_ACCESS_TOKEN_KEY, normalized);
+  else sessionStorage.removeItem(HOSTED_AI_ACCESS_TOKEN_KEY);
+}
 
 function safeParseDate(value: string): Date | null {
   const parsed = value ? parseISO(value) : null;
@@ -195,12 +208,17 @@ function hasAiInsights(insights: AiInsights): boolean {
 
 export async function generateHostedAiInsights(summary: AiInsightSummary): Promise<AiInsights> {
   let response: Response;
+  const accessToken = getHostedAiAccessToken();
+  if (!accessToken) throw new Error("Hosted AI insights require an access token.");
 
   try {
-    // The server endpoint owns the Gemini key; the browser sends only the pre-filtered summary.
+    // The server endpoint owns the Gemini key; the browser sends only the session token and pre-filtered summary.
     response = await fetch(HOSTED_AI_INSIGHTS_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ summary }),
     });
   } catch {

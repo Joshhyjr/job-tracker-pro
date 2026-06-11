@@ -1,6 +1,14 @@
 import ExcelJS from "exceljs";
 import type { JobApplication } from "./types";
 
+const SPREADSHEET_FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
+export function neutralizeSpreadsheetFormula(value: unknown): unknown {
+  // Office applications can execute formula-like CSV/XLSX cells, so force untrusted leading operators to plain text.
+  const cell = value ?? "";
+  return typeof cell === "string" && SPREADSHEET_FORMULA_PREFIX.test(cell) ? `'${cell}` : cell;
+}
+
 function toRows(apps: JobApplication[]) {
   return apps.map((a) => ({
     "Job Title": a.jobTitle,
@@ -59,11 +67,11 @@ function getExportHeaders(rows: ReturnType<typeof toRows>) {
 }
 
 export function exportCSV(apps: JobApplication[]) {
-  // CSV export avoids spreadsheet formulas and escapes cells before handing data to the browser download API.
+  // CSV export neutralizes spreadsheet formulas and escapes cells before handing data to the browser download API.
   const rows = toRows(apps);
   const headers = getExportHeaders(rows);
   const csv = [headers, ...rows.map((row) => headers.map((header) => row[header as keyof typeof row] ?? ""))]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .map((row) => row.map((cell) => `"${String(neutralizeSpreadsheetFormula(cell)).replace(/"/g, '""')}"`).join(","))
     .join("\n");
   download(csv, "job-applications.csv", "text/csv");
 }
@@ -75,8 +83,8 @@ export async function exportXLSX(apps: JobApplication[]) {
   const rows = toRows(apps);
   const headers = getExportHeaders(rows);
 
-  worksheet.addRow(headers);
-  rows.forEach((row) => worksheet.addRow(headers.map((header) => row[header as keyof typeof row] ?? "")));
+  worksheet.addRow(headers.map(neutralizeSpreadsheetFormula));
+  rows.forEach((row) => worksheet.addRow(headers.map((header) => neutralizeSpreadsheetFormula(row[header as keyof typeof row]))));
 
   const buffer = await workbook.xlsx.writeBuffer();
   download(buffer, "job-applications.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

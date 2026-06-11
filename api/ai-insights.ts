@@ -1,3 +1,6 @@
+import { timingSafeEqual } from "node:crypto";
+import type { IncomingMessage, ServerResponse } from "node:http";
+
 // Keep the function contract local so Vercel's Node runtime does not import browser-only modules.
 interface AiInsightSummary {
   totalApplications: number;
@@ -35,6 +38,7 @@ const MAX_RESPONSE_ITEMS = 4;
 
 type HandlerOptions = {
   apiKey?: string;
+  accessToken?: string;
   model?: string;
   fetchImpl?: typeof fetch;
 };
@@ -60,6 +64,17 @@ function isSameOrigin(request: Request): boolean {
   // clients (curl, scripts) cannot trigger Gemini calls and exhaust the API key quota.
   const origin = request.headers.get("origin");
   return origin !== null && origin === getExpectedOrigin(request);
+}
+
+function isAuthorized(request: Request, expectedToken: string): boolean {
+  const authorization = request.headers.get("authorization");
+  const token = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
+  if (!token || token.length > 512) return false;
+
+  // Constant-time comparison avoids leaking useful token-prefix timing to remote callers.
+  const provided = Buffer.from(token);
+  const expected = Buffer.from(expectedToken);
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -198,6 +213,9 @@ function extractGeminiText(payload: unknown): string | null {
 export async function handleAiInsightsRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   if (!isSameOrigin(request)) return jsonResponse({ error: "Cross-origin requests are not allowed." }, 403);
+  const accessToken = options.accessToken ?? process.env.AI_INSIGHTS_ACCESS_TOKEN;
+  if (!accessToken) return jsonResponse({ error: "Hosted AI insights authentication is not configured." }, 503);
+  if (!isAuthorized(request, accessToken)) return jsonResponse({ error: "Authentication required." }, 401);
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return jsonResponse({ error: "Content-Type must be application/json." }, 415);
 
   const contentLength = Number(request.headers.get("content-length") || 0);
@@ -316,4 +334,3 @@ export default async function handler(request: IncomingMessage, response: Server
     response.end(JSON.stringify({ error: "Hosted AI insights are temporarily unavailable." }));
   }
 }
-import type { IncomingMessage, ServerResponse } from "node:http";

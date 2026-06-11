@@ -54,7 +54,7 @@ Job Tracker Pro includes practical security controls for a frontend portfolio ap
 - Sanitisation for manual and imported job application data
 - Vercel security headers, including CSP, referrer policy, permissions policy, and `nosniff`
 
-Private API keys, including `GEMINI_API_KEY`, must stay server-side only and must not use `VITE_` environment variables.
+Private API keys, including `G_API_KEY`, must stay server-side only and must not use `VITE_` environment variables.
 
 ## Future Roadmap
 
@@ -80,9 +80,10 @@ Add these server-side environment variables locally and in Vercel:
 ```sh
 GEMINI_API_KEY="your-google-ai-studio-key"
 GEMINI_MODEL="gemini-3.5-flash"
+AI_INSIGHTS_ACCESS_TOKEN="a-long-random-access-token"
 ```
 
-`GEMINI_MODEL` selects the primary model. Capacity failures automatically retry with `gemini-3.1-flash-lite` before using Ollama. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products. Never prefix the API key with `VITE_`, because Vite exposes those variables to browser code.
+`GEMINI_MODEL` selects the primary model. Enter `AI_INSIGHTS_ACCESS_TOKEN` in the dashboard when generating hosted insights; it is kept only for the browser session. Capacity failures automatically retry with `gemini-3.1-flash-lite` before using Ollama. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products. Never prefix either secret with `VITE_`, because Vite exposes those variables to browser code.
 
 Use `vercel dev` to run the frontend and Gemini function together locally. Plain `npm run dev` runs only Vite, so hosted requests will fall back to Ollama.
 

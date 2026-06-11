@@ -30,6 +30,7 @@ function request(body: unknown, headers: Record<string, string> = {}): Request {
       Host: "job-tracker.example",
       // Default to a same-origin request so the endpoint's Origin check passes in tests.
       Origin: "https://job-tracker.example",
+      Authorization: "Bearer test-access-token",
       ...headers,
     },
     body: JSON.stringify(body),
@@ -60,19 +61,21 @@ describe("POST /api/ai-insights", () => {
     // Requests without an Origin header (curl/scripts) must also be rejected to prevent Gemini key abuse.
     const noOriginRequest = new Request("https://job-tracker.example/api/ai-insights", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Host: "job-tracker.example" },
+      headers: { "Content-Type": "application/json", Host: "job-tracker.example", Authorization: "Bearer test-access-token" },
       body: JSON.stringify({ summary: createSummary() }),
     });
     const noOriginResponse = await handleAiInsightsRequest(noOriginRequest);
+    const unauthenticatedResponse = await handleAiInsightsRequest(request({ summary: createSummary() }, { Authorization: "" }), { accessToken: "test-access-token" });
 
     expect(getResponse.status).toBe(405);
     expect(crossOriginResponse.status).toBe(403);
     expect(noOriginResponse.status).toBe(403);
+    expect(unauthenticatedResponse.status).toBe(401);
   });
 
   it("rejects malformed payloads and missing configuration", async () => {
-    const invalidResponse = await handleAiInsightsRequest(request({ summary: { totalApplications: 1 } }), { apiKey: "test-key" });
-    const missingKeyResponse = await handleAiInsightsRequest(request({ summary: createSummary() }), { apiKey: "" });
+    const invalidResponse = await handleAiInsightsRequest(request({ summary: { totalApplications: 1 } }), { apiKey: "test-key", accessToken: "test-access-token" });
+    const missingKeyResponse = await handleAiInsightsRequest(request({ summary: createSummary() }), { apiKey: "", accessToken: "test-access-token" });
 
     expect(invalidResponse.status).toBe(400);
     expect(missingKeyResponse.status).toBe(503);
@@ -88,6 +91,7 @@ describe("POST /api/ai-insights", () => {
       },
     }), {
       apiKey: "test-key",
+      accessToken: "test-access-token",
       model: "gemini-test",
       fetchImpl: fetchMock,
     });

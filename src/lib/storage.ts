@@ -8,6 +8,9 @@ const SEEDED_KEY = "job-tracker-seeded";
 const RESPONSE_STATUS_ORDER_KEY = "job-tracker-response-status-order";
 const IMPORT_WARNINGS_KEY = "job-tracker-import-warnings";
 const LAST_IMPORT_METADATA_KEY = "job-tracker-last-import";
+const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_IMPORT_ROWS = 10_000;
+const MAX_IMPORT_COLUMNS = 100;
 
 type ImportField =
   | "jobTitle"
@@ -355,6 +358,10 @@ function parseWorkbook(wb: ExcelJS.Workbook): WorkbookParseResult {
   const applicationsSheet = wb.getWorksheet("Applications") ?? wb.worksheets[0];
   // Empty workbooks cannot be mapped safely, so surface a clear import failure instead of a vague parser error.
   if (!applicationsSheet) throw new Error("Workbook does not contain any worksheets.");
+  // Bound attacker-controlled workbook shape before mapping it into large in-memory arrays and objects.
+  if (applicationsSheet.rowCount > MAX_IMPORT_ROWS || applicationsSheet.columnCount > MAX_IMPORT_COLUMNS) {
+    throw new Error(`Workbook exceeds the import limit of ${MAX_IMPORT_ROWS.toLocaleString()} rows and ${MAX_IMPORT_COLUMNS} columns.`);
+  }
 
   const listsSheet = wb.getWorksheet("Lists");
   const rows = worksheetToRows(applicationsSheet);
@@ -444,6 +451,8 @@ export async function loadSeedData(): Promise<JobApplication[]> {
 }
 
 export async function importApplicationsFromFile(file: File): Promise<{ applications: JobApplication[]; warnings: string[] }> {
+  // Reject unusually large uploads before ExcelJS expands the workbook in browser memory.
+  if (file.size > MAX_IMPORT_FILE_BYTES) throw new Error("Workbook exceeds the 10 MB import limit.");
   const buf = await file.arrayBuffer();
   const wb = await loadWorkbook(buf);
   const parsed = parseWorkbook(wb);

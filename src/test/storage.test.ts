@@ -239,4 +239,13 @@ describe("mapRowsToApplications", () => {
     });
     expect(getLastImportMetadata()?.importedAt).toEqual(expect.any(String));
   });
+
+  it("rejects workbooks that exceed the upload size limit", async () => {
+    // The size check runs before ExcelJS expands attacker-controlled workbook data in browser memory.
+    const file = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "oversized.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    await expect(importApplicationsFromFile(file)).rejects.toThrow("Workbook exceeds the 10 MB import limit.");
+  });
 });
