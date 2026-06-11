@@ -56,9 +56,10 @@ function getExpectedOrigin(request: Request): string {
 }
 
 function isSameOrigin(request: Request): boolean {
+  // Require an Origin header that matches the deployed host. Missing Origin is rejected so non-browser
+  // clients (curl, scripts) cannot trigger Gemini calls and exhaust the API key quota.
   const origin = request.headers.get("origin");
-  // Requests without Origin are allowed for local testing and non-browser clients.
-  return !origin || origin === getExpectedOrigin(request);
+  return origin !== null && origin === getExpectedOrigin(request);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
