@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,13 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   const [editing, setEditing] = useState(false);
   const [followNote, setFollowNote] = useState("");
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Route changes and parent refreshes can provide a newer record; reset the local draft to avoid saving stale data.
+    setApp({ ...application });
+    setEditing(false);
+    setFollowNote("");
+  }, [application]);
 
   // Keep local state, storage, and parent data synchronized after every mutation.
   function persistApplication(next: JobApplication) {

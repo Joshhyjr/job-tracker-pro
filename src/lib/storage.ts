@@ -550,12 +550,22 @@ export function mapRowsToApplications(rows: Record<string, unknown>[]): JobAppli
 export function getApplications(): JobApplication[] {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
-  const parsed = JSON.parse(raw) as JobApplication[];
-  return parsed.map((app) => ({
-    ...app,
-    currentStatus: sanitizeCurrentStatus(mapStatus(app.currentStatus)),
-    responseStatus: mapResponseStatus(app.responseStatus),
-  }));
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    // Corrupted browser storage should not take down app boot; salvage only array-shaped records.
+    return parsed.map((app) => {
+      const record = typeof app === "object" && app !== null ? app as Partial<JobApplication> : {};
+      return {
+        ...record,
+        currentStatus: sanitizeCurrentStatus(mapStatus(record.currentStatus)),
+        responseStatus: mapResponseStatus(record.responseStatus),
+      } as JobApplication;
+    });
+  } catch {
+    return [];
+  }
 }
 
 export function saveApplications(apps: JobApplication[]) {
