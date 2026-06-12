@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation } from "@/lib/storage";
+import { getApplications, getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation } from "@/lib/storage";
 
 beforeEach(() => {
   localStorage.clear();
@@ -247,5 +247,20 @@ describe("mapRowsToApplications", () => {
     });
 
     await expect(importApplicationsFromFile(file)).rejects.toThrow("Workbook exceeds the 10 MB import limit.");
+  });
+});
+
+describe("getApplications", () => {
+  it("returns an empty list when stored JSON is corrupted", () => {
+    // Browser extensions or manual localStorage edits should not crash the app shell on next boot.
+    localStorage.setItem("job-tracker-data", "{not-json");
+
+    expect(getApplications()).toEqual([]);
+  });
+
+  it("returns an empty list when stored data is not an array", () => {
+    localStorage.setItem("job-tracker-data", JSON.stringify({ id: "unexpected-shape" }));
+
+    expect(getApplications()).toEqual([]);
   });
 });
