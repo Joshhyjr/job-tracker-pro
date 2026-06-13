@@ -35,6 +35,15 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
     () => computeStatusBreakdown(applications, getPreferredResponseStatusOrder()),
     [applications]
   );
+  // Compute status counts once so the filter chip render stays simple and avoids repeated array scans.
+  const applicationCountByStatus = useMemo(() => {
+    const counts = new Map<CurrentStatus, number>();
+    applications.forEach((application) => {
+      const status = getEffectiveCurrentStatus(application);
+      counts.set(status, (counts.get(status) ?? 0) + 1);
+    });
+    return counts;
+  }, [applications]);
 
   // Filter + sort the applications list
   const filtered = useMemo(() => {
@@ -76,7 +85,13 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
         <h1 className="text-3xl font-semibold tracking-tight">Applications</h1>
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <Input
+            placeholder="Search applications"
+            aria-label="Search applications"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
       </div>
 
@@ -92,7 +107,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
             All ({applications.length})
           </Button>
           {CURRENT_STATUSES.map((s) => {
-            const count = applications.filter((a) => getEffectiveCurrentStatus(a) === s).length;
+            const count = applicationCountByStatus.get(s) ?? 0;
             if (count === 0) return null;
             return (
               <Button key={s} type="button" variant={activeStatus === s ? "default" : "outline"} size="sm" onClick={() => setFilters({ status: s })}>

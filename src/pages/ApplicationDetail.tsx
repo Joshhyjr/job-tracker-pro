@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -84,12 +85,18 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   }
 
   const jobPostingHref = getSafeExternalHref(app.jobLink);
+  // Stable ids keep edit-mode labels connected to controls while the detail grid rerenders.
+  function getFieldInputId(fieldKey: string) {
+    return `application-detail-${fieldKey}`;
+  }
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-4 w-4" /></Button>
+        <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Go back to applications">
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold">{app.jobTitle}</h1>
           <p className="text-muted-foreground">{app.companyName} · {app.location}</p>
@@ -104,24 +111,42 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             <h2 className="text-base font-medium">Details</h2>
             <div className="flex gap-2">
               {!editing && (
-                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={handleDelete}
+                >
                   <Trash2 className="h-3.5 w-3.5 mr-1" />Delete
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={() => editing ? save() : setEditing(true)}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => editing ? save() : setEditing(true)}>
                 {editing ? <><Save className="h-3.5 w-3.5 mr-1" />Save</> : <><Edit2 className="h-3.5 w-3.5 mr-1" />Edit</>}
               </Button>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {fields.map((f) => (
+            {fields.map((f) => {
+              const fieldInputId = getFieldInputId(f.key);
+              return (
               <div key={f.key}>
-                <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
+                {editing ? (
+                  <Label htmlFor={fieldInputId} className="text-xs font-medium text-muted-foreground">{f.label}</Label>
+                ) : (
+                  <p className="text-xs font-medium text-muted-foreground">{f.label}</p>
+                )}
                 {editing ? (
                   <div className="mt-1 space-y-2">
-                    <Input value={app[f.key] ?? ""} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} />
+                    <Input id={fieldInputId} value={app[f.key] ?? ""} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} />
                     {f.key === "jobTitle" && (
-                      <Input value={app.jobLink ?? ""} onChange={(e) => setApp({ ...app, jobLink: e.target.value })} placeholder="Job posting URL" />
+                      <Input
+                        id={getFieldInputId("jobLink")}
+                        value={app.jobLink ?? ""}
+                        onChange={(e) => setApp({ ...app, jobLink: e.target.value })}
+                        placeholder="Job posting URL"
+                        aria-label="Job posting URL"
+                      />
                     )}
                   </div>
                 ) : (
@@ -142,32 +167,44 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
                   </div>
                 )}
               </div>
-            ))}
+            )})}
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Current Status</label>
+              {editing ? (
+                <Label htmlFor={getFieldInputId("currentStatus")} className="text-xs font-medium text-muted-foreground">Current Status</Label>
+              ) : (
+                <p className="text-xs font-medium text-muted-foreground">Current Status</p>
+              )}
               {editing ? (
                 <Select value={app.currentStatus} onValueChange={(v) => setApp({ ...app, currentStatus: v as CurrentStatus })}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id={getFieldInputId("currentStatus")} className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{CURRENT_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
               ) : <p className="mt-1 text-sm">{app.currentStatus}</p>}
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Response Status</label>
+              {editing ? (
+                <Label htmlFor={getFieldInputId("responseStatus")} className="text-xs font-medium text-muted-foreground">Response Status</Label>
+              ) : (
+                <p className="text-xs font-medium text-muted-foreground">Response Status</p>
+              )}
               {editing ? (
                 <Select value={app.responseStatus} onValueChange={(v) => setApp({ ...app, responseStatus: v })}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id={getFieldInputId("responseStatus")} className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{RESPONSE_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
               ) : <p className="mt-1 text-sm">{app.responseStatus}</p>}
             </div>
 
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">Notes</label>
               {editing ? (
-                <Textarea value={app.notes} onChange={(e) => setApp({ ...app, notes: e.target.value })} className="mt-1" />
+                <Label htmlFor={getFieldInputId("notes")} className="text-xs font-medium text-muted-foreground">Notes</Label>
+              ) : (
+                <p className="text-xs font-medium text-muted-foreground">Notes</p>
+              )}
+              {editing ? (
+                <Textarea id={getFieldInputId("notes")} value={app.notes} onChange={(e) => setApp({ ...app, notes: e.target.value })} className="mt-1" />
               ) : <p className="mt-1 text-sm whitespace-pre-wrap">{app.notes || "—"}</p>}
             </div>
           </div>
@@ -179,7 +216,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             <CardHeader><CardTitle className="text-base font-medium">Quick Actions</CardTitle></CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {CURRENT_STATUSES.filter((s) => s !== app.currentStatus).map((s) => (
-                <Button key={s} variant="outline" size="sm" onClick={() => changeStatus(s)}>{s}</Button>
+                <Button key={s} type="button" variant="outline" size="sm" onClick={() => changeStatus(s)}>{s}</Button>
               ))}
             </CardContent>
           </Card>
@@ -187,8 +224,15 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
           <Card className="border-border/40 shadow-none">
             <CardHeader><CardTitle className="text-base font-medium">Add Follow-up</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <Textarea placeholder="Follow-up note..." value={followNote} onChange={(e) => setFollowNote(e.target.value)} rows={3} />
-              <Button size="sm" onClick={addFollowUp} disabled={!followNote.trim()} className="w-full">Add Entry</Button>
+              <Textarea
+                id={getFieldInputId("followUpNote")}
+                placeholder="Follow-up note..."
+                value={followNote}
+                onChange={(e) => setFollowNote(e.target.value)}
+                rows={3}
+                aria-label="Follow-up note"
+              />
+              <Button type="button" size="sm" onClick={addFollowUp} disabled={!followNote.trim()} className="w-full">Add Entry</Button>
             </CardContent>
           </Card>
         </div>

@@ -9,6 +9,11 @@ import { useToast } from "@/hooks/use-toast";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { formatDisplayDate } from "@/lib/utils";
 
+const followUpActions = [
+  { label: "Email", icon: Mail, buildMessage: emailTemplate },
+  { label: "LinkedIn", icon: Linkedin, buildMessage: linkedInTemplate },
+] as const;
+
 function emailTemplate(a: JobApplication) {
   return `Subject: Following Up – ${a.jobTitle} Application
 
@@ -37,8 +42,12 @@ export default function FollowUps({ applications }: { applications: JobApplicati
   }, [applications]);
 
   async function copyText(text: string, label: string) {
-    await navigator.clipboard.writeText(text);
-    toast({ title: "Copied!", description: `${label} template copied to clipboard.` });
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Copied!", description: `${label} template copied to clipboard.` });
+    } catch {
+      toast({ title: "Copy failed", description: `Unable to copy the ${label} template.`, variant: "destructive" });
+    }
   }
 
   return (
@@ -71,12 +80,12 @@ export default function FollowUps({ applications }: { applications: JobApplicati
                   <TableCell><StatusBadge status={a.currentStatus} /></TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      <Button variant="outline" size="sm" onClick={() => copyText(emailTemplate(a), "Email")}>
-                        <Mail className="h-3.5 w-3.5 mr-1" />Email
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => copyText(linkedInTemplate(a), "LinkedIn")}>
-                        <Linkedin className="h-3.5 w-3.5 mr-1" />LinkedIn
-                      </Button>
+                      {followUpActions.map((action) => (
+                        // Keep follow-up actions declarative so new contact channels can be added without duplicating button markup.
+                        <Button key={action.label} type="button" variant="outline" size="sm" onClick={() => copyText(action.buildMessage(a), action.label)}>
+                          <action.icon className="h-3.5 w-3.5 mr-1" />{action.label}
+                        </Button>
+                      ))}
                     </div>
                   </TableCell>
                 </TableRow>
