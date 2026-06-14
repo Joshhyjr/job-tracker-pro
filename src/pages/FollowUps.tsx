@@ -8,6 +8,7 @@ import type { JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { formatDisplayDate } from "@/lib/utils";
+import { TableSection } from "@/components/TableSection";
 
 function emailTemplate(a: JobApplication) {
   return `Subject: Following Up – ${a.jobTitle} Application
@@ -51,7 +52,7 @@ export default function FollowUps({ applications }: { applications: JobApplicati
       {needsFollowUp.length === 0 ? (
         <Card className="border-border/40 shadow-none"><CardContent className="py-12 text-center text-muted-foreground">🎉 No pending follow-ups! You're all caught up.</CardContent></Card>
       ) : (
-        <div className="rounded-2xl border border-border/40 overflow-hidden">
+        <TableSection>
           <Table>
             <TableHeader>
               <TableRow className="border-border/40">
@@ -83,7 +84,7 @@ export default function FollowUps({ applications }: { applications: JobApplicati
               ))}
             </TableBody>
           </Table>
-        </div>
+        </TableSection>
       )}
     </div>
   );

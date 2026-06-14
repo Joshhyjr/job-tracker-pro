@@ -13,6 +13,11 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { formatDisplayDate } from "@/lib/utils";
 
+function DetailFieldLabel({ children }: { children: string }) {
+  // Read-only sections should expose text headings instead of orphaned form labels.
+  return <p className="text-xs font-medium text-muted-foreground">{children}</p>;
+}
+
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
   const [editing, setEditing] = useState(false);
@@ -89,7 +94,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to applications"><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold">{app.jobTitle}</h1>
           <p className="text-muted-foreground">{app.companyName} · {app.location}</p>
@@ -116,12 +121,17 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
           <div className="grid gap-4 sm:grid-cols-2">
             {fields.map((f) => (
               <div key={f.key}>
-                <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
+                <DetailFieldLabel>{f.label}</DetailFieldLabel>
                 {editing ? (
                   <div className="mt-1 space-y-2">
                     <Input value={app[f.key] ?? ""} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} />
                     {f.key === "jobTitle" && (
-                      <Input value={app.jobLink ?? ""} onChange={(e) => setApp({ ...app, jobLink: e.target.value })} placeholder="Job posting URL" />
+                      <Input
+                        value={app.jobLink ?? ""}
+                        onChange={(e) => setApp({ ...app, jobLink: e.target.value })}
+                        placeholder="Job posting URL"
+                        aria-label="Job posting URL"
+                      />
                     )}
                   </div>
                 ) : (
@@ -145,7 +155,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             ))}
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Current Status</label>
+              <DetailFieldLabel>Current Status</DetailFieldLabel>
               {editing ? (
                 <Select value={app.currentStatus} onValueChange={(v) => setApp({ ...app, currentStatus: v as CurrentStatus })}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -155,7 +165,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Response Status</label>
+              <DetailFieldLabel>Response Status</DetailFieldLabel>
               {editing ? (
                 <Select value={app.responseStatus} onValueChange={(v) => setApp({ ...app, responseStatus: v })}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -165,7 +175,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             </div>
 
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">Notes</label>
+              <DetailFieldLabel>Notes</DetailFieldLabel>
               {editing ? (
                 <Textarea value={app.notes} onChange={(e) => setApp({ ...app, notes: e.target.value })} className="mt-1" />
               ) : <p className="mt-1 text-sm whitespace-pre-wrap">{app.notes || "—"}</p>}

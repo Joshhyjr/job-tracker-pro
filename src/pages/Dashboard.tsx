@@ -299,7 +299,9 @@ export default function Dashboard({ applications }: { applications: JobApplicati
               {recentApplications.map((app) => (
                 <button
                   key={app.id}
+                  type="button"
                   onClick={() => navigate(`/applications/${app.id}`)}
+                  aria-label={`Open ${app.jobTitle} at ${app.companyName}`}
                   className="flex w-full flex-col items-start justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4"
                 >
                   <div className="min-w-0">

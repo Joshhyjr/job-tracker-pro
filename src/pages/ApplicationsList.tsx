@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { getPreferredResponseStatusOrder, updateApplication, generateId } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
 import { computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, mapCurrentStatusToResponseStatus, normalizeResponseStatus } from "@/lib/responseStatus";
+import { TableSection } from "@/components/TableSection";
 
 export default function ApplicationsList({ applications, onSelect, onUpdate }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: () => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -120,7 +121,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
       </div>
 
       {/* Table — minimal borders */}
-      <div className="rounded-2xl border border-border/40 overflow-hidden">
+      <TableSection>
         <Table>
           <TableHeader>
             <TableRow className="border-border/40">
@@ -169,7 +170,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </TableSection>
       <p className="text-xs text-muted-foreground">{filtered.length} of {applications.length} applications</p>
     </div>
   );
