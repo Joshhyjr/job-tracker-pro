@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { getApplications, getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation } from "@/lib/storage";
+import { addApplication, getApplications, getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation } from "@/lib/storage";
 
 beforeEach(() => {
   localStorage.clear();
@@ -168,6 +168,26 @@ describe("mapRowsToApplications", () => {
     });
   });
 
+  it("preserves assessment and withdrawn tracker statuses from imported workbooks", () => {
+    const applications = mapRowsToApplications([
+      {
+        Position: "Security Analyst",
+        Employer: "Atlas",
+        "Current Status": "Assessment",
+      },
+      {
+        Position: "Support Engineer",
+        Employer: "Beacon",
+        "Current Status": "Withdrawn",
+      },
+    ]);
+
+    expect(applications).toMatchObject([
+      { currentStatus: "Assessment", responseStatus: "Applied" },
+      { currentStatus: "Withdrawn", responseStatus: "Applied" },
+    ]);
+  });
+
   it("derives the display location from city and country when location is absent", () => {
     const [application] = mapRowsToApplications([
       {
@@ -262,5 +282,61 @@ describe("getApplications", () => {
     localStorage.setItem("job-tracker-data", JSON.stringify({ id: "unexpected-shape" }));
 
     expect(getApplications()).toEqual([]);
+  });
+
+  it("preserves optional application fields when creating a new record", () => {
+    const created = addApplication({
+      jobTitle: " Platform Engineer ",
+      companyName: " Northstar ",
+      location: " Remote ",
+      currentStatus: "Applied",
+      responseStatus: "Human reply received",
+      followUps: true,
+      dateApplied: "2026-06-01",
+      notes: " First contact made ",
+      followUpDate: "2026-06-10",
+      city: " Halifax ",
+      region: " Nova Scotia ",
+      country: " Canada ",
+      latitude: 44.6488,
+      longitude: -63.5752,
+      jobLink: " https://jobs.example/platform ",
+      salary: " $130k ",
+      daysSinceApplied: 14,
+      coverLetterIncluded: true,
+      recruiterContactName: " Alex Doe ",
+      interviewDate: "2026-06-18",
+      tags: " remote, platform ",
+      customFields: {
+        " Portfolio Notes ": " Shared case study ",
+      },
+    });
+
+    // Newly created rows should retain enriched workbook-style fields for future UI features and exports.
+    expect(created).toMatchObject({
+      city: "Halifax",
+      region: "Nova Scotia",
+      country: "Canada",
+      latitude: 44.6488,
+      longitude: -63.5752,
+      jobLink: "https://jobs.example/platform",
+      salary: "$130k",
+      daysSinceApplied: 14,
+      coverLetterIncluded: true,
+      recruiterContactName: "Alex Doe",
+      interviewDate: "2026-06-18",
+      tags: "remote, platform",
+      customFields: {
+        "Portfolio Notes": "Shared case study",
+      },
+    });
+    expect(created.activityLog).toHaveLength(1);
+    expect(getApplications()[0]).toMatchObject({
+      city: "Halifax",
+      jobLink: "https://jobs.example/platform",
+      customFields: {
+        "Portfolio Notes": "Shared case study",
+      },
+    });
   });
 });

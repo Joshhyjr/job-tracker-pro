@@ -1,9 +1,11 @@
-import { CURRENT_STATUSES, type CurrentStatus, type JobApplication } from "./types";
+import { CURRENT_STATUSES, type ActivityLogEntry, type CurrentStatus, type JobApplication } from "./types";
 import { normalizeResponseStatus } from "./responseStatus";
 
 const MAX_SHORT_TEXT_LENGTH = 200;
 const MAX_NOTES_LENGTH = 2000;
+const MAX_URL_LENGTH = 2048;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ACTIVITY_LOG_TYPES: ActivityLogEntry["type"][] = ["status_change", "follow_up", "note"];
 
 export type SanitizedApplicationInput = Omit<JobApplication, "id" | "activityLog">;
 
@@ -41,9 +43,44 @@ export function sanitizeCurrentStatus(value: unknown): CurrentStatus {
   return (CURRENT_STATUSES as string[]).includes(status) ? (status as CurrentStatus) : "Applied";
 }
 
+function sanitizeFiniteNumber(value: unknown, min: number, max: number): number | undefined {
+  if (value === "" || value == null) return undefined;
+  const parsed = typeof value === "number" ? value : Number(String(value).trim());
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
+}
+
+function sanitizeCustomFields(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const sanitizedEntries = Object.entries(value).flatMap(([key, fieldValue]) => {
+    const sanitizedKey = sanitizeSingleLineText(key);
+    const sanitizedValue = sanitizeMultilineText(fieldValue);
+    return sanitizedKey && sanitizedValue ? [[sanitizedKey, sanitizedValue] as const] : [];
+  });
+
+  return sanitizedEntries.length > 0 ? Object.fromEntries(sanitizedEntries) : undefined;
+}
+
+export function sanitizeActivityLog(value: unknown): ActivityLogEntry[] {
+  if (!Array.isArray(value)) return [];
+
+  // Rehydrate only well-formed entries so corrupted localStorage does not leak invalid shapes into the UI.
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+
+    const record = entry as Partial<ActivityLogEntry>;
+    const id = sanitizeSingleLineText(record.id);
+    const message = sanitizeMultilineText(record.message);
+    const date = sanitizeSingleLineText(record.date);
+    const type = ACTIVITY_LOG_TYPES.includes(record.type as ActivityLogEntry["type"]) ? record.type : undefined;
+
+    return id && message && date && type ? [{ id, message, date, type }] : [];
+  });
+}
+
 export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInput>): SanitizedApplicationInput {
   // Future AI enrichment should call a server endpoint; private model/provider keys must never be added to Vite client code.
-  return {
+  const sanitized: SanitizedApplicationInput = {
     jobTitle: sanitizeSingleLineText(input.jobTitle),
     companyName: sanitizeSingleLineText(input.companyName),
     location: sanitizeSingleLineText(input.location),
@@ -54,4 +91,34 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
     notes: sanitizeMultilineText(input.notes),
     followUpDate: sanitizeDateInput(input.followUpDate),
   };
+
+  // Preserve optional workbook/app fields instead of silently dropping them during create/update sanitization.
+  const city = sanitizeSingleLineText(input.city);
+  const region = sanitizeSingleLineText(input.region);
+  const country = sanitizeSingleLineText(input.country);
+  const jobLink = sanitizeSingleLineText(input.jobLink, MAX_URL_LENGTH);
+  const salary = sanitizeSingleLineText(input.salary);
+  const recruiterContactName = sanitizeSingleLineText(input.recruiterContactName);
+  const tags = sanitizeSingleLineText(input.tags);
+  const interviewDate = sanitizeDateInput(input.interviewDate);
+  const daysSinceApplied = sanitizeFiniteNumber(input.daysSinceApplied, 0, Number.MAX_SAFE_INTEGER);
+  const latitude = sanitizeFiniteNumber(input.latitude, -90, 90);
+  const longitude = sanitizeFiniteNumber(input.longitude, -180, 180);
+  const customFields = sanitizeCustomFields(input.customFields);
+
+  if (city) sanitized.city = city;
+  if (region) sanitized.region = region;
+  if (country) sanitized.country = country;
+  if (jobLink) sanitized.jobLink = jobLink;
+  if (salary) sanitized.salary = salary;
+  if (recruiterContactName) sanitized.recruiterContactName = recruiterContactName;
+  if (tags) sanitized.tags = tags;
+  if (interviewDate) sanitized.interviewDate = interviewDate;
+  if (daysSinceApplied !== undefined) sanitized.daysSinceApplied = daysSinceApplied;
+  if (typeof input.coverLetterIncluded === "boolean") sanitized.coverLetterIncluded = input.coverLetterIncluded;
+  if (latitude !== undefined) sanitized.latitude = latitude;
+  if (longitude !== undefined) sanitized.longitude = longitude;
+  if (customFields) sanitized.customFields = customFields;
+
+  return sanitized;
 }

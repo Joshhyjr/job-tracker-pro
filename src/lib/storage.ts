@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import type { JobApplication, CurrentStatus } from "./types";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
-import { sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
+import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
 
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
@@ -131,10 +131,29 @@ function mapStatus(val: unknown): CurrentStatus {
   const s = String(val || "").trim();
   const map: Record<string, CurrentStatus> = {
     "pre-screen call": "Pre-screen call", "prescreen call": "Pre-screen call", "pre screen call": "Pre-screen call",
-    applied: "Applied", interview: "Interview", offer: "Offer",
-    rejected: "Rejected", "no response": "No Response", withdrawn: "Withdrawn",
+    applied: "Applied",
+    assessment: "Assessment",
+    interview: "Interview",
+    offer: "Offer",
+    "offer received": "Offer",
+    rejected: "Rejected",
+    "no response": "No Response",
+    withdrawn: "Withdrawn",
+    "role cancelled": "Withdrawn",
+    "role canceled": "Withdrawn",
   };
   return map[s.toLowerCase()] || "Applied";
+}
+
+function sanitizeStoredApplication(record: Partial<JobApplication>): JobApplication {
+  const sanitized = sanitizeApplicationInput(record);
+  const id = sanitizeSingleLineText(record.id) || generateId();
+
+  return {
+    id,
+    ...sanitized,
+    activityLog: sanitizeActivityLog(record.activityLog),
+  };
 }
 
 // Maps raw value to a normalised response-status string
@@ -557,11 +576,12 @@ export function getApplications(): JobApplication[] {
     // Corrupted browser storage should not take down app boot; salvage only array-shaped records.
     return parsed.map((app) => {
       const record = typeof app === "object" && app !== null ? app as Partial<JobApplication> : {};
-      return {
+      const storedStatus = mapStatus(record.currentStatus);
+      return sanitizeStoredApplication({
         ...record,
-        currentStatus: sanitizeCurrentStatus(mapStatus(record.currentStatus)),
+        currentStatus: sanitizeCurrentStatus(storedStatus),
         responseStatus: mapResponseStatus(record.responseStatus),
-      } as JobApplication;
+      });
     });
   } catch {
     return [];
@@ -581,7 +601,13 @@ export function markSeeded() {
 }
 
 export function addApplication(app: Omit<JobApplication, "id" | "activityLog">): JobApplication {
-  const newApp: JobApplication = { ...sanitizeApplicationInput(app), id: generateId(), activityLog: [{ id: generateId(), date: new Date().toISOString(), type: "note", message: "Application created" }] };
+  const sanitized = sanitizeApplicationInput(app);
+  // Add a guaranteed first log entry while keeping any optional imported fields intact on newly created records.
+  const newApp: JobApplication = {
+    ...sanitized,
+    id: generateId(),
+    activityLog: [{ id: generateId(), date: new Date().toISOString(), type: "note", message: "Application created" }],
+  };
   const apps = getApplications();
   apps.unshift(newApp);
   saveApplications(apps);
@@ -589,7 +615,17 @@ export function addApplication(app: Omit<JobApplication, "id" | "activityLog">):
 }
 
 export function updateApplication(updated: JobApplication) {
-  const apps = getApplications().map((a) => (a.id === updated.id ? { ...updated, ...sanitizeApplicationInput(updated) } : a));
+  const sanitized = sanitizeApplicationInput(updated);
+  const apps = getApplications().map((a) => (
+    a.id === updated.id
+      ? {
+          ...updated,
+          ...sanitized,
+          id: sanitizeSingleLineText(updated.id) || a.id,
+          activityLog: sanitizeActivityLog(updated.activityLog),
+        }
+      : a
+  ));
   saveApplications(apps);
 }
 
