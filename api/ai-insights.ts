@@ -170,6 +170,11 @@ function hasInsights(insights: AiInsights): boolean {
   return Boolean(insights.summary || insights.strengths.length || insights.improvementAreas.length || insights.recommendedNextActions.length);
 }
 
+// Keep hosted-model diagnostics consistent without scattering raw console calls through the retry flow.
+function logGeminiEvent(level: "warn" | "error", message: string, details: Record<string, unknown>): void {
+  console[level](message, details);
+}
+
 function buildGeminiRequest(summary: AiInsightSummary): unknown {
   return {
     systemInstruction: {
@@ -267,12 +272,12 @@ export async function handleAiInsightsRequest(request: Request, options: Handler
     const canTryFallback = candidateModel !== models[models.length - 1] && (!geminiResponse || [429, 503].includes(geminiResponse.status));
     if (canTryFallback) {
       // Capacity failures should try a smaller hosted model before falling back to local Ollama.
-      console.warn("Gemini primary model unavailable; trying fallback", { model: candidateModel, status: geminiResponse?.status });
+      logGeminiEvent("warn", "Gemini primary model unavailable; trying fallback", { model: candidateModel, status: geminiResponse?.status });
       continue;
     }
 
     // Provider diagnostics stay in Vercel logs while the browser receives a sanitized error.
-    console.error("Gemini request failed", { model: candidateModel, status: geminiResponse?.status, detail: providerError.slice(0, 500) });
+    logGeminiEvent("error", "Gemini request failed", { model: candidateModel, status: geminiResponse?.status, detail: providerError.slice(0, 500) });
     return jsonResponse({ error: "Hosted AI insights are temporarily unavailable." }, 502);
   }
 

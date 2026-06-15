@@ -15,6 +15,12 @@ const links = [
   { to: "/add", label: "Add New", icon: PlusCircle },
 ];
 
+const dataActions = [
+  { key: "import", label: "Import XLSX", shortLabel: "Import", icon: Upload },
+  { key: "csv", label: "CSV", shortLabel: "CSV", icon: Download },
+  { key: "xlsx", label: "XLSX", shortLabel: "XLSX", icon: Download },
+] as const;
+
 export default function AppNavbar({
   onExportCSV,
   onExportXLSX,
@@ -43,11 +49,24 @@ export default function AppNavbar({
     setOpen(false);
   }
 
+  // Reuse one action switch so desktop and mobile controls behave the same way.
+  function handleDataAction(action: typeof dataActions[number]["key"]) {
+    if (action === "import") {
+      handleImportClick();
+      return;
+    }
+    if (action === "csv") {
+      handleExportCSV();
+      return;
+    }
+    handleExportXLSX();
+  }
+
   // Keep theme selection markup in one place so desktop and mobile stay aligned.
-  function renderThemeSelect(triggerClassName: string) {
+  function renderThemeSelect(triggerClassName: string, triggerLabel: string) {
     return (
       <Select value={theme} onValueChange={setTheme}>
-        <SelectTrigger className={triggerClassName}>
+        <SelectTrigger className={triggerClassName} aria-label={triggerLabel}>
           <SelectValue placeholder="Theme" />
         </SelectTrigger>
         <SelectContent>
@@ -86,10 +105,13 @@ export default function AppNavbar({
             </Button>
           ))}
           <div className="ml-2 flex gap-1">
-            {renderThemeSelect("h-9 w-[132px]")}
-            <Button variant="outline" size="sm" onClick={handleImportClick}><Upload className="h-3.5 w-3.5 mr-1" />Import XLSX</Button>
-            <Button variant="outline" size="sm" onClick={handleExportCSV}><Download className="h-3.5 w-3.5 mr-1" />CSV</Button>
-            <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-3.5 w-3.5 mr-1" />XLSX</Button>
+            {renderThemeSelect("h-9 w-[132px]", "Select application theme")}
+            {dataActions.map((action) => (
+              <Button key={action.key} variant="outline" size="sm" onClick={() => handleDataAction(action.key)}>
+                <action.icon className="mr-1 h-3.5 w-3.5" />
+                {action.label}
+              </Button>
+            ))}
           </div>
         </div>
 
@@ -120,10 +142,18 @@ export default function AppNavbar({
               </Button>
             ))}
             <div className="flex gap-2 pt-2 border-t border-border/40">
-              {renderThemeSelect("h-9 flex-1")}
-              <Button variant="outline" size="sm" className="flex-1" onClick={handleImportClick}>Import</Button>
-              <Button variant="outline" size="sm" className="flex-1" onClick={handleExportCSV}>CSV</Button>
-              <Button variant="outline" size="sm" className="flex-1" onClick={handleExportXLSX}>XLSX</Button>
+              {renderThemeSelect("h-9 flex-1", "Select application theme")}
+              {dataActions.map((action) => (
+                <Button
+                  key={action.key}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => handleDataAction(action.key)}
+                >
+                  {action.shortLabel}
+                </Button>
+              ))}
             </div>
           </div>
         </div>
@@ -134,6 +164,7 @@ export default function AppNavbar({
         type="file"
         accept=".xlsx,.xls"
         className="hidden"
+        aria-label="Import applications from spreadsheet"
         onChange={handleImportChange}
       />
     </nav>

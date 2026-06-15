@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { type KeyboardEvent, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -70,13 +70,21 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
     toast({ title: "Status Updated", description: `Marked as ${status}` });
   }
 
+  // Mirror row click behavior on Enter/Space so keyboard users can open an application quickly.
+  function handleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, application: JobApplication) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onSelect(application);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-semibold tracking-tight">Applications</h1>
         <div className="relative w-full max-w-xs">
+          <label htmlFor="application-search" className="sr-only">Search applications</label>
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <Input id="application-search" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
 
@@ -144,7 +152,14 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
             {filtered.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No applications found</TableCell></TableRow>
             ) : filtered.map((a) => (
-              <TableRow key={a.id} className="cursor-pointer border-border/30 hover:bg-muted/40" onClick={() => onSelect(a)}>
+              <TableRow
+                key={a.id}
+                tabIndex={0}
+                className="cursor-pointer border-border/30 hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+                onClick={() => onSelect(a)}
+                onKeyDown={(event) => handleRowKeyDown(event, a)}
+                aria-label={`Open ${a.jobTitle} at ${a.companyName}`}
+              >
                 <TableCell className="font-medium">{a.jobTitle}</TableCell>
                 <TableCell className="hidden sm:table-cell">{a.companyName}</TableCell>
                 <TableCell className="hidden md:table-cell">{a.location}</TableCell>
