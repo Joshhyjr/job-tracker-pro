@@ -316,11 +316,16 @@ export async function generateAiInsightsWithFallback(
   try {
     return await hostedGenerator(summary);
   } catch (hostedError) {
+    const hostedMessage = hostedError instanceof Error ? hostedError.message : "Hosted AI insights failed.";
+    // Authentication/configuration failures require operator action; Ollama fallback would hide the useful error.
+    if (/access token|authentication required|authentication is not configured/i.test(hostedMessage)) {
+      throw new Error(hostedMessage);
+    }
+
     try {
       // Ollama preserves a privacy-first path when Gemini is not configured or temporarily unavailable.
       return await localGenerator(summary);
     } catch (localError) {
-      const hostedMessage = hostedError instanceof Error ? hostedError.message : "Hosted AI insights failed.";
       const localMessage = localError instanceof Error ? localError.message : "Local Ollama insights failed.";
       throw new Error(`Gemini failed: ${hostedMessage} Ollama fallback failed: ${localMessage}`);
     }

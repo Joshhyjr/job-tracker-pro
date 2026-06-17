@@ -162,6 +162,11 @@ export default function Dashboard({ applications }: { applications: JobApplicati
   ];
 
   async function handleGenerateAiInsights() {
+    if (!aiAccessToken.trim()) {
+      setAiError("Enter the same AI_INSIGHTS_ACCESS_TOKEN configured in Vercel before generating hosted insights.");
+      return;
+    }
+
     setAiLoading(true);
     setAiError("");
 
@@ -358,7 +363,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
                 placeholder="Hosted AI access token (session only)"
                 aria-label="Hosted AI access token"
               />
-              <p className="text-xs text-muted-foreground sm:max-w-56">Required for hosted Gemini; never bundled or persisted after this browser session.</p>
+              <p className="text-xs text-muted-foreground sm:max-w-56">Enter the exact AI_INSIGHTS_ACCESS_TOKEN value configured in Vercel. It stays only in this browser session.</p>
             </div>
 
             {aiError && (

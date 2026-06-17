@@ -19,7 +19,7 @@ This site is a Vite, React, TypeScript, shadcn-ui, and Tailwind CSS application.
    GEMINI_MODEL="gemini-3.5-flash"
    ```
 
-   Keep both secrets server-side and never name either with a `VITE_` prefix. Enter the access token in the dashboard only when generating hosted insights; the browser keeps it for the current session. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products.
+   Keep both secrets server-side and never name either with a `VITE_` prefix. Redeploy after adding or changing environment variables. Then enter the exact same access-token value in the dashboard's **Hosted AI access token (session only)** field when generating hosted insights; the browser cannot read Vercel secrets and keeps the entered value only for the current session. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products.
 
 2. Confirm the app works locally:
 

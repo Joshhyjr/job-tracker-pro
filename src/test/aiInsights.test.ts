@@ -131,6 +131,16 @@ describe("hosted AI insights", () => {
     expect(localGenerator).toHaveBeenCalledWith(summary);
   });
 
+  it("surfaces hosted authentication errors without an unrelated Ollama fallback", async () => {
+    const hostedGenerator = vi.fn().mockRejectedValue(new Error("Hosted AI insights require an access token."));
+    const localGenerator = vi.fn();
+
+    await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).rejects.toThrow(
+      "Hosted AI insights require an access token.",
+    );
+    expect(localGenerator).not.toHaveBeenCalled();
+  });
+
   it("reports both failures when hosted and local insights fail", async () => {
     const hostedGenerator = vi.fn().mockRejectedValue(new Error("Hosted unavailable"));
     const localGenerator = vi.fn().mockRejectedValue(new Error("Ollama unavailable"));

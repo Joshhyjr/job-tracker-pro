@@ -83,7 +83,7 @@ GEMINI_MODEL="gemini-3.5-flash"
 AI_INSIGHTS_ACCESS_TOKEN="a-long-random-access-token"
 ```
 
-`GEMINI_MODEL` selects the primary model. Enter `AI_INSIGHTS_ACCESS_TOKEN` in the dashboard when generating hosted insights; it is kept only for the browser session. Capacity failures automatically retry with `gemini-3.1-flash-lite` before using Ollama. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products. Never prefix either secret with `VITE_`, because Vite exposes those variables to browser code.
+`GEMINI_MODEL` selects the primary model. After redeploying, enter the exact same `AI_INSIGHTS_ACCESS_TOKEN` value into the dashboard's **Hosted AI access token (session only)** field before generating hosted insights. The browser cannot read Vercel secrets, so it keeps the entered token only for the current session. Capacity failures automatically retry with `gemini-3.1-flash-lite` before using Ollama. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products. Never prefix either secret with `VITE_`, because Vite exposes those variables to browser code.
 
 Use `vercel dev` to run the frontend and Gemini function together locally. Plain `npm run dev` runs only Vite, so hosted requests will fall back to Ollama.
 
