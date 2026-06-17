@@ -9,10 +9,15 @@ export async function loadInitialApplications(): Promise<JobApplication[]> {
     return savedApplications;
   }
 
-  const seed = await loadSeedData();
-  saveApplications(seed);
-  markSeeded();
-  return seed;
+  try {
+    const seed = await loadSeedData();
+    saveApplications(seed);
+    markSeeded();
+    return seed;
+  } catch {
+    // Fall back to an empty workspace when the bundled workbook is unavailable instead of leaving boot stuck.
+    return [];
+  }
 }
 
 export function useApplications() {
@@ -20,11 +25,27 @@ export function useApplications() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function init() {
-      setApplications(await loadInitialApplications());
-      setLoading(false);
+      try {
+        const initialApplications = await loadInitialApplications();
+        if (!cancelled) {
+          setApplications(initialApplications);
+        }
+      } finally {
+        // Always release the loading state so the app shell can recover from bootstrap failures.
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
+
     init();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refresh = useCallback(() => {
