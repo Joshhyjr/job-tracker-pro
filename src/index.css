@@ -139,8 +139,17 @@
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  .font-display {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 }
 
