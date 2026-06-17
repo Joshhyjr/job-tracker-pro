@@ -1,32 +1,51 @@
 import { useState, type FormEvent } from "react";
-import { Github, Linkedin, Mail, Globe, Send } from "lucide-react";
+import { Github, Linkedin, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { SectionReveal } from "./SectionReveal";
-
-// Contact email — update if you'd prefer a different inbox.
-const CONTACT_EMAIL = "hello@jkivaria.com";
+import { useToast } from "@/hooks/use-toast";
 
 const links = [
-  { icon: Linkedin, label: "LinkedIn", href: "https://www.linkedin.com/in/joshuakivaria" },
-  { icon: Github, label: "GitHub", href: "https://github.com/joshuakivaria" },
-  { icon: Mail, label: "Email", href: `mailto:${CONTACT_EMAIL}` },
-  { icon: Globe, label: "jkivaria.com", href: "https://jkivaria.com" },
+  { icon: Linkedin, label: "LinkedIn", href: "https://www.linkedin.com/in/joshua-kivaria/" },
+  { icon: Github, label: "GitHub", href: "https://github.com/Joshhyjr" },
 ];
 
 export default function Contact() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const { toast } = useToast();
 
-  // Form opens the visitor's email client with a prefilled message (no backend required).
-  function handleSubmit(e: FormEvent) {
+  // Sends through a server endpoint so the destination inbox stays in environment variables.
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const subject = encodeURIComponent(`Portfolio contact from ${name || "visitor"}`);
-    const body = encodeURIComponent(`${message}\n\n— ${name}\n${email}`);
-    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+    setSending(true);
+
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, message }),
+      });
+
+      if (!response.ok) throw new Error("Contact request failed");
+
+      setName("");
+      setEmail("");
+      setMessage("");
+      toast({ title: "Message sent", description: "Thanks for reaching out. I'll get back to you soon." });
+    } catch {
+      toast({
+        title: "Message not sent",
+        description: "Please try again later or reach out through LinkedIn.",
+        variant: "destructive",
+      });
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -72,8 +91,8 @@ export default function Contact() {
               />
             </div>
             <div className="mt-6">
-              <Button type="submit" size="lg">
-                <Send /> Send Message
+              <Button type="submit" size="lg" disabled={sending}>
+                <Send /> {sending ? "Sending..." : "Send Message"}
               </Button>
             </div>
           </form>

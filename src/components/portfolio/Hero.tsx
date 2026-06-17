@@ -42,7 +42,7 @@ export default function Hero() {
               </a>
             </Button>
             <Button asChild size="lg" variant="outline">
-              {/* TODO: replace /resume.pdf with the actual resume file in /public */}
+              {/* Downloads the public resume copy with direct contact PII redacted. */}
               <a href="/resume.pdf" download>
                 <Download /> Download Resume
               </a>

@@ -1,22 +1,28 @@
 import { Briefcase } from "lucide-react";
 import { SectionReveal } from "./SectionReveal";
 
-// Timeline-style experience snapshot. Edit dates/copy as needed.
+// Resume-backed experience snapshot; keep entries aligned with the redacted public resume.
 const items = [
   {
     role: "Data Analyst",
+    organization: "IBM OPOR Project (via Experis)",
+    date: "March 2026 - May 2026",
     summary:
-      "Cleaned and validated data, built reports and dashboards, and communicated insights to stakeholders to support better decision-making.",
+      "Supported IBM's One Person One Record healthcare initiative through data entry, validation, cleaning, reconciliation, and legacy data migration across multiple systems.",
   },
   {
-    role: "Technical Support / IT Support",
+    role: "Data Content Intern",
+    organization: "Food and Agriculture Organization (FAO, UN)",
+    date: "Sept 2025 - Dec 2025",
     summary:
-      "Troubleshot hardware, software, and network issues; documented fixes; supported end users; and improved internal processes to reduce repeat tickets.",
+      "Maintained geospatial datasets, applied ISO 19115 and DCAT metadata standards, contributed to Hand-in-Hand Platform frontend fixes, and standardized map styling.",
   },
   {
-    role: "Administrative & Operations",
+    role: "End User Support Technician",
+    organization: "Saint Mary's University",
+    date: "Nov 2022 - Dec 2024",
     summary:
-      "Coordinated documentation, reporting, and stakeholder communication while streamlining day-to-day workflows.",
+      "Analyzed service and incident data, supported Active Directory and Microsoft Azure access management, and explained technical issues clearly to non-technical users.",
   },
 ];
 
@@ -27,7 +33,7 @@ export default function Experience() {
         <div className="mx-auto mb-12 max-w-2xl text-center">
           <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Experience Snapshot</h2>
           <p className="mt-3 text-muted-foreground">
-            Data validation, troubleshooting, documentation, reporting, and improving workflows.
+            Data operations, geospatial content, frontend support, and end-user technical support.
           </p>
         </div>
       </SectionReveal>
@@ -51,6 +57,9 @@ export default function Experience() {
                   }`}
                 >
                   <h3 className="font-display text-lg font-semibold">{item.role}</h3>
+                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-primary/80">
+                    {item.organization} | {item.date}
+                  </p>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.summary}</p>
                 </div>
               </li>

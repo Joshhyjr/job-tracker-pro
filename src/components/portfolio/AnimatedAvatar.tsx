@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-// Friendly illustrated avatar — replace src/assets/avatar.png with your own image any time.
+// Portfolio portrait used anywhere the interactive avatar appears.
 import avatarImg from "@/assets/avatar.png";
 
 const FULL_TEXT = "Welcome! I'm Joshua — let me show you what I do.";
@@ -31,14 +31,14 @@ export default function AnimatedAvatar() {
         <span className="ml-0.5 inline-block h-4 w-[2px] -translate-y-[1px] animate-blink bg-primary align-middle" />
       </div>
 
-      {/* Floating avatar container */}
+      {/* Floating headshot container; object-contain preserves the placeholder portrait crop. */}
       <div className="relative animate-float">
         <div className="relative aspect-square overflow-hidden rounded-[2rem] glass p-3">
           <img
             src={avatarImg}
-            alt="Illustrated avatar of Joshua Kivaria waving"
-            width={1024}
-            height={1024}
+            alt="Headshot portrait of Joshua Kivaria in a light suit"
+            width={1254}
+            height={1254}
             className="h-full w-full object-contain drop-shadow-[0_20px_40px_hsl(239_84%_60%/0.25)]"
           />
         </div>

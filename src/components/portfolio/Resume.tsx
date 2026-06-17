@@ -2,7 +2,7 @@ import { Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionReveal } from "./SectionReveal";
 
-// Resume download area. Drop your PDF at /public/resume.pdf to wire this up.
+// Resume download area served from the redacted public PDF in /public.
 export default function Resume() {
   return (
     <section id="resume" className="container py-20">
@@ -13,12 +13,11 @@ export default function Resume() {
           </div>
           <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">My Resume</h2>
           <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-            A one-page summary of my experience, skills, and projects — perfect for recruiters and hiring
-            managers.
+            A redacted public copy of my experience, skills, and projects for recruiters and hiring managers.
           </p>
           <div className="mt-6">
             <Button asChild size="lg">
-              {/* TODO: upload your resume to /public/resume.pdf */}
+              {/* Downloads a resume PDF with direct contact PII removed. */}
               <a href="/resume.pdf" download>
                 <Download /> Download My Resume
               </a>
