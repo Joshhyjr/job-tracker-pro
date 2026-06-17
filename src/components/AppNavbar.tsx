@@ -6,13 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useTheme } from "next-themes";
 import { BrandLogo } from "@/components/BrandLogo";
 
-// Navigation link definitions
+// Navigation link definitions — Job Tracker lives under /app/* now (portfolio is at /).
 const links = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/applications", label: "Applications", icon: List },
-  { to: "/locations", label: "Locations", icon: Globe2 },
-  { to: "/follow-ups", label: "Follow-ups", icon: Bell },
-  { to: "/add", label: "Add New", icon: PlusCircle },
+  { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/app/applications", label: "Applications", icon: List },
+  { to: "/app/locations", label: "Locations", icon: Globe2 },
+  { to: "/app/follow-ups", label: "Follow-ups", icon: Bell },
+  { to: "/app/add", label: "Add New", icon: PlusCircle },
 ];
 
 export default function AppNavbar({
