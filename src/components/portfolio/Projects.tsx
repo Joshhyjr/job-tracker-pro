@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { SectionReveal } from "./SectionReveal";
 
-// Featured projects. Replace the `#` GitHub placeholders with real repo URLs.
+// Featured projects with public links for viewing source or launching available demos.
 type Project = {
   title: string;
   description: string;
@@ -19,31 +19,23 @@ const projects: Project[] = [
       "A web app for tracking job applications — statuses, follow-ups, dashboards, and AI-powered insights to spot trends in your search.",
     tech: ["React", "Vite", "TypeScript", "Recharts", "AI"],
     view: { href: "/app", label: "Open Live App", internal: true },
-    github: "#", // TODO: add Job Tracker Pro repo URL
+    github: "https://github.com/Joshhyjr/job-tracker-pro",
   },
   {
     title: "Grocery Deals Finder",
     description:
       "A React + Vite app to search grocery deals, filter by store, manage a basket, and export results — built for everyday saving.",
     tech: ["React", "Vite", "JavaScript"],
-    view: { href: "#" }, // TODO: live demo URL
-    github: "#", // TODO: repo URL
+    view: { href: "https://github.com/Joshhyjr/Grocerydealsfinder" },
+    github: "https://github.com/Joshhyjr/Grocerydealsfinder",
   },
   {
     title: "Spam Detection Model",
     description:
       "A Python machine learning project using NLP, TF-IDF features, and scikit-learn to classify messages as spam or not spam.",
     tech: ["Python", "scikit-learn", "NLP", "TF-IDF"],
-    view: { href: "#" },
-    github: "#",
-  },
-  {
-    title: "Inventory & Budget Web App",
-    description:
-      "A Flask + MySQL application for managing inventory and budget projections — built for small teams that need clarity over spreadsheets.",
-    tech: ["Flask", "MySQL", "Python"],
-    view: { href: "#" },
-    github: "#",
+    view: { href: "https://github.com/Joshhyjr/SpamFilter" },
+    github: "https://github.com/Joshhyjr/SpamFilter",
   },
 ];
 
