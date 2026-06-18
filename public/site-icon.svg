@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Joshua Kivaria monogram</title>
+  <desc id="desc">A navy JK monogram on a warm white background.</desc>
+  <!-- Keep generous padding so the monogram remains clear inside browser-generated rounded icon masks. -->
+  <rect width="256" height="256" rx="44" fill="#f6f3ee" />
+  <g transform="translate(28 28) scale(.78125)" fill="#18365a">
+    <path d="M92 36 120 8v96l-28 28Z" />
+    <path d="M0 132h36c2 39 24 58 56 58 8 0 16-1 24-4v38c-10 4-21 6-33 6-53 0-84-31-83-98Z" />
+    <path d="M101 173 199 8h57L158 173l-42 52h-57Z" />
+    <path d="M166 180h41l49 76h-42Z" />
+    <path d="M92 210h28v46H92Z" />
+  </g>
+</svg>
