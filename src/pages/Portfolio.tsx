@@ -1,42 +1,31 @@
-import PortfolioNav from "@/components/portfolio/PortfolioNav";
-import Hero from "@/components/portfolio/Hero";
-import About from "@/components/portfolio/About";
-import Skills from "@/components/portfolio/Skills";
-import Certifications from "@/components/portfolio/Certifications";
-import Projects from "@/components/portfolio/Projects";
-import Experience from "@/components/portfolio/Experience";
-import Resume from "@/components/portfolio/Resume";
-import Contact from "@/components/portfolio/Contact";
-import Footer from "@/components/portfolio/Footer";
-import { useEffect } from "react";
+import CockpitNav from "@/components/cockpit/CockpitNav";
+import Hero from "@/components/cockpit/Hero";
+import DriverProfile from "@/components/cockpit/DriverProfile";
+import PerformanceSpecs from "@/components/cockpit/PerformanceSpecs";
+import Garage from "@/components/cockpit/Garage";
+import JourneyLog from "@/components/cockpit/JourneyLog";
+import Licenses from "@/components/cockpit/Licenses";
+import SpecSheet from "@/components/cockpit/SpecSheet";
+import Ignition from "@/components/cockpit/Ignition";
+import CockpitFooter from "@/components/cockpit/CockpitFooter";
 
-// Top-level portfolio page composed of scrollable sections.
+// Cockpit portfolio — minimal luxury performance dashboard.
+// Scope the dark palette to this subtree so next-themes can't override it.
 export default function Portfolio() {
-  // Force dark mode on the portfolio for the intended Midnight Indigo aesthetic.
-  useEffect(() => {
-    const root = document.documentElement;
-    const hadDark = root.classList.contains("dark");
-    root.classList.add("dark");
-    return () => {
-      if (!hadDark) root.classList.remove("dark");
-    };
-  }, []);
-
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <PortfolioNav />
+    <div className="dark carbon-texture min-h-screen bg-background text-foreground">
+      <CockpitNav />
       <main>
         <Hero />
-        <About />
-        <Skills />
-        {/* Certifications follow skills so visitors can verify the supporting training. */}
-        <Certifications />
-        <Projects />
-        <Experience />
-        <Resume />
-        <Contact />
+        <DriverProfile />
+        <PerformanceSpecs />
+        <Garage />
+        <JourneyLog />
+        <Licenses />
+        <SpecSheet />
+        <Ignition />
       </main>
-      <Footer />
+      <CockpitFooter />
     </div>
   );
 }

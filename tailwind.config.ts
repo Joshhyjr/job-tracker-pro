@@ -77,28 +77,17 @@ export default {
           "0%": { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        float: {
-          "0%,100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-10px)" },
-        },
-        blink: {
-          "0%,100%": { opacity: "1" },
-          "50%": { opacity: "0" },
-        },
-        wave: {
-          "0%,60%,100%": { transform: "rotate(0deg)" },
-          "10%,30%": { transform: "rotate(14deg)" },
-          "20%": { transform: "rotate(-8deg)" },
-          "40%": { transform: "rotate(14deg)" },
+        // Sweeps a performance bar from 0 to its target width on reveal.
+        "bar-fill": {
+          "0%": { transform: "scaleX(0)" },
+          "100%": { transform: "scaleX(1)" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.6s ease-out both",
-        float: "float 6s ease-in-out infinite",
-        blink: "blink 1s step-end infinite",
-        wave: "wave 2.4s ease-in-out infinite",
+        "bar-fill": "bar-fill 0.8s cubic-bezier(.22,.61,.36,1) both",
       },
     },
   },

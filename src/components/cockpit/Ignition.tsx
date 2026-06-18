@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import SectionPanel from "./SectionPanel";
 import { SectionReveal } from "./SectionReveal";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,27 +13,24 @@ const links = [
   { icon: Github, label: "GitHub", href: "https://github.com/Joshhyjr" },
 ];
 
-export default function Contact() {
+export default function Ignition() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
 
-  // Sends through a server endpoint so the destination inbox stays in environment variables.
+  // Sends through the existing /api/contact endpoint so the destination inbox stays server-side.
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSending(true);
-
     try {
       const response = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, message }),
       });
-
       if (!response.ok) throw new Error("Contact request failed");
-
       setName("");
       setEmail("");
       setMessage("");
@@ -49,26 +47,26 @@ export default function Contact() {
   }
 
   return (
-    <section id="contact" className="container py-20">
-      <SectionReveal>
-        <div className="mx-auto mb-10 max-w-2xl text-center">
-          <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Get in touch</h2>
-          <p className="mt-3 text-muted-foreground">
-            Have a role, project, or idea in mind? I'd love to hear from you.
-          </p>
-        </div>
-      </SectionReveal>
-
-      <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-5">
+    <SectionPanel
+      id="ignition"
+      eyebrow="07 · Start the Engine"
+      title="Let's talk"
+      description="Have a role, project, or idea? Drop a note or reach me directly."
+    >
+      <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-5">
         <SectionReveal className="md:col-span-3">
-          <form onSubmit={handleSubmit} className="glass rounded-2xl p-6 sm:p-8">
+          <form onSubmit={handleSubmit} className="glass rounded-xl p-6 sm:p-8">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="name" className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Name
+                </Label>
                 <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Your name" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Email
+                </Label>
                 <Input
                   id="email"
                   type="email"
@@ -80,7 +78,9 @@ export default function Contact() {
               </div>
             </div>
             <div className="mt-4 space-y-2">
-              <Label htmlFor="message">Message</Label>
+              <Label htmlFor="message" className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                Message
+              </Label>
               <Textarea
                 id="message"
                 value={message}
@@ -98,26 +98,28 @@ export default function Contact() {
           </form>
         </SectionReveal>
 
-        <SectionReveal className="md:col-span-2" delay={120}>
-          <div className="glass h-full rounded-2xl p-6 sm:p-8">
-            <h3 className="font-display text-lg font-semibold">Find me online</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Prefer to reach out directly? Pick a channel that works for you.
-            </p>
-            <ul className="mt-5 space-y-3">
+        <SectionReveal className="md:col-span-2" delay={100}>
+          <div className="glass-subtle flex h-full flex-col rounded-xl p-6 sm:p-8">
+            <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Direct channels
+            </div>
+            <h3 className="mt-1 font-display text-lg font-semibold">Reach me directly</h3>
+            <ul className="mt-5 space-y-2.5">
               {links.map((l) => (
                 <li key={l.label}>
                   <a
                     href={l.href}
                     target="_blank"
                     rel="noreferrer"
-                    className="group flex items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 px-4 py-3 text-sm transition-colors hover:border-primary/40 hover:bg-primary/10"
+                    className="group flex items-center gap-3 rounded-lg border border-border/60 bg-secondary/30 px-4 py-3 text-sm transition-colors hover:border-primary/40 hover:bg-secondary/60"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-primary">
                       <l.icon className="h-4 w-4" />
                     </span>
                     <span className="font-medium">{l.label}</span>
-                    <span className="ml-auto text-xs text-muted-foreground group-hover:text-foreground">→</span>
+                    <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground group-hover:text-foreground">
+                      Open →
+                    </span>
                   </a>
                 </li>
               ))}
@@ -125,6 +127,6 @@ export default function Contact() {
           </div>
         </SectionReveal>
       </div>
-    </section>
+    </SectionPanel>
   );
 }
