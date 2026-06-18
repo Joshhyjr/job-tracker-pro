@@ -87,7 +87,7 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
       toast({ title: "Added", description: "New application added." });
     }
     onSaved();
-    navigate("/applications");
+    navigate("/app/applications");
   }
 
   return (
@@ -133,7 +133,7 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
               )} />
               <div className="flex gap-3 pt-2">
                 <Button type="submit">{existing ? "Save Changes" : "Add Application"}</Button>
-                <Button type="button" variant="outline" onClick={() => navigate("/applications")}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={() => navigate("/app/applications")}>Cancel</Button>
               </div>
             </form>
           </Form>

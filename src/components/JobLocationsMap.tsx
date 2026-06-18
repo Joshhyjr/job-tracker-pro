@@ -36,7 +36,7 @@ function LocationDetails({ group }: { group: JobLocationGroup }) {
           <button
             key={application.id}
             type="button"
-            onClick={() => navigate(`/applications/${application.id}`)}
+            onClick={() => navigate(`/app/applications/${application.id}`)}
             className="w-full rounded-md border border-border/40 px-3 py-2 text-left transition-colors hover:bg-muted/50"
           >
             <div className="flex items-start justify-between gap-3">
