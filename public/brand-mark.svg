@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Joshua Kivaria monogram</title>
+  <desc id="desc">A navy blue JK monogram used as the primary website brand mark.</desc>
+  <g fill="#18365a">
+    <!-- Left stroke forms the upright of the monogram's J and anchors the shared diagonal. -->
+    <path d="M92 36 120 8v96l-28 28Z" />
+    <!-- Bottom-left curve gives the J its hook while keeping the counter open at favicon sizes. -->
+    <path d="M0 132h36c2 39 24 58 56 58 8 0 16-1 24-4v38c-10 4-21 6-33 6-53 0-84-31-83-98Z" />
+    <!-- Center diagonal ties the initials together and matches the original sketch's strongest gesture. -->
+    <path d="M101 173 199 8h57L158 173l-42 52h-57Z" />
+    <!-- Right leg completes the K with a clean, bold counter for small-screen legibility. -->
+    <path d="M166 180h41l49 76h-42Z" />
+    <!-- Small lower stem closes the monogram without adding visual noise to the main silhouette. -->
+    <path d="M92 210h28v46H92Z" />
+  </g>
+</svg>
