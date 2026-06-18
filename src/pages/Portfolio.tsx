@@ -10,19 +10,10 @@ import Ignition from "@/components/cockpit/Ignition";
 import CockpitFooter from "@/components/cockpit/CockpitFooter";
 
 // Cockpit portfolio — minimal luxury performance dashboard.
-// Forces dark theme; carbon texture applied to the wrapper.
+// Scope the dark palette to this subtree so next-themes can't override it.
 export default function Portfolio() {
-  useEffect(() => {
-    const root = document.documentElement;
-    const hadDark = root.classList.contains("dark");
-    root.classList.add("dark");
-    return () => {
-      if (!hadDark) root.classList.remove("dark");
-    };
-  }, []);
-
   return (
-    <div className="carbon-texture min-h-screen bg-background text-foreground">
+    <div className="dark carbon-texture min-h-screen bg-background text-foreground">
       <CockpitNav />
       <main>
         <Hero />
