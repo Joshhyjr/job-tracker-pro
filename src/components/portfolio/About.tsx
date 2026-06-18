@@ -15,15 +15,11 @@ export default function About() {
             A bit about my background
           </h2>
           <p className="mt-6 text-base leading-relaxed text-muted-foreground sm:text-lg">
-            I have a background in <span className="text-foreground">Computer Science</span>, with hands-on
+            Graduated with a <span className="text-foreground">Computer Science</span> degree, with hands-on
             experience in <span className="text-foreground">data analysis</span>,{" "}
             <span className="text-foreground">technical support</span>, IT systems, and everyday
             problem-solving. I enjoy learning, improving workflows, working with data, and using modern AI
-            tools to build smarter, faster solutions for the people I work with.
-          </p>
-          <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Whether I'm cleaning a dataset, debugging a system, or shipping a small web app, my goal is the
-            same: make something useful, reliable, and easy to use.
+            tools to build smarter, faster solutions.
           </p>
         </div>
       </SectionReveal>

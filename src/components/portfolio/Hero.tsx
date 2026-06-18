@@ -19,7 +19,7 @@ export default function Hero() {
             Available for new opportunities
           </div>
           <h1 className="font-display text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
-            Hi, I'm{" "}
+            Hey there, I'm{" "}
             <span className="bg-gradient-to-r from-primary via-indigo-300 to-indigo-100 bg-clip-text text-transparent">
               Joshua Kivaria
             </span>
@@ -30,8 +30,8 @@ export default function Hero() {
           </p>
           <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
             Passionate about technology, data, problem-solving, automation, and building useful digital tools.
-            I turn messy data into clear insights, fix things that are broken, and ship apps that make real
-            workflows feel easier.
+            I enjoy fixing broken things, making sense of messy data, and eventually shipping apps that make real
+            positive impacts.
           </p>
 
           <div className="flex flex-wrap gap-3 pt-2">
