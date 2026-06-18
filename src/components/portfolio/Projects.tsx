@@ -24,7 +24,8 @@ const projects: Project[] = [
     view: { href: "https://data.apps.fao.org/?lang=en", label: "View Platform" },
   },
   {
-    title: "Job Tracker Pro",
+    // Use the simplified product name consistently across the portfolio and app.
+    title: "Job Tracker",
     description:
       "A web app for tracking job applications — statuses, follow-ups, dashboards, and AI-powered insights to spot trends in your search.",
     tech: ["React", "Vite", "TypeScript", "Recharts", "AI"],

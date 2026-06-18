@@ -1,4 +1,4 @@
-# Job Tracker Pro
+# Job Tracker
 
 [![CI](https://github.com/Joshhyjr/job-tracker-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/Joshhyjr/job-tracker-pro/actions/workflows/ci.yml)
 [![Security](https://github.com/Joshhyjr/job-tracker-pro/actions/workflows/security.yml/badge.svg)](https://github.com/Joshhyjr/job-tracker-pro/actions/workflows/security.yml)
@@ -17,7 +17,7 @@ Production: [www.jkivaria.com](https://www.jkivaria.com)
 - Follow-up management with dates and overdue visibility
 - XLSX import/export powered by ExcelJS
 - Responsive design for desktop and mobile workflows
-- Dark mode UI with polished Job Tracker Pro branding
+- Dark mode UI with polished Job Tracker branding
 - Security hardening through headers, dependency checks, and safer data handling
 - Future AI-powered career insights foundation
 
@@ -26,7 +26,7 @@ Production: [www.jkivaria.com](https://www.jkivaria.com)
 - Added Recent Applications to the dashboard
 - Added Insights & Recommendations
 - Added hosted Gemini AI insights with local Ollama fallback
-- Added Job Tracker Pro branding and logo
+- Added Job Tracker branding and logo
 - Removed Lovable branding
 - Added CI/CD workflows for linting, typechecking, tests, and builds
 - Added automated security scans with npm audit, CodeQL, dependency review, and Gitleaks
@@ -45,7 +45,7 @@ Production: [www.jkivaria.com](https://www.jkivaria.com)
 
 ## Security
 
-Job Tracker Pro includes practical security controls for a frontend portfolio app:
+Job Tracker includes practical security controls for a frontend portfolio app:
 
 - Secret protection with `.env` ignore rules and a safe `.env.example`
 - Dependabot updates for npm packages and GitHub Actions

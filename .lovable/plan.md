@@ -1,6 +1,6 @@
 ## Goal
 
-Rebuild the site as a personal portfolio for Joshua Kivaria with a Midnight Indigo dark theme, glassmorphism, and an animated illustrated avatar. Keep the existing Job Tracker Pro app fully working under `/app/*` and feature it as a project on the portfolio.
+Rebuild the site as a personal portfolio for Joshua Kivaria with a Midnight Indigo dark theme, glassmorphism, and an animated illustrated avatar. Keep the existing Job Tracker app fully working under `/app/*` and feature it as a project on the portfolio.
 
 ## Routing changes
 
@@ -31,7 +31,7 @@ Install fonts via `@fontsource/space-grotesk` + `@fontsource/inter`, wire in `ma
 - `src/components/portfolio/AnimatedAvatar.tsx` — floating + waving wrapper + typing speech bubble
 - `src/components/portfolio/About.tsx`
 - `src/components/portfolio/Skills.tsx` — 4 grouped glass cards with lucide icons
-- `src/components/portfolio/Projects.tsx` — Job Tracker Pro (links to `/app`), Grocery Deals Finder, Spam Detection Model, Inventory & Budget App
+- `src/components/portfolio/Projects.tsx` — Job Tracker (links to `/app`), Grocery Deals Finder, Spam Detection Model, Inventory & Budget App
 - `src/components/portfolio/Experience.tsx` — vertical timeline
 - `src/components/portfolio/Resume.tsx` — placeholder download (`/resume.pdf`, file dropped in `public/` later)
 - `src/components/portfolio/Contact.tsx` — name/email/message form (client-side only, mailto fallback) + social links

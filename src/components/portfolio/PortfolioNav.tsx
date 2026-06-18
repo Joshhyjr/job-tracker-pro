@@ -33,12 +33,15 @@ export default function PortfolioNav() {
       }`}
     >
       <div className="container flex h-16 items-center justify-between">
-        {/* Brand wordmark */}
+        {/* Reuse the Job Tracker monogram as the primary jkivaria.com identity. */}
         <a
           href="#top"
-          className="text-lg font-semibold tracking-tight font-display"
+          className="inline-flex items-center gap-2.5 rounded-md font-display focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Joshua Kivaria home"
         >
-          <span className="bg-gradient-to-r from-primary to-indigo-300 bg-clip-text text-transparent">
+          <img src="/brand-mark.svg" alt="" aria-hidden="true" className="h-9 w-9 shrink-0 brightness-0 invert" />
+          {/* Keep the name beside the shared mark so first-time visitors can identify the portfolio owner. */}
+          <span className="bg-gradient-to-r from-primary to-indigo-300 bg-clip-text text-lg font-semibold tracking-tight text-transparent">
             Joshua Kivaria
           </span>
         </a>
