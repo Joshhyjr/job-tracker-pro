@@ -6,7 +6,19 @@ const groups = [
   {
     icon: BarChart3,
     title: "Data Analysis",
-    items: ["Excel", "SQL", "Python", "pandas", "Data cleaning", "Reporting", "Dashboards"],
+    // Include credential-backed analytics skills without duplicating existing entries.
+    items: [
+      "Excel",
+      "SQL",
+      "Python",
+      "pandas",
+      "Data cleaning",
+      "Data Refinery",
+      "Data Visualization",
+      "Tableau",
+      "Reporting",
+      "Dashboards",
+    ],
   },
   {
     icon: Wrench,
@@ -21,7 +33,8 @@ const groups = [
   {
     icon: Sparkles,
     title: "Tools & AI",
-    items: ["ChatGPT", "Claude", "Codex", "Gemini", "GitHub", "Vercel", "Cloudflare"],
+    // AWS is supported by the listed Digital Nova Scotia certifications.
+    items: ["ChatGPT", "Claude", "Codex", "Gemini", "GitHub", "AWS", "Vercel", "Cloudflare"],
   },
 ];
 

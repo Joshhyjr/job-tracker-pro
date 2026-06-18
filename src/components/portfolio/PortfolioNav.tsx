@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 const sections = [
   { id: "about", label: "About" },
   { id: "skills", label: "Skills" },
+  // Keep certifications reachable from both desktop and mobile navigation.
+  { id: "certifications", label: "Certifications" },
   { id: "projects", label: "Projects" },
   { id: "experience", label: "Experience" },
   { id: "resume", label: "Resume" },
@@ -41,7 +43,8 @@ export default function PortfolioNav() {
           </span>
         </a>
 
-        <div className="hidden items-center gap-1 md:flex">
+        {/* Use the mobile menu at tablet widths to prevent the expanded link set from crowding. */}
+        <div className="hidden items-center gap-1 lg:flex">
           {sections.map((s) => (
             <a
               key={s.id}
@@ -59,7 +62,7 @@ export default function PortfolioNav() {
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden"
+          className="lg:hidden"
           onClick={() => setOpen((o) => !o)}
           aria-label={open ? "Close menu" : "Open menu"}
         >
@@ -68,7 +71,7 @@ export default function PortfolioNav() {
       </div>
 
       {open && (
-        <div className="glass-subtle rounded-none border-x-0 border-b p-4 md:hidden">
+        <div className="glass-subtle rounded-none border-x-0 border-b p-4 lg:hidden">
           <div className="flex flex-col gap-1">
             {sections.map((s) => (
               <a

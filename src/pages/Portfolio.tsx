@@ -2,6 +2,7 @@ import PortfolioNav from "@/components/portfolio/PortfolioNav";
 import Hero from "@/components/portfolio/Hero";
 import About from "@/components/portfolio/About";
 import Skills from "@/components/portfolio/Skills";
+import Certifications from "@/components/portfolio/Certifications";
 import Projects from "@/components/portfolio/Projects";
 import Experience from "@/components/portfolio/Experience";
 import Resume from "@/components/portfolio/Resume";
@@ -28,6 +29,8 @@ export default function Portfolio() {
         <Hero />
         <About />
         <Skills />
+        {/* Certifications follow skills so visitors can verify the supporting training. */}
+        <Certifications />
         <Projects />
         <Experience />
         <Resume />

@@ -1,6 +1,7 @@
 import { ArrowUpRight, Github } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { AutoCarousel } from "./AutoCarousel";
 import { SectionReveal } from "./SectionReveal";
 
 // Featured projects with public links for viewing source or launching available demos.
@@ -9,10 +10,19 @@ type Project = {
   description: string;
   tech: string[];
   view: { href: string; label?: string; internal?: boolean };
-  github: string;
+  github?: string;
 };
 
 const projects: Project[] = [
+  {
+    title: "FAO Hand-in-Hand Geospatial Platform",
+    // Explain the platform's purpose first, then distinguish Joshua's internship contribution.
+    description:
+      "An FAO mapping and data platform that brings agriculture, climate, land, water, food, and economic data into one place. It helps countries and international teams make informed decisions aimed at reducing poverty and hunger. During my Data Content Internship, I fixed frontend UI bugs and prepared, validated, and documented structured and geospatial datasets for the platform.",
+    tech: ["Frontend", "UI Bug Fixes", "Geospatial Data", "Data Validation", "Documentation"],
+    // Link to the live FAO platform while accurately presenting this as an internship contribution.
+    view: { href: "https://data.apps.fao.org/?lang=en", label: "View Platform" },
+  },
   {
     title: "Job Tracker Pro",
     description:
@@ -26,7 +36,8 @@ const projects: Project[] = [
     description:
       "A React + Vite app to search grocery deals, filter by store, manage a basket, and export results — built for everyday saving.",
     tech: ["React", "Vite", "JavaScript"],
-    view: { href: "https://github.com/Joshhyjr/Grocerydealsfinder" },
+    // Launch the deployed Grocery Deals Finder from the primary project action.
+    view: { href: "https://joshhyjr.github.io/Grocerydealsfinder/" },
     github: "https://github.com/Joshhyjr/Grocerydealsfinder",
   },
   {
@@ -45,13 +56,21 @@ export default function Projects() {
       <SectionReveal>
         <div className="mx-auto mb-12 max-w-2xl text-center">
           <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Featured Projects</h2>
-          <p className="mt-3 text-muted-foreground">A few things I've built recently.</p>
+          <p className="mt-3 text-muted-foreground">
+            A few projects and platforms I've built or contributed to.
+          </p>
         </div>
       </SectionReveal>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {projects.map((p, idx) => (
-          <SectionReveal key={p.title} delay={idx * 80}>
+      {/* Match the certification carousel with one centered, comfortably sized card. */}
+      <SectionReveal className="mx-auto max-w-3xl">
+        <AutoCarousel
+          items={projects}
+          getKey={(project) => project.title}
+          label="Featured projects"
+          // Keep one project visible at every breakpoint for a clear active state.
+          itemClassName="basis-full"
+          renderItem={(p) => (
             <article className="group relative h-full overflow-hidden glass rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/10">
               {/* Decorative gradient corner */}
               <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-primary/20 blur-3xl transition-opacity duration-300 group-hover:opacity-100 opacity-60" />
@@ -84,16 +103,18 @@ export default function Projects() {
                     </a>
                   </Button>
                 )}
-                <Button asChild size="sm" variant="outline">
-                  <a href={p.github} target="_blank" rel="noreferrer">
-                    <Github className="h-4 w-4" /> GitHub
-                  </a>
-                </Button>
+                {p.github ? (
+                  <Button asChild size="sm" variant="outline">
+                    <a href={p.github} target="_blank" rel="noreferrer">
+                      <Github className="h-4 w-4" /> GitHub
+                    </a>
+                  </Button>
+                ) : null}
               </div>
             </article>
-          </SectionReveal>
-        ))}
-      </div>
+          )}
+        />
+      </SectionReveal>
     </section>
   );
 }
