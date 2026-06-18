@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import CockpitNav from "@/components/cockpit/CockpitNav";
 import Hero from "@/components/cockpit/Hero";
 import DriverProfile from "@/components/cockpit/DriverProfile";
