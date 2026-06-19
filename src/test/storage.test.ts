@@ -1,9 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
-import { addApplication, getApplications, getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation } from "@/lib/storage";
+import { addApplication, getApplications, getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation, markSeeded, saveApplications, saveLastImportMetadata } from "@/lib/storage";
 
 beforeEach(() => {
   localStorage.clear();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("mapRowsToApplications", () => {
@@ -338,5 +342,42 @@ describe("getApplications", () => {
         "Portfolio Notes": "Shared case study",
       },
     });
+  });
+
+  it("does not throw when browser storage rejects application writes", () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("quota exceeded");
+    });
+
+    // Restricted/private browser contexts can deny writes; creating records should still succeed in memory.
+    expect(() => saveApplications([])).not.toThrow();
+    expect(() => markSeeded()).not.toThrow();
+    expect(() => addApplication({
+      jobTitle: "Platform Engineer",
+      companyName: "Northstar",
+      location: "Remote",
+      currentStatus: "Applied",
+      responseStatus: "Applied",
+      followUps: false,
+      dateApplied: "2026-06-01",
+      notes: "",
+      followUpDate: "",
+    })).not.toThrow();
+
+    setItemSpy.mockRestore();
+  });
+
+  it("does not throw when browser storage rejects import metadata writes", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("quota exceeded");
+    });
+
+    // Import success should not be reclassified as a fatal error just because metadata persistence is unavailable.
+    expect(() => saveLastImportMetadata({
+      fileName: "import.xlsx",
+      importedAt: "2026-06-19T00:00:00.000Z",
+      rowCount: 3,
+      warningCount: 1,
+    })).not.toThrow();
   });
 });

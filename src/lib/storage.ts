@@ -12,6 +12,23 @@ const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 10_000;
 const MAX_IMPORT_COLUMNS = 100;
 
+function safeStorageSetItem(key: string, value: string): void {
+  try {
+    // Storage writes can throw in private browsing or quota-constrained sessions; keep mutations from crashing the UI.
+    localStorage.setItem(key, value);
+  } catch {
+    // A failed persistence write is preferable to losing the current in-memory interaction entirely.
+  }
+}
+
+function safeStorageRemoveItem(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore browser storage failures so transient cleanup does not interrupt the rest of the app flow.
+  }
+}
+
 type ImportField =
   | "jobTitle"
   | "companyName"
@@ -400,16 +417,16 @@ function parseWorkbook(wb: ExcelJS.Workbook): WorkbookParseResult {
 }
 
 function setPreferredResponseStatusOrder(order: string[]) {
-  localStorage.setItem(RESPONSE_STATUS_ORDER_KEY, JSON.stringify(normalizeResponseStatusList(order)));
+  safeStorageSetItem(RESPONSE_STATUS_ORDER_KEY, JSON.stringify(normalizeResponseStatusList(order)));
 }
 
 function setImportWarnings(warnings: string[]) {
-  localStorage.setItem(IMPORT_WARNINGS_KEY, JSON.stringify(warnings));
+  safeStorageSetItem(IMPORT_WARNINGS_KEY, JSON.stringify(warnings));
 }
 
 export function saveLastImportMetadata(metadata: LastImportMetadata) {
   // Keep a lightweight import breadcrumb without retaining the original workbook.
-  localStorage.setItem(LAST_IMPORT_METADATA_KEY, JSON.stringify(metadata));
+  safeStorageSetItem(LAST_IMPORT_METADATA_KEY, JSON.stringify(metadata));
 }
 
 export function getLastImportMetadata(): LastImportMetadata | null {
@@ -438,7 +455,7 @@ export function getLastImportMetadata(): LastImportMetadata | null {
 
 export function consumeImportWarnings(): string[] {
   const raw = localStorage.getItem(IMPORT_WARNINGS_KEY);
-  localStorage.removeItem(IMPORT_WARNINGS_KEY);
+  safeStorageRemoveItem(IMPORT_WARNINGS_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as string[];
@@ -589,7 +606,7 @@ export function getApplications(): JobApplication[] {
 }
 
 export function saveApplications(apps: JobApplication[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(apps));
+  safeStorageSetItem(STORAGE_KEY, JSON.stringify(apps));
 }
 
 export function isSeeded(): boolean {
@@ -597,7 +614,7 @@ export function isSeeded(): boolean {
 }
 
 export function markSeeded() {
-  localStorage.setItem(SEEDED_KEY, "true");
+  safeStorageSetItem(SEEDED_KEY, "true");
 }
 
 export function addApplication(app: Omit<JobApplication, "id" | "activityLog">): JobApplication {
