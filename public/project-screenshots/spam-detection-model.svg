@@ -1,0 +1,78 @@
+<!-- Visual preview for the archived model, which does not have a deployed interface. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-labelledby="title description">
+  <title id="title">Spam detection model preview</title>
+  <desc id="description">A dark inbox interface showing safe and spam message classifications.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17122b"/>
+      <stop offset="1" stop-color="#281347"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#08040f" flood-opacity=".45"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#background)"/>
+  <circle cx="1110" cy="84" r="230" fill="#7c3aed" opacity=".12"/>
+  <circle cx="120" cy="670" r="260" fill="#c026d3" opacity=".08"/>
+
+  <g filter="url(#shadow)">
+    <rect x="92" y="78" width="1096" height="564" rx="28" fill="#11101b" stroke="#4b3d68" stroke-width="2"/>
+    <rect x="92" y="78" width="1096" height="82" rx="28" fill="#191626"/>
+    <path d="M92 132h1096v28H92z" fill="#191626"/>
+  </g>
+
+  <circle cx="136" cy="119" r="9" fill="#fb7185"/>
+  <circle cx="164" cy="119" r="9" fill="#fbbf24"/>
+  <circle cx="192" cy="119" r="9" fill="#4ade80"/>
+  <text x="236" y="128" fill="#f5f3ff" font-family="Arial, sans-serif" font-size="25" font-weight="700">Spam Detection Model</text>
+  <rect x="948" y="101" width="202" height="38" rx="19" fill="#242033"/>
+  <circle cx="976" cy="120" r="7" fill="#4ade80"/>
+  <text x="995" y="127" fill="#d8d2e7" font-family="Arial, sans-serif" font-size="17">model ready</text>
+
+  <g font-family="Arial, sans-serif">
+    <text x="132" y="214" fill="#9b92ad" font-size="17" font-weight="700" letter-spacing="2">MESSAGE</text>
+    <text x="884" y="214" fill="#9b92ad" font-size="17" font-weight="700" letter-spacing="2">PREDICTION</text>
+
+    <g>
+      <rect x="126" y="240" width="1028" height="96" rx="16" fill="#1c1928" stroke="#343044"/>
+      <circle cx="174" cy="288" r="22" fill="#2d2840"/>
+      <path d="M162 281h24v16h-24zm0 0 12 9 12-9" fill="none" stroke="#b8b1c8" stroke-width="3" stroke-linejoin="round"/>
+      <text x="220" y="282" fill="#f4f1fa" font-size="22" font-weight="700">Team sync moved to 2:30 PM</text>
+      <text x="220" y="310" fill="#9991a8" font-size="17">Can you send the latest dashboard before the call?</text>
+      <rect x="915" y="267" width="186" height="42" rx="21" fill="#123627"/>
+      <circle cx="944" cy="288" r="8" fill="#4ade80"/>
+      <text x="965" y="295" fill="#8bf0b2" font-size="18" font-weight="700">SAFE · 98%</text>
+    </g>
+
+    <g>
+      <rect x="126" y="356" width="1028" height="96" rx="16" fill="#241828" stroke="#5a294e"/>
+      <circle cx="174" cy="404" r="22" fill="#422139"/>
+      <path d="M162 397h24v16h-24zm0 0 12 9 12-9" fill="none" stroke="#f0a6ce" stroke-width="3" stroke-linejoin="round"/>
+      <text x="220" y="398" fill="#fff1f7" font-size="22" font-weight="700">URGENT: You won a $5,000 gift card!!!</text>
+      <text x="220" y="426" fill="#b79aaa" font-size="17">Click here now to claim your exclusive cash reward.</text>
+      <rect x="895" y="383" width="206" height="42" rx="21" fill="#4a1738"/>
+      <circle cx="925" cy="404" r="8" fill="#fb7185"/>
+      <text x="946" y="411" fill="#fda4c9" font-size="18" font-weight="700">SPAM · 99%</text>
+    </g>
+
+    <g>
+      <rect x="126" y="472" width="1028" height="96" rx="16" fill="#1c1928" stroke="#343044"/>
+      <circle cx="174" cy="520" r="22" fill="#2d2840"/>
+      <path d="M162 513h24v16h-24zm0 0 12 9 12-9" fill="none" stroke="#b8b1c8" stroke-width="3" stroke-linejoin="round"/>
+      <text x="220" y="514" fill="#f4f1fa" font-size="22" font-weight="700">Your monthly statement is ready</text>
+      <text x="220" y="542" fill="#9991a8" font-size="17">Review account activity in the secure customer portal.</text>
+      <rect x="915" y="499" width="186" height="42" rx="21" fill="#123627"/>
+      <circle cx="944" cy="520" r="8" fill="#4ade80"/>
+      <text x="965" y="527" fill="#8bf0b2" font-size="18" font-weight="700">SAFE · 94%</text>
+    </g>
+
+    <rect x="126" y="594" width="1028" height="4" rx="2" fill="#292437"/>
+    <rect x="126" y="594" width="762" height="4" rx="2" fill="url(#accent)"/>
+    <text x="126" y="626" fill="#8e849f" font-size="15">TF-IDF + scikit-learn · NLP classification pipeline</text>
+  </g>
+</svg>

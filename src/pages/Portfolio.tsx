@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
-  Search, Bell, Home, User, Folder, FileText, MapPin, Globe,
+  Search, Bell, Home, User, Folder, FileText, MapPin,
   Github, Linkedin, ThumbsUp, MessageSquare, Share2, Award, Briefcase,
-  Camera, StickyNote, Users, Wallet, Download, ExternalLink, Plus, Send,
+  Camera, StickyNote, Users, Download, ExternalLink, Plus, Send,
 } from "lucide-react";
 import avatarImg from "@/assets/joshua-avatar.png";
 
@@ -122,9 +122,9 @@ function LeftSidebar() {
   const sidebarNav = [
     { label: "Wall", href: "#wall" },
     { label: "About Me", href: "#about" },
-    { label: "Photos / Projects", href: "#projects" },
-    { label: "Notes / Resume", href: "#resume" },
-    { label: "Friends / Network", href: "#network" },
+    { label: "Projects", href: "#projects" },
+    { label: "Resume", href: "#resume" },
+   // { label: "Friends / Network", href: "#network" },
   ];
 
   // Fictional "friends" placeholders representing Joshua's network.
@@ -161,8 +161,9 @@ function LeftSidebar() {
       {/* About Me */}
       <RetroCard title="About Me" edit="Edit">
         <p className="text-[12px] leading-relaxed text-[hsl(var(--retro-text))]">
-          I turn data into insights, solve problems with technology, and build tools that
-          make life easier.
+          I built this space to share my journey across data analytics, technical support
+          &amp; the few times I&apos;ve tinkered with software development. Here you&apos;ll
+          find the projects I&apos;ve built, tools I&apos;m learning &amp; what experience I bring.
         </p>
       </RetroCard>
 
@@ -211,8 +212,8 @@ function CenterColumn() {
         { label: "GitHub Repo", href: "https://github.com/Joshhyjr/job-tracker-pro" },
         { label: "Live Demo", href: "/app" },
       ],
-      gradient: "from-[hsl(215_70%_30%)] to-[hsl(220_60%_18%)]",
-      icon: <Briefcase className="h-8 w-8 text-white/85" />,
+      preview: "/project-screenshots/job-tracker.png",
+      previewAlt: "Job Tracker dashboard with application totals and status charts",
     },
     {
       title: "FAO Hand-in-Hand Platform",
@@ -221,8 +222,8 @@ function CenterColumn() {
       links: [
         { label: "View Platform", href: "https://data.apps.fao.org/?lang=en" },
       ],
-      gradient: "from-[hsl(142_45%_35%)] to-[hsl(160_55%_22%)]",
-      icon: <Globe className="h-8 w-8 text-white/85" />,
+      preview: "/project-screenshots/fao-hand-in-hand.png",
+      previewAlt: "FAO Hand-in-Hand geospatial platform showing its map interface",
     },
     {
       title: "Grocery Deals Finder",
@@ -232,8 +233,8 @@ function CenterColumn() {
         { label: "Live Demo", href: "https://joshhyjr.github.io/Grocerydealsfinder/" },
         { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Grocerydealsfinder" },
       ],
-      gradient: "from-[hsl(35_85%_45%)] to-[hsl(20_75%_35%)]",
-      icon: <Wallet className="h-8 w-8 text-white/85" />,
+      preview: "/project-screenshots/grocery-deals-finder.png",
+      previewAlt: "Grocery Deals Finder landing page with its budget and grocery list form",
     },
     {
       title: "Spam Detection Model",
@@ -243,8 +244,8 @@ function CenterColumn() {
       links: [
         { label: "View Archived Repo", href: "https://github.com/Joshhyjr/SpamFilter" },
       ],
-      gradient: "from-[hsl(265_50%_38%)] to-[hsl(285_45%_24%)]",
-      icon: <FileText className="h-8 w-8 text-white/85" />,
+      preview: "/project-screenshots/spam-detection-model.svg",
+      previewAlt: "Spam detection model preview classifying messages as safe or spam",
     },
   ];
 
@@ -257,24 +258,35 @@ function CenterColumn() {
             <h1 className="font-bold text-[22px] leading-tight text-[hsl(var(--retro-navy))]">
               Joshua Kivaria
             </h1>
+            {/* Concise role summary reflects Joshua's analytical and hands-on strengths. */}
             <p className="mt-0.5 text-[12px] text-[hsl(var(--retro-muted))]">
-              Data Analyst | Technical Support Specialist | Developer
+              Data Analyst · Tech Support Problem-Solver · Builder
             </p>
             <p className="mt-1 text-[12px] italic text-[hsl(var(--retro-text))]">
-              “Driven by data. Tuned for support. Built to ship.”
+              “I’ve got 99 problems, but messy data won’t be one.”
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[hsl(var(--retro-muted))]">
               <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Halifax, Nova Scotia, Canada</span>
               <a className="retro-link inline-flex items-center gap-1" href="#about"><User className="h-3 w-3" /> Edit My Profile</a>
             </div>
           </div>
-          {/* Launch the original Job Tracker app — preserves existing functionality. */}
-          <Link
-            to="/app"
-            className="inline-flex items-center gap-1.5 rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] px-2.5 py-1 text-[12px] font-semibold text-[hsl(var(--retro-navy))] hover:bg-white"
-          >
-            <Briefcase className="h-3.5 w-3.5" /> Launch Job Tracker
-          </Link>
+          {/* Keep the primary project and resume actions visible near the profile heading. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href="/resume.pdf"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-[hsl(var(--retro-border))] bg-white px-2.5 py-1 text-[12px] font-semibold text-[hsl(var(--retro-navy))] hover:bg-[hsl(var(--retro-soft))]"
+            >
+              <FileText className="h-3.5 w-3.5" /> View Resume
+            </a>
+            <Link
+              to="/app"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] px-2.5 py-1 text-[12px] font-semibold text-[hsl(var(--retro-navy))] hover:bg-white"
+            >
+              <Briefcase className="h-3.5 w-3.5" /> Launch Job Tracker
+            </Link>
+          </div>
         </div>
 
         {/* Profile tabs */}
@@ -355,13 +367,15 @@ function CenterColumn() {
       <RetroCard title="Featured Projects" edit="See All">
         <ul id="projects" className="divide-y divide-[hsl(var(--retro-border))]">
           {projects.map((p) => (
-            <li key={p.title} className="flex gap-3 py-3 first:pt-1 last:pb-1">
-              {/* Thumbnail placeholder — labeled gradient tile, easy to swap */}
-              <div
-                className={`flex h-20 w-28 flex-none items-center justify-center rounded-sm bg-gradient-to-br ${p.gradient}`}
-                aria-label={`${p.title} thumbnail placeholder`}
-              >
-                {p.icon}
+            <li key={p.title} className="flex flex-col gap-3 py-3 first:pt-1 last:pb-1 sm:flex-row">
+              {/* Real project captures make each item immediately recognizable. */}
+              <div className="aspect-video w-full flex-none overflow-hidden rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] shadow-sm sm:w-40">
+                <img
+                  src={p.preview}
+                  alt={p.previewAlt}
+                  loading="lazy"
+                  className="h-full w-full object-cover object-top transition-transform duration-200 hover:scale-[1.02]"
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
@@ -407,9 +421,13 @@ function CenterColumn() {
           <div className="flex-1">
             <div className="text-[12px]">
               <a href="#" className="retro-link font-bold">Joshua Kivaria</a>{" "}
-              <span>Just shipped a new update to Job Tracker! 🚀 Making the job search more organized and smarter.</span>
+              {/* Keep the wall current with active professional-development work. */}
+              <span>
+                Just shipped a new update to Job Tracker! 🚀 Making the job search more organized and smarter.
+                I&apos;m currently learning Power BI &amp; Tableau to build even stronger dashboards and data stories.
+              </span>
             </div>
-            <div className="mt-1 text-[11px] text-[hsl(var(--retro-muted))]">June 2 at 9:45 PM</div>
+            <div className="mt-1 text-[11px] text-[hsl(var(--retro-muted))]">June 22, 2026 at 9:45 PM</div>
             <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-[hsl(var(--retro-link))]">
               <button className="inline-flex items-center gap-1 hover:underline"><ThumbsUp className="h-3 w-3" /> Like</button>
               <button className="inline-flex items-center gap-1 hover:underline"><MessageSquare className="h-3 w-3" /> Comment</button>
@@ -532,8 +550,8 @@ function RightSidebar() {
 
   return (
     <aside className="space-y-3">
-      {/* Welcome box with animated host avatar + speech bubble */}
-      <RetroCard title="Welcome to My Profile!" edit="Edit">
+      {/* Personal introduction frames the portfolio around Joshua's multidisciplinary journey. */}
+      <RetroCard title="Hello World" edit="Edit">
         <div className="flex items-start gap-3">
           <AnimatedAvatar size={64} />
           <div className="relative flex-1">
@@ -542,10 +560,11 @@ function RightSidebar() {
             >
               {/* Bubble arrow pointing back at the avatar */}
               <span className="absolute -left-1.5 top-3 h-3 w-3 rotate-45 border-b border-l border-[hsl(var(--retro-border))] bg-[hsl(45_95%_94%)]" />
-              Welcome to my profile! 👋
+              Hello world, 👋
             </div>
             <p className="mt-1.5 text-[12px] leading-relaxed">
-              Hey there! Thanks for stopping by. Feel free to check out my projects, experience, and resume.
+              Welcome to JK.space — part portfolio, part digital scrapbook, and part proof
+              that I&apos;m always learning, building, and improving.
             </p>
           </div>
         </div>
