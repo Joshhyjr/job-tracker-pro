@@ -446,7 +446,7 @@ const skillsWithEvidence = [
   {
     name: "Data Analysis",
     tools: "Python · pandas · NumPy · Matplotlib",
-    evidence: "Quantium Data Analytics simulation (Forage)",
+    evidence: "IBM OPOR Data Analyst role (Experis) and Quantium simulation (Forage)",
   },
   {
     name: "Decision Support",
@@ -461,7 +461,7 @@ const skillsWithEvidence = [
   {
     name: "Technical Support",
     tools: "Troubleshooting · Active Directory · Azure · documentation",
-    evidence: "IBM OPOR project support role through Experis",
+    evidence: "End User Support Technician role at Saint Mary's University",
   },
   {
     name: "Frontend Development",
