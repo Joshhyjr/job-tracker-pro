@@ -127,13 +127,13 @@ function LeftSidebar() {
    // { label: "Friends / Network", href: "#network" },
   ];
 
-  // Fictional "friends" placeholders representing Joshua's network.
-  const network = [
-    { name: "Recruiters", initial: "R", color: "bg-[hsl(215_70%_45%)]" },
-    { name: "Developers", initial: "D", color: "bg-[hsl(142_55%_40%)]" },
-    { name: "Data Analysts", initial: "A", color: "bg-[hsl(265_55%_50%)]" },
-    { name: "IT Support Teams", initial: "I", color: "bg-[hsl(35_85%_45%)]" },
-    { name: "Project Managers", initial: "P", color: "bg-[hsl(12_75%_50%)]" },
+  // Personal interests add a little life beyond the professional portfolio.
+  const interests = [
+    "🚗 F1",
+    "🎧 Music",
+    "⚽ Football",
+    "🎬 Movies & Series",
+    "🛠️ Building things for fun",
   ];
 
   return (
@@ -167,18 +167,15 @@ function LeftSidebar() {
         </p>
       </RetroCard>
 
-      {/* Friends / Network */}
-      <RetroCard title={`Network (${network.length})`} edit="See All">
-        <ul id="network" className="grid grid-cols-3 gap-2">
-          {network.map((f) => (
-            <li key={f.name} className="flex flex-col items-center text-center">
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-sm border border-[hsl(var(--retro-border))] text-sm font-bold text-white ${f.color}`}
-                aria-hidden="true"
-              >
-                {f.initial}
-              </div>
-              <span className="mt-1 text-[10px] leading-tight text-[hsl(var(--retro-link))]">{f.name}</span>
+      {/* A quick glimpse of Joshua's interests away from work. */}
+      <RetroCard title="Outside the Terminal">
+        <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px] text-[hsl(var(--retro-text))]">
+          {interests.map((interest, index) => (
+            <li
+              key={interest}
+              className={index === interests.length - 1 ? "col-span-2" : undefined}
+            >
+              {interest}
             </li>
           ))}
         </ul>
