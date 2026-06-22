@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
-  Search, Bell, Home, User, Folder, FileText, Mail, MapPin, Globe,
+  Search, Bell, Home, User, Folder, FileText, MapPin, Globe,
   Github, Linkedin, ThumbsUp, MessageSquare, Share2, Award, Briefcase,
-  Camera, StickyNote, Users, Wallet, Download, ExternalLink, Plus,
+  Camera, StickyNote, Users, Wallet, Download, ExternalLink, Plus, Send,
 } from "lucide-react";
 import avatarImg from "@/assets/joshua-avatar.png";
 
@@ -164,24 +164,6 @@ function LeftSidebar() {
           I turn data into insights, solve problems with technology, and build tools that
           make life easier.
         </p>
-        <dl className="mt-3 space-y-1.5 text-[12px]">
-          <div className="flex items-start gap-1.5">
-            <MapPin className="mt-0.5 h-3 w-3 flex-none text-[hsl(var(--retro-muted))]" />
-            <span>Halifax, Nova Scotia</span>
-          </div>
-          <div className="flex items-start gap-1.5">
-            <Mail className="mt-0.5 h-3 w-3 flex-none text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link break-all" href="mailto:joshua.kivaria@example.com">
-              joshua.kivaria@example.com
-            </a>
-          </div>
-          <div className="flex items-start gap-1.5">
-            <Globe className="mt-0.5 h-3 w-3 flex-none text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link" href="https://jkivaria.com" target="_blank" rel="noreferrer">
-              jkivaria.com
-            </a>
-          </div>
-        </dl>
       </RetroCard>
 
       {/* Friends / Network */}
@@ -283,7 +265,6 @@ function CenterColumn() {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[hsl(var(--retro-muted))]">
               <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Halifax, Nova Scotia, Canada</span>
-              <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" /> joshua.kivaria@example.com</span>
               <a className="retro-link inline-flex items-center gap-1" href="#about"><User className="h-3 w-3" /> Edit My Profile</a>
             </div>
           </div>
@@ -511,6 +492,43 @@ const certifications = [
 
 // Right column — welcome box (with animated avatar host), skills, certs, contact.
 function RightSidebar() {
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactStatus, setContactStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [contactFeedback, setContactFeedback] = useState("");
+
+  async function handleContactSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setContactStatus("sending");
+    setContactFeedback("");
+
+    try {
+      // The recipient and provider credentials remain on the server in /api/contact.
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: contactName,
+          email: contactEmail,
+          message: contactMessage,
+        }),
+      });
+      const result = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Message could not be sent right now.");
+      }
+
+      setContactName("");
+      setContactEmail("");
+      setContactMessage("");
+      setContactStatus("sent");
+      setContactFeedback("Message sent. Thanks for reaching out!");
+    } catch (error) {
+      setContactStatus("error");
+      setContactFeedback(error instanceof Error ? error.message : "Message could not be sent right now.");
+    }
+  }
 
   return (
     <aside className="space-y-3">
@@ -574,28 +592,75 @@ function RightSidebar() {
         </ul>
       </RetroCard>
 
-      {/* Contact info + resume download (preserves existing /resume.pdf) */}
-      <RetroCard title="Contact Info" edit="Edit">
-        <ul id="contact" className="space-y-1.5 text-[12px]">
-          <li className="flex items-center gap-1.5">
-            <Mail className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link break-all" href="mailto:joshua.kivaria@example.com">joshua.kivaria@example.com</a>
-          </li>
+      {/* Contact form sends through the server endpoint instead of exposing a personal email address. */}
+      <RetroCard title="Contact Me">
+        <form id="contact" onSubmit={handleContactSubmit} className="space-y-2">
+          <div>
+            <label htmlFor="contact-name" className="text-[11px] font-semibold">Name</label>
+            <input
+              id="contact-name"
+              value={contactName}
+              onChange={(event) => setContactName(event.target.value)}
+              required
+              maxLength={120}
+              className="mt-0.5 w-full rounded-sm border border-[hsl(var(--retro-border))] bg-white px-2 py-1.5 text-[12px] outline-none focus:border-[hsl(var(--retro-link))]"
+            />
+          </div>
+          <div>
+            <label htmlFor="contact-email" className="text-[11px] font-semibold">Email</label>
+            <input
+              id="contact-email"
+              type="email"
+              value={contactEmail}
+              onChange={(event) => setContactEmail(event.target.value)}
+              required
+              maxLength={254}
+              className="mt-0.5 w-full rounded-sm border border-[hsl(var(--retro-border))] bg-white px-2 py-1.5 text-[12px] outline-none focus:border-[hsl(var(--retro-link))]"
+            />
+          </div>
+          <div>
+            <label htmlFor="contact-message" className="text-[11px] font-semibold">Message</label>
+            <textarea
+              id="contact-message"
+              value={contactMessage}
+              onChange={(event) => setContactMessage(event.target.value)}
+              required
+              maxLength={3000}
+              rows={4}
+              className="mt-0.5 w-full resize-y rounded-sm border border-[hsl(var(--retro-border))] bg-white px-2 py-1.5 text-[12px] outline-none focus:border-[hsl(var(--retro-link))]"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={contactStatus === "sending"}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-sm bg-[hsl(var(--retro-navy))] px-2 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Send className="h-3.5 w-3.5" />
+            {contactStatus === "sending" ? "Sending..." : "Send Message"}
+          </button>
+          {contactFeedback ? (
+            <p
+              role="status"
+              className={`text-[11px] leading-snug ${
+                contactStatus === "sent" ? "text-green-700" : "text-red-700"
+              }`}
+            >
+              {contactFeedback}
+            </p>
+          ) : null}
+        </form>
+        <ul className="mt-3 space-y-1.5 border-t border-[hsl(var(--retro-border))] pt-3 text-[12px]">
           <li className="flex items-center gap-1.5">
             <Linkedin className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link" href="https://linkedin.com/in/joshuakivaria" target="_blank" rel="noreferrer">
-              linkedin.com/in/joshuakivaria
+            <a className="retro-link" href="https://www.linkedin.com/in/joshua-kivaria/" target="_blank" rel="noreferrer">
+              LinkedIn
             </a>
           </li>
           <li className="flex items-center gap-1.5">
             <Github className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link" href="https://github.com/joshuakivaria" target="_blank" rel="noreferrer">
-              github.com/joshuakivaria
+            <a className="retro-link" href="https://github.com/Joshhyjr" target="_blank" rel="noreferrer">
+              GitHub
             </a>
-          </li>
-          <li className="flex items-center gap-1.5">
-            <Globe className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link" href="https://jkivaria.com" target="_blank" rel="noreferrer">jkivaria.com</a>
           </li>
         </ul>
         <a
