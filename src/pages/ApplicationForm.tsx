@@ -17,6 +17,7 @@ const schema = z.object({
   jobTitle: z.string().trim().min(1, "Required").max(200),
   companyName: z.string().trim().min(1, "Required").max(200),
   location: z.string().trim().max(200),
+  jobLink: z.union([z.string().trim().url("Enter a valid URL").max(2048), z.literal("")]),
   currentStatus: z.enum(CURRENT_STATUSES as [CurrentStatus, ...CurrentStatus[]]),
   responseStatus: z.string().trim().min(1, "Required").max(200),
   followUps: z.boolean(),
@@ -34,6 +35,7 @@ function getDefaultValues(existing?: JobApplication): FormData {
       jobTitle: existing.jobTitle,
       companyName: existing.companyName,
       location: existing.location,
+      jobLink: existing.jobLink ?? "",
       currentStatus: existing.currentStatus,
       responseStatus: existing.responseStatus,
       followUps: existing.followUps,
@@ -47,6 +49,7 @@ function getDefaultValues(existing?: JobApplication): FormData {
     jobTitle: "",
     companyName: "",
     location: "",
+    jobLink: "",
     currentStatus: "Applied",
     responseStatus: "No Response",
     followUps: false,
@@ -71,6 +74,8 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
       jobTitle: data.jobTitle,
       companyName: data.companyName,
       location: data.location,
+      // Keep the optional posting URL with manually created applications, matching imported records.
+      jobLink: data.jobLink,
       currentStatus: data.currentStatus,
       responseStatus: data.responseStatus,
       followUps: data.followUps,
@@ -106,6 +111,9 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
                 )} />
                 <FormField control={form.control} name="location" render={({ field }) => (
                   <FormItem><FormLabel>Location</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="jobLink" render={({ field }) => (
+                  <FormItem><FormLabel>Job Link</FormLabel><FormControl><Input type="url" placeholder="https://example.com/jobs/role" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="dateApplied" render={({ field }) => (
                   <FormItem><FormLabel>Date Applied</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
