@@ -217,3 +217,85 @@
     50% { opacity: 0.55; transform: scale(0.92); }
   }
 }
+
+/* ── Retro Social Profile theme ──
+   Scoped to `.retro` so it only restyles the portfolio page,
+   leaving the cockpit tokens (and /app job tracker) untouched. */
+@layer utilities {
+  .retro {
+    /* Early-2000s social profile palette */
+    --retro-bg: 220 16% 92%;
+    --retro-card: 0 0% 100%;
+    --retro-border: 220 14% 80%;
+    --retro-navy: 220 70% 22%;
+    --retro-navy-deep: 220 75% 16%;
+    --retro-link: 215 85% 38%;
+    --retro-link-hover: 215 95% 30%;
+    --retro-text: 220 15% 18%;
+    --retro-muted: 220 8% 45%;
+    --retro-accent: 12 78% 52%;
+    --retro-soft: 220 20% 96%;
+
+    background: hsl(var(--retro-bg));
+    color: hsl(var(--retro-text));
+    font-family: 'Verdana', 'Tahoma', 'Geneva', system-ui, sans-serif;
+    font-size: 13px;
+  }
+
+  .retro-card {
+    background: hsl(var(--retro-card));
+    border: 1px solid hsl(var(--retro-border));
+    border-radius: 4px;
+    box-shadow: 0 1px 2px hsl(220 20% 10% / 0.04);
+  }
+
+  .retro-card-header {
+    background: linear-gradient(to bottom, hsl(220 30% 97%), hsl(220 24% 94%));
+    border-bottom: 1px solid hsl(var(--retro-border));
+    padding: 6px 10px;
+    font-weight: 700;
+    font-size: 12px;
+    color: hsl(var(--retro-navy));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .retro-link { color: hsl(var(--retro-link)); text-decoration: none; }
+  .retro-link:hover { color: hsl(var(--retro-link-hover)); text-decoration: underline; }
+
+  .retro-nav {
+    background: linear-gradient(to bottom, hsl(var(--retro-navy)), hsl(var(--retro-navy-deep)));
+    color: hsl(0 0% 98%);
+    border-bottom: 2px solid hsl(220 80% 12%);
+  }
+
+  .retro-skill-bar {
+    background: hsl(220 20% 90%);
+    border: 1px solid hsl(var(--retro-border));
+    height: 8px;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .retro-skill-fill {
+    height: 100%;
+    background: linear-gradient(to bottom, hsl(215 80% 50%), hsl(220 80% 38%));
+  }
+
+  @keyframes retro-wave {
+    0%, 60%, 100% { transform: rotate(0deg); }
+    70% { transform: rotate(14deg); }
+    80% { transform: rotate(-8deg); }
+    90% { transform: rotate(14deg); }
+  }
+  @keyframes retro-blink {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95%, 98% { transform: scaleY(0.05); }
+  }
+  @keyframes retro-bubble {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  .retro-wave { animation: retro-wave 4s ease-in-out infinite; transform-origin: 70% 70%; display: inline-block; }
+  .retro-bubble { animation: retro-bubble 3s ease-in-out infinite; }
+}
