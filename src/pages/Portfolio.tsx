@@ -441,23 +441,70 @@ function CenterColumn() {
   );
 }
 
+// Skills are paired with concrete evidence so proficiency claims stay specific and interview-ready.
+const skillsWithEvidence = [
+  {
+    name: "Data Analysis",
+    tools: "Python · pandas · NumPy · Matplotlib",
+    evidence: "Quantium Data Analytics simulation (Forage)",
+  },
+  {
+    name: "Decision Support",
+    tools: "Excel · data storytelling · recommendations",
+    evidence: "BCG Data for Decision Makers simulation (Forage)",
+  },
+  {
+    name: "SQL & Reporting",
+    tools: "SQL · Tableau · dashboards · data cleaning",
+    evidence: "StFX and Digital Nova Scotia data analytics training",
+  },
+  {
+    name: "Technical Support",
+    tools: "Troubleshooting · Active Directory · Azure · documentation",
+    evidence: "IBM OPOR project support role through Experis",
+  },
+  {
+    name: "Frontend Development",
+    tools: "React · TypeScript · Vite · Git/GitHub",
+    evidence: "Job Tracker Pro and Grocery Deals Finder",
+  },
+  {
+    name: "Data Validation",
+    tools: "Dataset review · quality checks · geospatial platforms",
+    evidence: "FAO Hand-in-Hand Platform internship",
+  },
+];
+
+// Certification metadata includes verification links already used by the prior portfolio design.
+const certifications = [
+  {
+    code: "QNT",
+    title: "Quantium – Data Analytics Job Simulation",
+    issued: "Jun 2026",
+    href: "https://www.theforage.com/completion-certificates/32A6DqtsbF7LbKdcq/NkaC7knWtjSbi6aYv_32A6DqtsbF7LbKdcq_6a145487df290a68a05f2ebf_1780413335511_completion_certificate.pdf",
+  },
+  {
+    code: "BCG",
+    title: "BCG – Data for Decision Makers",
+    issued: "Jun 2026",
+    href: "https://www.theforage.com/completion-certificates/SKZxezskWgmFjRvj9/Pchc5rEGyCeozqY5Z_SKZxezskWgmFjRvj9_6a145487df290a68a05f2ebf_1780397819988_completion_certificate.pdf",
+  },
+  {
+    code: "IBM",
+    title: "Enterprise Data Science in Practice",
+    issued: "Jan 2026",
+    href: "https://www.credly.com/badges/3d60d852-cac5-4c2b-95bc-690f71193c8e/public_url",
+  },
+  {
+    code: "STFX",
+    title: "Data Analytics – Digital Nova Scotia",
+    issued: "Jun 2025",
+    href: "https://learner.mycreds.ca/badges/public/assertion/XRXdtqsZRLy-ORfRRz8KMA",
+  },
+];
+
 // Right column — welcome box (with animated avatar host), skills, certs, contact.
 function RightSidebar() {
-  const skills = [
-    { name: "Data Analysis", level: 95 },
-    { name: "SQL", level: 90 },
-    { name: "Python", level: 90 },
-    { name: "Technical Support", level: 90 },
-    { name: "Web Development", level: 80 },
-    { name: "Problem Solving", level: 95 },
-  ];
-
-  const certs = [
-    { code: "IBM", title: "Data Analyst – Job Simulation (Forage)", issued: "Jun 2026" },
-    { code: "IBM", title: "Enterprise Data Science in Practice", issued: "Jan 2026" },
-    { code: "NS",  title: "Professional Software Development – Digital Nova Scotia", issued: "Dec 2024" },
-    { code: "STFX", title: "Data Analytics – St. Francis Xavier University", issued: "Apr 2024" },
-  ];
 
   return (
     <aside className="space-y-3">
@@ -480,17 +527,17 @@ function RightSidebar() {
         </div>
       </RetroCard>
 
-      {/* Skills with horizontal progress bars */}
-      <RetroCard title="Skills" edit="See All Skills">
-        <ul id="skills" className="space-y-2">
-          {skills.map((s) => (
-            <li key={s.name}>
-              <div className="flex items-baseline justify-between text-[12px]">
-                <span>{s.name}</span>
-                <span className="text-[hsl(var(--retro-muted))]">{s.level}%</span>
+      {/* Evidence-backed skills replace arbitrary percentage ratings with tools and proof of use. */}
+      <RetroCard title="Skills + Evidence" edit="View Projects">
+        <ul id="skills" className="divide-y divide-[hsl(var(--retro-border))]">
+          {skillsWithEvidence.map((s) => (
+            <li key={s.name} className="py-2 first:pt-0 last:pb-0">
+              <div className="text-[12px] font-semibold text-[hsl(var(--retro-text))]">{s.name}</div>
+              <div className="mt-0.5 text-[11px] leading-snug text-[hsl(var(--retro-muted))]">
+                {s.tools}
               </div>
-              <div className="retro-skill-bar mt-0.5">
-                <div className="retro-skill-fill" style={{ width: `${s.level}%` }} />
+              <div className="mt-1 text-[10px] leading-snug text-[hsl(var(--retro-link))]">
+                Evidence: {s.evidence}
               </div>
             </li>
           ))}
@@ -500,13 +547,20 @@ function RightSidebar() {
       {/* Certifications widget */}
       <RetroCard title="Certifications" edit="See All">
         <ul className="space-y-2 text-[12px]">
-          {certs.map((c) => (
+          {certifications.map((c) => (
             <li key={c.title} className="flex items-start gap-2">
               <div className="flex h-8 w-10 flex-none items-center justify-center rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] text-[10px] font-bold text-[hsl(var(--retro-navy))]">
                 {c.code}
               </div>
               <div className="min-w-0">
-                <div className="font-semibold leading-tight text-[hsl(var(--retro-text))]">{c.title}</div>
+                <a
+                  href={c.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="retro-link font-semibold leading-tight"
+                >
+                  {c.title}
+                </a>
                 <div className="text-[10px] text-[hsl(var(--retro-muted))]">Issued: {c.issued}</div>
               </div>
             </li>
