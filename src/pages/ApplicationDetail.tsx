@@ -12,6 +12,7 @@ import { updateApplication, deleteApplication, generateId } from "@/lib/storage"
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { formatDisplayDate } from "@/lib/utils";
+import { mapCurrentStatusToResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -41,7 +42,13 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
 
   function changeStatus(status: CurrentStatus) {
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
-    const updated = { ...app, currentStatus: status, activityLog: [entry, ...app.activityLog] };
+    // Keep quick status updates aligned with dashboard/filter metrics that are derived from responseStatus.
+    const updated = {
+      ...app,
+      currentStatus: status,
+      responseStatus: mapCurrentStatusToResponseStatus(status) ?? app.responseStatus,
+      activityLog: [entry, ...app.activityLog],
+    };
     persistApplication(updated);
     toast({ title: "Status Updated", description: `Marked as ${status}` });
   }

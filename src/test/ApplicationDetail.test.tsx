@@ -1,11 +1,23 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import ApplicationDetail from "@/pages/ApplicationDetail";
 import type { JobApplication } from "@/lib/types";
 
+const { updateApplicationMock } = vi.hoisted(() => ({
+  updateApplicationMock: vi.fn(),
+}));
+
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
+
+vi.mock("@/lib/storage", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/storage")>("@/lib/storage");
+  return {
+    ...actual,
+    updateApplication: updateApplicationMock,
+  };
+});
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
   return {
@@ -24,6 +36,24 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
 }
 
 describe("ApplicationDetail", () => {
+  it("keeps response status in sync when quick actions change the current status", () => {
+    const onBack = vi.fn();
+    const onUpdate = vi.fn();
+
+    render(
+      <ApplicationDetail application={application({ currentStatus: "Applied", responseStatus: "No Response" })} onBack={onBack} onUpdate={onUpdate} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Interview" }));
+
+    // Quick actions feed dashboard metrics and filters, so both status fields should advance together.
+    expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
+      currentStatus: "Interview",
+      responseStatus: "Interview",
+    }));
+    expect(onUpdate).toHaveBeenCalled();
+  });
+
   it("refreshes the local draft when the selected application changes", () => {
     const onBack = vi.fn();
     const onUpdate = vi.fn();
