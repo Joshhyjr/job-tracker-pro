@@ -19,6 +19,11 @@ type ChartContextProps = {
 
 const ChartContext = React.createContext<ChartContextProps | null>(null);
 
+function sanitizeCssIdentifier(value: string): string {
+  // Chart ids and config keys end up inside inline CSS, so strip characters that could break selectors.
+  return value.replace(/[^a-zA-Z0-9_-]/g, "");
+}
+
 function useChart() {
   const context = React.useContext(ChartContext);
 
@@ -59,9 +64,12 @@ const ChartContainer = React.forwardRef<
 ChartContainer.displayName = "Chart";
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
+  const safeId = sanitizeCssIdentifier(id);
+  const colorConfig = Object.entries(config)
+    .map(([key, itemConfig]) => [sanitizeCssIdentifier(key), itemConfig] as const)
+    .filter(([safeKey, itemConfig]) => safeKey && (itemConfig.theme || itemConfig.color));
 
-  if (!colorConfig.length) {
+  if (!safeId || !colorConfig.length) {
     return null;
   }
 
@@ -71,7 +79,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart="${safeId}"] {
 ${colorConfig
   .map(([key, itemConfig]) => {
     const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;

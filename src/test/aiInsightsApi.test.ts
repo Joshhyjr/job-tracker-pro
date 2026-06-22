@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleAiInsightsRequest } from "../../api/ai-insights";
+import { resetRateLimitStore } from "../../api/_shared/security";
 import { buildAiInsightSummary } from "@/lib/aiInsights";
 import type { JobApplication } from "@/lib/types";
 
@@ -55,7 +56,32 @@ function geminiResponse(): Response {
 }
 
 describe("POST /api/ai-insights", () => {
+  it("rate limits repeated same-origin requests before hitting Gemini", async () => {
+    resetRateLimitStore();
+    // Return a fresh Response each time so the handler can safely consume the JSON body on every request.
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(geminiResponse()));
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const response = await handleAiInsightsRequest(request({ summary: createSummary() }), {
+        apiKey: "test-key",
+        accessToken: "test-access-token",
+        fetchImpl: fetchMock,
+      });
+      expect(response.status).toBe(200);
+    }
+
+    const limitedResponse = await handleAiInsightsRequest(request({ summary: createSummary() }), {
+      apiKey: "test-key",
+      accessToken: "test-access-token",
+      fetchImpl: fetchMock,
+    });
+
+    expect(limitedResponse.status).toBe(429);
+    expect(fetchMock).toHaveBeenCalledTimes(12);
+  });
+
   it("rejects unsupported methods and cross-origin requests", async () => {
+    resetRateLimitStore();
     const getResponse = await handleAiInsightsRequest(new Request("https://job-tracker.example/api/ai-insights"));
     const crossOriginResponse = await handleAiInsightsRequest(request({ summary: createSummary() }, { Origin: "https://attacker.example" }));
     // Requests without an Origin header (curl/scripts) must also be rejected to prevent Gemini key abuse.
@@ -74,6 +100,7 @@ describe("POST /api/ai-insights", () => {
   });
 
   it("rejects malformed payloads and missing configuration", async () => {
+    resetRateLimitStore();
     const invalidResponse = await handleAiInsightsRequest(request({ summary: { totalApplications: 1 } }), { apiKey: "test-key", accessToken: "test-access-token" });
     const missingKeyResponse = await handleAiInsightsRequest(request({ summary: createSummary() }), { apiKey: "", accessToken: "test-access-token" });
 
@@ -82,6 +109,7 @@ describe("POST /api/ai-insights", () => {
   });
 
   it("allows only summary fields through to Gemini and normalizes its response", async () => {
+    resetRateLimitStore();
     const fetchMock = vi.fn().mockResolvedValue(geminiResponse());
     const response = await handleAiInsightsRequest(request({
       summary: {

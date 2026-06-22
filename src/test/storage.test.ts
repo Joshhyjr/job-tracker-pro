@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
-import { addApplication, getApplications, getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation, markSeeded, saveApplications, saveLastImportMetadata } from "@/lib/storage";
+import { addApplication, generateId, getApplications, getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation, markSeeded, saveApplications, saveLastImportMetadata } from "@/lib/storage";
 
 beforeEach(() => {
   localStorage.clear();
@@ -11,6 +11,13 @@ afterEach(() => {
 });
 
 describe("mapRowsToApplications", () => {
+  it("uses cryptographically strong UUIDs when the browser provides them", () => {
+    const randomUuid = "11111111-2222-4333-8444-555555555555";
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(randomUuid);
+
+    expect(generateId()).toBe(randomUuid);
+  });
+
   it("reads Decision Status as the imported response status", () => {
     const applications = mapRowsToApplications([
       {

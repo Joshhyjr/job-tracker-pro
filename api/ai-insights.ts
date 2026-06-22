@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { enforceRateLimit, isSameOrigin, jsonResponse } from "./_shared/security";
 
 // Keep the function contract local so Vercel's Node runtime does not import browser-only modules.
 interface AiInsightSummary {
@@ -35,6 +36,7 @@ const MAX_REQUEST_BYTES = 16_384;
 const MAX_TEXT_LENGTH = 160;
 const MAX_LIST_ITEMS = 8;
 const MAX_RESPONSE_ITEMS = 4;
+const AI_INSIGHTS_RATE_LIMIT = { windowMs: 60_000, maxRequests: 12 } as const;
 
 type HandlerOptions = {
   apiKey?: string;
@@ -42,29 +44,6 @@ type HandlerOptions = {
   model?: string;
   fetchImpl?: typeof fetch;
 };
-
-function jsonResponse(body: unknown, status: number): Response {
-  return Response.json(body, {
-    status,
-    headers: {
-      "Cache-Control": "no-store",
-      "Content-Type": "application/json; charset=utf-8",
-    },
-  });
-}
-
-function getExpectedOrigin(request: Request): string {
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || new URL(request.url).host;
-  const protocol = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
-  return `${protocol}://${host}`;
-}
-
-function isSameOrigin(request: Request): boolean {
-  // Require an Origin header that matches the deployed host. Missing Origin is rejected so non-browser
-  // clients (curl, scripts) cannot trigger Gemini calls and exhaust the API key quota.
-  const origin = request.headers.get("origin");
-  return origin !== null && origin === getExpectedOrigin(request);
-}
 
 function isAuthorized(request: Request, expectedToken: string): boolean {
   const authorization = request.headers.get("authorization");
@@ -213,6 +192,8 @@ function extractGeminiText(payload: unknown): string | null {
 export async function handleAiInsightsRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   if (!isSameOrigin(request)) return jsonResponse({ error: "Cross-origin requests are not allowed." }, 403);
+  const rateLimited = enforceRateLimit(request, "ai-insights", AI_INSIGHTS_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
   const accessToken = options.accessToken ?? process.env.AI_INSIGHTS_ACCESS_TOKEN;
   if (!accessToken) return jsonResponse({ error: "Hosted AI insights authentication is not configured." }, 503);
   if (!isAuthorized(request, accessToken)) return jsonResponse({ error: "Authentication required." }, 401);

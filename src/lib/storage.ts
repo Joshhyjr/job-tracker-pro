@@ -122,7 +122,17 @@ const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
 };
 
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+  // Prefer cryptographically strong IDs so imported rows and activity entries are hard to guess or collide.
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const randomBytes = crypto.getRandomValues(new Uint8Array(16));
+    return Array.from(randomBytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function parseExcelDate(val: unknown): string {

@@ -1,9 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { enforceRateLimit, isSameOrigin, jsonResponse } from "./_shared/security";
 
 const MAX_REQUEST_BYTES = 8_192;
 const MAX_NAME_LENGTH = 120;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_MESSAGE_LENGTH = 3_000;
+const CONTACT_RATE_LIMIT = { windowMs: 60_000, maxRequests: 5 } as const;
 
 type HandlerOptions = {
   apiKey?: string;
@@ -11,28 +13,6 @@ type HandlerOptions = {
   toEmail?: string;
   fetchImpl?: typeof fetch;
 };
-
-function jsonResponse(body: unknown, status: number): Response {
-  return Response.json(body, {
-    status,
-    headers: {
-      "Cache-Control": "no-store",
-      "Content-Type": "application/json; charset=utf-8",
-    },
-  });
-}
-
-function getExpectedOrigin(request: Request): string {
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || new URL(request.url).host;
-  const protocol = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
-  return `${protocol}://${host}`;
-}
-
-function isSameOrigin(request: Request): boolean {
-  // Contact submissions should come from the portfolio page, not scripts or cross-site forms.
-  const origin = request.headers.get("origin");
-  return origin !== null && origin === getExpectedOrigin(request);
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -75,6 +55,8 @@ function buildEmailHtml(name: string, email: string, message: string): string {
 export async function handleContactRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
   if (!isSameOrigin(request)) return jsonResponse({ error: "Cross-origin requests are not allowed." }, 403);
+  const rateLimited = enforceRateLimit(request, "contact", CONTACT_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return jsonResponse({ error: "Content-Type must be application/json." }, 415);
 
   const contentLength = Number(request.headers.get("content-length") || 0);
