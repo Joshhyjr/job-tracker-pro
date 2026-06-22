@@ -211,22 +211,22 @@ function CenterColumn() {
 
   // Recent activity feed entries (retro social style).
   const activity = [
-    { text: "Joshua updated his project:", link: "Job Tracker Pro" },
+    { text: "Joshua updated his project:", link: "Job Tracker" },
     { text: "Joshua added", link: "Python, SQL, and React", suffix: "to his skills" },
     { text: "Joshua is now connected to", link: "GitHub" },
     { text: "Joshua uploaded his", link: "resume" },
   ];
 
-  // Featured projects — Job Tracker Pro stays the showcase project.
+  // Featured projects use live destinations where available and clearly label archived work.
   const projects = [
     {
-      title: "Job Tracker Pro",
+      title: "Job Tracker",
       date: "Jun 2026",
       desc: "Track applications, manage follow-ups, and get AI-powered insights.",
       to: "/app",
       links: [
         { label: "View Project", href: "/app" },
-        { label: "GitHub Repo", href: "https://github.com/joshuakivaria" },
+        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/job-tracker-pro" },
         { label: "Live Demo", href: "/app" },
       ],
       gradient: "from-[hsl(215_70%_30%)] to-[hsl(220_60%_18%)]",
@@ -237,8 +237,7 @@ function CenterColumn() {
       date: "Dec 2025",
       desc: "Geospatial data platform for sustainable development and data visualization.",
       links: [
-        { label: "View Project", href: "#" },
-        { label: "GitHub Repo", href: "#" },
+        { label: "View Platform", href: "https://data.apps.fao.org/?lang=en" },
       ],
       gradient: "from-[hsl(142_45%_35%)] to-[hsl(160_55%_22%)]",
       icon: <Globe className="h-8 w-8 text-white/85" />,
@@ -248,8 +247,8 @@ function CenterColumn() {
       date: "Oct 2025",
       desc: "Search grocery deals across stores, filter by budget, and export results.",
       links: [
-        { label: "View Project", href: "#" },
-        { label: "GitHub Repo", href: "#" },
+        { label: "Live Demo", href: "https://joshhyjr.github.io/Grocerydealsfinder/" },
+        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Grocerydealsfinder" },
       ],
       gradient: "from-[hsl(35_85%_45%)] to-[hsl(20_75%_35%)]",
       icon: <Wallet className="h-8 w-8 text-white/85" />,
@@ -257,10 +256,10 @@ function CenterColumn() {
     {
       title: "Spam Detection Model",
       date: "Aug 2025",
+      status: "Archived",
       desc: "Machine learning model using NLP and TF-IDF to classify spam messages.",
       links: [
-        { label: "View Project", href: "#" },
-        { label: "GitHub Repo", href: "#" },
+        { label: "View Archived Repo", href: "https://github.com/Joshhyjr/SpamFilter" },
       ],
       gradient: "from-[hsl(265_50%_38%)] to-[hsl(285_45%_24%)]",
       icon: <FileText className="h-8 w-8 text-white/85" />,
@@ -385,7 +384,14 @@ function CenterColumn() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
-                  <h3 className="text-[14px] font-bold text-[hsl(var(--retro-link))]">{p.title}</h3>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h3 className="text-[14px] font-bold text-[hsl(var(--retro-link))]">{p.title}</h3>
+                    {"status" in p ? (
+                      <span className="rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--retro-muted))]">
+                        {p.status}
+                      </span>
+                    ) : null}
+                  </div>
                   <span className="text-[11px] text-[hsl(var(--retro-muted))]">{p.date}</span>
                 </div>
                 <p className="mt-0.5 text-[12px] text-[hsl(var(--retro-text))]">{p.desc}</p>
@@ -420,7 +426,7 @@ function CenterColumn() {
           <div className="flex-1">
             <div className="text-[12px]">
               <a href="#" className="retro-link font-bold">Joshua Kivaria</a>{" "}
-              <span>Just shipped a new update to Job Tracker Pro! 🚀 Making the job search more organized and smarter.</span>
+              <span>Just shipped a new update to Job Tracker! 🚀 Making the job search more organized and smarter.</span>
             </div>
             <div className="mt-1 text-[11px] text-[hsl(var(--retro-muted))]">June 2 at 9:45 PM</div>
             <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-[hsl(var(--retro-link))]">
@@ -466,7 +472,7 @@ const skillsWithEvidence = [
   {
     name: "Frontend Development",
     tools: "React · TypeScript · Vite · Git/GitHub",
-    evidence: "Job Tracker Pro and Grocery Deals Finder",
+    evidence: "Job Tracker and Grocery Deals Finder",
   },
   {
     name: "Data Validation",
