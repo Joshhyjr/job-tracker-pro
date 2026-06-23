@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Search, ArrowUpDown, MoreHorizontal } from "lucide-react";
-import type { JobApplication, CurrentStatus, ActivityLogEntry } from "@/lib/types";
+import type { JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
 import { badgeVariants } from "@/components/ui/badge";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getPreferredResponseStatusOrder, updateApplication, generateId } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, mapCurrentStatusToResponseStatus, normalizeResponseStatus } from "@/lib/responseStatus";
+import { buildStatusChangeApplication, computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, normalizeResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationsList({ applications, onSelect, onUpdate }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: () => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -57,14 +57,8 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
   }, [applications, activeResponseStatus, activeStatus, search, sortAsc]);
 
   function handleChangeStatus(app: JobApplication, status: CurrentStatus) {
-    const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
-    const mappedResponseStatus = mapCurrentStatusToResponseStatus(status);
-    const updatedApp: JobApplication = {
-      ...app,
-      currentStatus: status,
-      responseStatus: mappedResponseStatus ?? app.responseStatus,
-      activityLog: [entry, ...(app.activityLog || [])],
-    };
+    // Share the exact same transition logic as the detail view to avoid duplicate status-sync code.
+    const updatedApp = buildStatusChangeApplication(app, status, generateId(), new Date().toISOString());
     updateApplication(updatedApp);
     onUpdate();
     toast({ title: "Status Updated", description: `Marked as ${status}` });

@@ -6,13 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Clock, Edit2, ExternalLink, Save, Trash2 } from "lucide-react";
-import type { JobApplication, CurrentStatus, ActivityLogEntry } from "@/lib/types";
+import type { JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { updateApplication, deleteApplication, generateId } from "@/lib/storage";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { formatDisplayDate } from "@/lib/utils";
-import { mapCurrentStatusToResponseStatus } from "@/lib/responseStatus";
+import { buildStatusChangeApplication } from "@/lib/responseStatus";
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -41,14 +41,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   }
 
   function changeStatus(status: CurrentStatus) {
-    const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "status_change", message: `Status changed to ${status}` };
-    // Keep quick status updates aligned with dashboard/filter metrics that are derived from responseStatus.
-    const updated = {
-      ...app,
-      currentStatus: status,
-      responseStatus: mapCurrentStatusToResponseStatus(status) ?? app.responseStatus,
-      activityLog: [entry, ...app.activityLog],
-    };
+    // Reuse the shared status-transition helper so list and detail views cannot drift.
+    const updated = buildStatusChangeApplication(app, status, generateId(), new Date().toISOString());
     persistApplication(updated);
     toast({ title: "Status Updated", description: `Marked as ${status}` });
   }

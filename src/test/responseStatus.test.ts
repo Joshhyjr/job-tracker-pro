@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeStatusBreakdown, normalizeResponseStatus, normalizeResponseStatusList } from "@/lib/responseStatus";
+import { buildStatusChangeApplication, computeStatusBreakdown, normalizeResponseStatus, normalizeResponseStatusList } from "@/lib/responseStatus";
 import type { JobApplication } from "@/lib/types";
 
 function app(responseStatus: string): JobApplication {
@@ -55,5 +55,27 @@ describe("computeStatusBreakdown", () => {
   it("defaults blank values to Applied", () => {
     const applications = [app(""), app(" "), app("")];
     expect(computeStatusBreakdown(applications)).toEqual([{ key: "Applied", label: "Applied", count: 3 }]);
+  });
+});
+
+describe("buildStatusChangeApplication", () => {
+  it("updates both status fields and prepends a status-change entry", () => {
+    const updated = buildStatusChangeApplication(
+      app("No Response"),
+      "Interview",
+      "entry-1",
+      "2026-06-23T12:00:00.000Z",
+    );
+
+    expect(updated).toMatchObject({
+      currentStatus: "Interview",
+      responseStatus: "Interview",
+    });
+    expect(updated.activityLog[0]).toEqual({
+      id: "entry-1",
+      date: "2026-06-23T12:00:00.000Z",
+      type: "status_change",
+      message: "Status changed to Interview",
+    });
   });
 });

@@ -1,4 +1,4 @@
-import type { CurrentStatus, JobApplication } from "./types";
+import type { ActivityLogEntry, CurrentStatus, JobApplication } from "./types";
 
 const COLLAPSE_SPACES = /\s+/g;
 
@@ -164,4 +164,25 @@ export function mapCurrentStatusToResponseStatus(status: CurrentStatus): string 
   if (status === "Rejected") return "Rejected";
   if (status === "No Response") return "No Response";
   return null;
+}
+
+export function buildStatusChangeApplication(
+  application: JobApplication,
+  status: CurrentStatus,
+  entryId: string,
+  changedAt: string,
+): JobApplication {
+  const entry: ActivityLogEntry = {
+    id: entryId,
+    date: changedAt,
+    type: "status_change",
+    message: `Status changed to ${status}`,
+  };
+
+  return {
+    ...application,
+    currentStatus: status,
+    responseStatus: mapCurrentStatusToResponseStatus(status) ?? application.responseStatus,
+    activityLog: [entry, ...(application.activityLog || [])],
+  };
 }
