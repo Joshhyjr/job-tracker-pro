@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStatusChangeApplication, computeStatusBreakdown, normalizeResponseStatus, normalizeResponseStatusList } from "@/lib/responseStatus";
+import { buildStatusChangeApplication, computeStatusBreakdown, normalizeResponseStatus, normalizeResponseStatusList, syncEditedResponseStatus } from "@/lib/responseStatus";
 import type { JobApplication } from "@/lib/types";
 
 function app(responseStatus: string): JobApplication {
@@ -77,5 +77,16 @@ describe("buildStatusChangeApplication", () => {
       type: "status_change",
       message: "Status changed to Interview",
     });
+  });
+});
+
+describe("syncEditedResponseStatus", () => {
+  it("keeps the paired response status aligned during standard status edits", () => {
+    expect(syncEditedResponseStatus("Applied", "Interview", "Applied")).toBe("Interview");
+    expect(syncEditedResponseStatus("No Response", "Offer", "No Response")).toBe("Offer");
+  });
+
+  it("preserves a deliberate custom response-status override", () => {
+    expect(syncEditedResponseStatus("Applied", "Interview", "Human reply received")).toBe("Human reply received");
   });
 });

@@ -166,6 +166,25 @@ export function mapCurrentStatusToResponseStatus(status: CurrentStatus): string 
   return null;
 }
 
+export function syncEditedResponseStatus(
+  previousStatus: CurrentStatus,
+  nextStatus: CurrentStatus,
+  currentResponseStatus: string,
+): string {
+  const previousMappedResponse = mapCurrentStatusToResponseStatus(previousStatus);
+  const nextMappedResponse = mapCurrentStatusToResponseStatus(nextStatus);
+  const normalizedCurrentResponse = normalizeResponseStatus(currentResponseStatus);
+
+  // Only auto-sync when the response status is blank or still matches the previous
+  // status-derived value. That keeps common form edits aligned without clobbering
+  // a deliberate manual override such as a custom imported response stage.
+  if (!currentResponseStatus.trim() || normalizedCurrentResponse === previousMappedResponse) {
+    return nextMappedResponse ?? currentResponseStatus;
+  }
+
+  return currentResponseStatus;
+}
+
 export function buildStatusChangeApplication(
   application: JobApplication,
   status: CurrentStatus,

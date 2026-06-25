@@ -12,6 +12,7 @@ import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { addApplication, updateApplication } from "@/lib/storage";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { syncEditedResponseStatus } from "@/lib/responseStatus";
 
 const schema = z.object({
   jobTitle: z.string().trim().min(1, "Required").max(200),
@@ -120,14 +121,27 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
                 )} />
                 <FormField control={form.control} name="currentStatus" render={({ field }) => (
                   <FormItem><FormLabel>Current Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        const nextStatus = value as CurrentStatus;
+                        const currentResponseStatus = form.getValues("responseStatus");
+                        const nextResponseStatus = syncEditedResponseStatus(field.value, nextStatus, currentResponseStatus);
+
+                        field.onChange(nextStatus);
+                        if (nextResponseStatus !== currentResponseStatus) {
+                          // Keep paired status fields aligned unless the user has already chosen a custom response status.
+                          form.setValue("responseStatus", nextResponseStatus, { shouldDirty: true });
+                        }
+                      }}
+                    >
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>{CURRENT_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="responseStatus" render={({ field }) => (
                   <FormItem><FormLabel>Response Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>{RESPONSE_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select><FormMessage /></FormItem>

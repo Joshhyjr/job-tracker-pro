@@ -12,7 +12,7 @@ import { updateApplication, deleteApplication, generateId } from "@/lib/storage"
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { formatDisplayDate } from "@/lib/utils";
-import { buildStatusChangeApplication } from "@/lib/responseStatus";
+import { buildStatusChangeApplication, syncEditedResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -148,7 +148,19 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             <div>
               <label className="text-xs font-medium text-muted-foreground">Current Status</label>
               {editing ? (
-                <Select value={app.currentStatus} onValueChange={(v) => setApp({ ...app, currentStatus: v as CurrentStatus })}>
+                <Select
+                  value={app.currentStatus}
+                  onValueChange={(v) =>
+                    setApp((currentApp) => {
+                      const nextStatus = v as CurrentStatus;
+                      return {
+                        ...currentApp,
+                        currentStatus: nextStatus,
+                        responseStatus: syncEditedResponseStatus(currentApp.currentStatus, nextStatus, currentApp.responseStatus),
+                      };
+                    })
+                  }
+                >
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{CURRENT_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>

@@ -73,4 +73,24 @@ describe("ApplicationDetail", () => {
     expect(screen.getByRole("heading", { name: "Security Analyst" })).toBeInTheDocument();
     expect(screen.getByText("Beacon · Remote")).toBeInTheDocument();
   });
+
+  it("syncs response status when the edit form changes the current status", () => {
+    const onBack = vi.fn();
+    const onUpdate = vi.fn();
+
+    render(
+      <ApplicationDetail application={application({ currentStatus: "Applied", responseStatus: "Applied" })} onBack={onBack} onUpdate={onUpdate} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(screen.getByRole("option", { name: "Interview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // Editing the canonical current status should not leave the response-status filters behind.
+    expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
+      currentStatus: "Interview",
+      responseStatus: "Interview",
+    }));
+  });
 });
