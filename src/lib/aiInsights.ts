@@ -1,4 +1,5 @@
 import { differenceInDays, isBefore, isValid, parseISO, startOfMonth, startOfWeek, subDays } from "date-fns";
+import { safeSessionStorageGetItem, safeSessionStorageRemoveItem, safeSessionStorageSetItem } from "./browserStorage";
 import type { JobApplication } from "./types";
 import { isApplicationOverdue } from "./overdue";
 
@@ -41,14 +42,13 @@ const HOSTED_AI_ACCESS_TOKEN_KEY = "job-tracker-ai-access-token";
 
 export function getHostedAiAccessToken(): string {
   // Keep the operator-provided token session-only so it is neither bundled nor retained across browser restarts.
-  return typeof sessionStorage === "undefined" ? "" : sessionStorage.getItem(HOSTED_AI_ACCESS_TOKEN_KEY) || "";
+  return safeSessionStorageGetItem(HOSTED_AI_ACCESS_TOKEN_KEY) || "";
 }
 
 export function setHostedAiAccessToken(token: string): void {
-  if (typeof sessionStorage === "undefined") return;
   const normalized = token.trim();
-  if (normalized) sessionStorage.setItem(HOSTED_AI_ACCESS_TOKEN_KEY, normalized);
-  else sessionStorage.removeItem(HOSTED_AI_ACCESS_TOKEN_KEY);
+  if (normalized) safeSessionStorageSetItem(HOSTED_AI_ACCESS_TOKEN_KEY, normalized);
+  else safeSessionStorageRemoveItem(HOSTED_AI_ACCESS_TOKEN_KEY);
 }
 
 function safeParseDate(value: string): Date | null {

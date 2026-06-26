@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { buildAiInsightSummary, generateAiInsightsWithFallback, generateHostedAiInsights, parseLocalAiInsightsContent, setHostedAiAccessToken } from "@/lib/aiInsights";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildAiInsightSummary, generateAiInsightsWithFallback, generateHostedAiInsights, getHostedAiAccessToken, parseLocalAiInsightsContent, setHostedAiAccessToken } from "@/lib/aiInsights";
 import type { JobApplication } from "@/lib/types";
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
@@ -103,6 +103,27 @@ describe("hosted AI insights", () => {
     // Hosted calls authenticate with a session-only token instead of a secret embedded in the Vite bundle.
     sessionStorage.clear();
     setHostedAiAccessToken("test-access-token");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to an empty token when session storage blocks reads", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+
+    expect(getHostedAiAccessToken()).toBe("");
+  });
+
+  it("does not throw when session storage blocks token writes", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+
+    expect(() => setHostedAiAccessToken("test-access-token")).not.toThrow();
   });
 
   it("sends only the privacy-filtered summary to the hosted endpoint", async () => {

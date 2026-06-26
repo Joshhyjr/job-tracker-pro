@@ -275,6 +275,15 @@ describe("mapRowsToApplications", () => {
 });
 
 describe("getApplications", () => {
+  it("returns an empty list when browser storage blocks reads", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+
+    // Some browsers deny storage access entirely; boot should still recover with an empty dataset.
+    expect(getApplications()).toEqual([]);
+  });
+
   it("returns an empty list when stored JSON is corrupted", () => {
     // Browser extensions or manual localStorage edits should not crash the app shell on next boot.
     localStorage.setItem("job-tracker-data", "{not-json");
@@ -379,5 +388,15 @@ describe("getApplications", () => {
       rowCount: 3,
       warningCount: 1,
     })).not.toThrow();
+  });
+
+  it("treats blocked seeded-flag reads as an unseeded workspace", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation((key: string) => {
+      if (key === "job-tracker-seeded") throw new Error("storage blocked");
+      return null;
+    });
+
+    const { loadInitialApplications } = await import("@/hooks/useApplications");
+    await expect(loadInitialApplications()).resolves.toEqual([]);
   });
 });

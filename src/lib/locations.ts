@@ -1,4 +1,5 @@
 import type { JobApplication } from "./types";
+import { safeLocalStorageGetItem, safeLocalStorageSetItem } from "./browserStorage";
 
 export type LocationResolutionSource = "coordinates" | "city" | "local-city" | "local-region" | "country";
 
@@ -208,9 +209,8 @@ export function getApplicationLocationLabel(application: JobApplication): string
 }
 
 function getCachedCoordinates(cacheKey: string): CachedCoordinate | null {
-  if (typeof localStorage === "undefined") return null;
   try {
-    const parsed = JSON.parse(localStorage.getItem(LOCATION_CACHE_KEY) || "{}") as Record<string, CachedCoordinate>;
+    const parsed = JSON.parse(safeLocalStorageGetItem(LOCATION_CACHE_KEY) || "{}") as Record<string, CachedCoordinate>;
     return parsed[cacheKey] ?? null;
   } catch {
     return null;
@@ -218,12 +218,12 @@ function getCachedCoordinates(cacheKey: string): CachedCoordinate | null {
 }
 
 function setCachedCoordinates(cacheKey: string, coordinates: CachedCoordinate) {
-  if (typeof localStorage === "undefined") return;
   try {
-    const parsed = JSON.parse(localStorage.getItem(LOCATION_CACHE_KEY) || "{}") as Record<string, CachedCoordinate>;
-    localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify({ ...parsed, [cacheKey]: coordinates }));
+    const parsed = JSON.parse(safeLocalStorageGetItem(LOCATION_CACHE_KEY) || "{}") as Record<string, CachedCoordinate>;
+    safeLocalStorageSetItem(LOCATION_CACHE_KEY, JSON.stringify({ ...parsed, [cacheKey]: coordinates }));
   } catch {
-    localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify({ [cacheKey]: coordinates }));
+    // If the cache contents are corrupted, overwrite them with just the fresh coordinate instead of failing.
+    safeLocalStorageSetItem(LOCATION_CACHE_KEY, JSON.stringify({ [cacheKey]: coordinates }));
   }
 }
 

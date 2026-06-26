@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { JobApplication, CurrentStatus } from "./types";
+import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from "./browserStorage";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
 
@@ -13,20 +14,12 @@ const MAX_IMPORT_ROWS = 10_000;
 const MAX_IMPORT_COLUMNS = 100;
 
 function safeStorageSetItem(key: string, value: string): void {
-  try {
-    // Storage writes can throw in private browsing or quota-constrained sessions; keep mutations from crashing the UI.
-    localStorage.setItem(key, value);
-  } catch {
-    // A failed persistence write is preferable to losing the current in-memory interaction entirely.
-  }
+  // Keep storage failures behind a shared boundary so all persistence paths degrade the same way.
+  safeLocalStorageSetItem(key, value);
 }
 
 function safeStorageRemoveItem(key: string): void {
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    // Ignore browser storage failures so transient cleanup does not interrupt the rest of the app flow.
-  }
+  safeLocalStorageRemoveItem(key);
 }
 
 type ImportField =
@@ -430,7 +423,7 @@ export function saveLastImportMetadata(metadata: LastImportMetadata) {
 }
 
 export function getLastImportMetadata(): LastImportMetadata | null {
-  const raw = localStorage.getItem(LAST_IMPORT_METADATA_KEY);
+  const raw = safeLocalStorageGetItem(LAST_IMPORT_METADATA_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<LastImportMetadata>;
@@ -454,7 +447,7 @@ export function getLastImportMetadata(): LastImportMetadata | null {
 }
 
 export function consumeImportWarnings(): string[] {
-  const raw = localStorage.getItem(IMPORT_WARNINGS_KEY);
+  const raw = safeLocalStorageGetItem(IMPORT_WARNINGS_KEY);
   safeStorageRemoveItem(IMPORT_WARNINGS_KEY);
   if (!raw) return [];
   try {
@@ -466,7 +459,7 @@ export function consumeImportWarnings(): string[] {
 }
 
 export function getPreferredResponseStatusOrder(): string[] {
-  const raw = localStorage.getItem(RESPONSE_STATUS_ORDER_KEY);
+  const raw = safeLocalStorageGetItem(RESPONSE_STATUS_ORDER_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as string[];
@@ -584,7 +577,7 @@ export function mapRowsToApplications(rows: Record<string, unknown>[]): JobAppli
 }
 
 export function getApplications(): JobApplication[] {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = safeLocalStorageGetItem(STORAGE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -610,7 +603,7 @@ export function saveApplications(apps: JobApplication[]) {
 }
 
 export function isSeeded(): boolean {
-  return localStorage.getItem(SEEDED_KEY) === "true";
+  return safeLocalStorageGetItem(SEEDED_KEY) === "true";
 }
 
 export function markSeeded() {

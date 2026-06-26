@@ -163,6 +163,19 @@ describe("job location grouping", () => {
     expect(second.groups[0]).toMatchObject({ label: "Ontario, Canada", latitude: 44.3, source: "local-region" });
   });
 
+  it("rebuilds the cache when stored location coordinates are corrupted", async () => {
+    localStorage.setItem("job-tracker-location-coordinate-cache-v2", "{bad-json");
+
+    const result = await buildJobLocationGroupsAsync(
+      [application({ id: "zagreb", city: "Zagreb", country: "Croatia" })],
+      () => ({ city: "Zagreb", region: "", country: "Croatia", latitude: 45.8, longitude: 16 }),
+    );
+
+    // A corrupted cache should be replaced with fresh coordinates instead of breaking map resolution.
+    expect(result.groups[0]).toMatchObject({ label: "Zagreb, Croatia", latitude: 45.8, source: "local-city" });
+    expect(localStorage.getItem("job-tracker-location-coordinate-cache-v2")).toContain("\"zagreb||croatia\"");
+  });
+
   it("re-parses updated location text instead of stale structured fields", async () => {
     const result = await buildJobLocationGroupsAsync(
       [application({
