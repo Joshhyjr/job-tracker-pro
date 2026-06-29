@@ -54,6 +54,24 @@ describe("ApplicationDetail", () => {
     expect(onUpdate).toHaveBeenCalled();
   });
 
+  it("preserves custom response status when quick actions change the current status", () => {
+    const onBack = vi.fn();
+    const onUpdate = vi.fn();
+
+    render(
+      <ApplicationDetail application={application({ currentStatus: "Applied", responseStatus: "Human reply received" })} onBack={onBack} onUpdate={onUpdate} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Interview" }));
+
+    // Quick actions should not erase a more specific manually maintained response stage.
+    expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
+      currentStatus: "Interview",
+      responseStatus: "Human reply received",
+    }));
+    expect(onUpdate).toHaveBeenCalled();
+  });
+
   it("refreshes the local draft when the selected application changes", () => {
     const onBack = vi.fn();
     const onUpdate = vi.fn();

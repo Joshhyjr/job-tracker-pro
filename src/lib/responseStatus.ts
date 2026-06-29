@@ -1,6 +1,16 @@
 import type { ActivityLogEntry, CurrentStatus, JobApplication } from "./types";
 
 const COLLAPSE_SPACES = /\s+/g;
+const STANDARD_RESPONSE_STATUSES = new Set([
+  "Applied",
+  "Pre-screen call",
+  "Interview",
+  "Offer",
+  "Rejected",
+  "No Response",
+  "Assessment",
+  "Role Cancelled",
+]);
 
 export function normalizeResponseStatus(raw: string | null | undefined): string {
   const value = String(raw ?? "").trim();
@@ -166,6 +176,10 @@ export function mapCurrentStatusToResponseStatus(status: CurrentStatus): string 
   return null;
 }
 
+function isStandardResponseStatus(status: string): boolean {
+  return STANDARD_RESPONSE_STATUSES.has(status);
+}
+
 export function syncEditedResponseStatus(
   previousStatus: CurrentStatus,
   nextStatus: CurrentStatus,
@@ -178,7 +192,11 @@ export function syncEditedResponseStatus(
   // Only auto-sync when the response status is blank or still matches the previous
   // status-derived value. That keeps common form edits aligned without clobbering
   // a deliberate manual override such as a custom imported response stage.
-  if (!currentResponseStatus.trim() || normalizedCurrentResponse === previousMappedResponse) {
+  if (
+    !currentResponseStatus.trim()
+    || normalizedCurrentResponse === previousMappedResponse
+    || isStandardResponseStatus(normalizedCurrentResponse)
+  ) {
     return nextMappedResponse ?? currentResponseStatus;
   }
 
@@ -201,7 +219,9 @@ export function buildStatusChangeApplication(
   return {
     ...application,
     currentStatus: status,
-    responseStatus: mapCurrentStatusToResponseStatus(status) ?? application.responseStatus,
+    // Quick actions should mirror edit-form behavior: advance the paired response status
+    // when it is still status-derived, but keep deliberate custom stages intact.
+    responseStatus: syncEditedResponseStatus(application.currentStatus, status, application.responseStatus),
     activityLog: [entry, ...(application.activityLog || [])],
   };
 }

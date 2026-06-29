@@ -78,6 +78,21 @@ describe("buildStatusChangeApplication", () => {
       message: "Status changed to Interview",
     });
   });
+
+  it("preserves a custom response status during quick status changes", () => {
+    const updated = buildStatusChangeApplication(
+      app("Human reply received"),
+      "Interview",
+      "entry-2",
+      "2026-06-29T12:00:00.000Z",
+    );
+
+    // Imported or manually curated response stages carry more detail than the coarse current-status enum.
+    expect(updated).toMatchObject({
+      currentStatus: "Interview",
+      responseStatus: "Human reply received",
+    });
+  });
 });
 
 describe("syncEditedResponseStatus", () => {
