@@ -52,7 +52,8 @@ function getDefaultValues(existing?: JobApplication): FormData {
     location: "",
     jobLink: "",
     currentStatus: "Applied",
-    responseStatus: "No Response",
+    // New applications start in the same canonical status bucket used across filters and analytics.
+    responseStatus: "Applied",
     followUps: false,
     dateApplied: new Date().toISOString().split("T")[0],
     notes: "",

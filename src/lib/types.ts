@@ -3,8 +3,20 @@ export type CurrentStatus = "Applied" | "No Response" | "Pre-screen call" | "Ass
 
 export const CURRENT_STATUSES: CurrentStatus[] = ["Applied", "No Response", "Pre-screen call", "Assessment", "Interview", "Offer", "Rejected", "Withdrawn"];
 
-// ResponseStatus is intentionally `string` so it can hold any value from imported data
-export const RESPONSE_STATUSES: string[] = ["No response", "Pre-screen call", "Assessment", "Interview", "Rejected", "Offer received"];
+// Keep form-select options aligned with the app's canonical response-status labels so
+// new records and edits do not drift away from the values used by filters and charts.
+export const RESPONSE_STATUSES: string[] = [
+  "Applied",
+  "No Response",
+  "Pre-screen call",
+  "Assessment",
+  "Interview",
+  "Offer",
+  "Rejected",
+  "Role Cancelled",
+  "Auto-reply received",
+  "Human reply received",
+];
 
 export interface ActivityLogEntry {
   id: string;
