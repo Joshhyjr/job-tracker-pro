@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import ApplicationForm from "@/pages/ApplicationForm";
+import type { JobApplication } from "@/lib/types";
 
 const { addApplicationMock, navigateMock } = vi.hoisted(() => ({
   addApplicationMock: vi.fn(),
@@ -57,5 +58,28 @@ describe("ApplicationForm", () => {
     expect(screen.getByRole("option", { name: "Applied" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "No Response" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Offer" })).toBeInTheDocument();
+  });
+
+  it("keeps an existing custom response status available in edit mode", () => {
+    const existing: JobApplication = {
+      id: "app-1",
+      jobTitle: "Platform Engineer",
+      companyName: "Beacon Systems",
+      location: "Remote",
+      currentStatus: "Interview",
+      responseStatus: "Interview scheduled",
+      followUps: false,
+      dateApplied: "2026-06-01",
+      notes: "",
+      followUpDate: "",
+      activityLog: [],
+    };
+
+    render(<ApplicationForm existing={existing} onSaved={vi.fn()} />);
+
+    fireEvent.click(screen.getAllByRole("combobox")[1]);
+
+    // Editing an imported record should not hide the saved custom stage from the select menu.
+    expect(screen.getByRole("option", { name: "Interview scheduled" })).toBeInTheDocument();
   });
 });

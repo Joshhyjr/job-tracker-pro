@@ -111,4 +111,23 @@ describe("ApplicationDetail", () => {
       responseStatus: "Interview",
     }));
   });
+
+  it("keeps an imported custom response status selectable while editing", () => {
+    const onBack = vi.fn();
+    const onUpdate = vi.fn();
+
+    render(
+      <ApplicationDetail
+        application={application({ currentStatus: "Interview", responseStatus: "Interview scheduled" })}
+        onBack={onBack}
+        onUpdate={onUpdate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getAllByRole("combobox")[1]);
+
+    // Imported custom stages should remain visible so users can save other edits without losing context.
+    expect(screen.getByRole("option", { name: "Interview scheduled" })).toBeInTheDocument();
+  });
 });

@@ -49,6 +49,21 @@ export function normalizeResponseStatusList(rawList: string[]): string[] {
   return normalized;
 }
 
+export function buildResponseStatusOptions(currentResponseStatus: string, defaults: string[]): string[] {
+  const normalizedDefaults = normalizeResponseStatusList(defaults);
+  const trimmedCurrent = String(currentResponseStatus ?? "").trim();
+
+  if (!trimmedCurrent) return normalizedDefaults;
+
+  const normalizedCurrent = normalizeResponseStatus(trimmedCurrent);
+  // Preserve exact imported/custom labels when they contain more detail than the canonical bucket name.
+  if (normalizedDefaults.some((status) => status === normalizedCurrent) && normalizedCurrent === trimmedCurrent) {
+    return normalizedDefaults;
+  }
+
+  return [...normalizedDefaults, trimmedCurrent];
+}
+
 export type StatusBreakdownItem = {
   key: string;
   label: string;

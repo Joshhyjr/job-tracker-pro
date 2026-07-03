@@ -6,19 +6,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Clock, Edit2, ExternalLink, Save, Trash2 } from "lucide-react";
-import type { JobApplication, CurrentStatus } from "@/lib/types";
+import type { ActivityLogEntry, JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { updateApplication, deleteApplication, generateId } from "@/lib/storage";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { formatDisplayDate } from "@/lib/utils";
-import { buildStatusChangeApplication, syncEditedResponseStatus } from "@/lib/responseStatus";
+import { buildResponseStatusOptions, buildStatusChangeApplication, syncEditedResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
   const [editing, setEditing] = useState(false);
   const [followNote, setFollowNote] = useState("");
   const { toast } = useToast();
+  // Imported workbooks can contain custom response stages, so keep the current value selectable while editing.
+  const responseStatusOptions = buildResponseStatusOptions(app.responseStatus, RESPONSE_STATUSES);
 
   useEffect(() => {
     // Route changes and parent refreshes can provide a newer record; reset the local draft to avoid saving stale data.
@@ -172,7 +174,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
               {editing ? (
                 <Select value={app.responseStatus} onValueChange={(v) => setApp({ ...app, responseStatus: v })}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{RESPONSE_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  <SelectContent>{responseStatusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
               ) : <p className="mt-1 text-sm">{app.responseStatus}</p>}
             </div>

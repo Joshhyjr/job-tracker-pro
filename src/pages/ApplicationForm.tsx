@@ -12,7 +12,7 @@ import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { addApplication, updateApplication } from "@/lib/storage";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { syncEditedResponseStatus } from "@/lib/responseStatus";
+import { buildResponseStatusOptions, syncEditedResponseStatus } from "@/lib/responseStatus";
 
 const schema = z.object({
   jobTitle: z.string().trim().min(1, "Required").max(200),
@@ -69,6 +69,8 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
     resolver: zodResolver(schema),
     defaultValues: getDefaultValues(existing),
   });
+  // Keep imported custom statuses editable instead of forcing users back to the canned list.
+  const responseStatusOptions = buildResponseStatusOptions(form.watch("responseStatus"), RESPONSE_STATUSES);
 
   function onSubmit(data: FormData) {
     // Storage performs the final sanitisation pass; future AI/API calls must stay server-side with private keys off the Vite client.
@@ -144,7 +146,7 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
                   <FormItem><FormLabel>Response Status</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>{RESPONSE_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                      <SelectContent>{responseStatusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="followUpDate" render={({ field }) => (

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildStatusChangeApplication, computeStatusBreakdown, normalizeResponseStatus, normalizeResponseStatusList, syncEditedResponseStatus } from "@/lib/responseStatus";
-import type { JobApplication } from "@/lib/types";
+import { buildResponseStatusOptions, buildStatusChangeApplication, computeStatusBreakdown, normalizeResponseStatus, normalizeResponseStatusList, syncEditedResponseStatus } from "@/lib/responseStatus";
+import { RESPONSE_STATUSES, type JobApplication } from "@/lib/types";
 
 function app(responseStatus: string): JobApplication {
   return {
@@ -103,5 +103,12 @@ describe("syncEditedResponseStatus", () => {
 
   it("preserves a deliberate custom response-status override", () => {
     expect(syncEditedResponseStatus("Applied", "Interview", "Human reply received")).toBe("Human reply received");
+  });
+});
+
+describe("buildResponseStatusOptions", () => {
+  it("keeps exact imported custom labels available in edit menus", () => {
+    expect(buildResponseStatusOptions("Interview scheduled", RESPONSE_STATUSES)).toContain("Interview scheduled");
+    expect(buildResponseStatusOptions("Interview", RESPONSE_STATUSES).filter((status) => status === "Interview")).toHaveLength(1);
   });
 });
