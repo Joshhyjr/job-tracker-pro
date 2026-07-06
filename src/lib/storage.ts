@@ -1,6 +1,6 @@
-import ExcelJS from "exceljs";
 import type { JobApplication, CurrentStatus } from "./types";
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from "./browserStorage";
+import { loadExcelJs } from "./exceljs";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
 
@@ -55,6 +55,10 @@ type RowsParseResult = {
   applications: JobApplication[];
   warnings: string[];
 };
+
+type ExcelCellValue = import("exceljs").CellValue;
+type ExcelWorksheet = import("exceljs").Worksheet;
+type ExcelWorkbook = import("exceljs").Workbook;
 
 export interface LastImportMetadata {
   fileName: string;
@@ -247,19 +251,19 @@ function joinFieldLabels(fields: ImportField[]): string {
   return fields.map((field) => FIELD_LABELS[field]).join(", ");
 }
 
-function getCellValue(value: ExcelJS.CellValue): unknown {
+function getCellValue(value: ExcelCellValue): unknown {
   // Excel cells can contain formulas, rich text, hyperlinks, or plain values; keep only displayable content.
   if (value == null) return "";
   if (value instanceof Date) return value;
   if (typeof value !== "object") return value;
-  if ("result" in value) return getCellValue(value.result as ExcelJS.CellValue);
+  if ("result" in value) return getCellValue(value.result as ExcelCellValue);
   if ("text" in value) return value.text;
   if ("richText" in value) return value.richText.map((part) => part.text).join("");
   if ("hyperlink" in value && "text" in value) return value.text;
   return "";
 }
 
-function getCellHyperlinkTarget(value: ExcelJS.CellValue): string {
+function getCellHyperlinkTarget(value: ExcelCellValue): string {
   if (value == null || value instanceof Date || typeof value !== "object") return "";
   // Excel stores hyperlink targets separately from display text, so link columns should prefer the target URL.
   if ("hyperlink" in value && typeof value.hyperlink === "string") return value.hyperlink;
@@ -307,7 +311,7 @@ function getCustomFields(row: Record<string, unknown>, mapping: ColumnMapping): 
   return Object.keys(customFields).length > 0 ? customFields : undefined;
 }
 
-function worksheetToMatrix(sheet: ExcelJS.Worksheet): unknown[][] {
+function worksheetToMatrix(sheet: ExcelWorksheet): unknown[][] {
   const matrix: unknown[][] = [];
   sheet.eachRow({ includeEmpty: true }, (row) => {
     const values: unknown[] = [];
@@ -319,7 +323,7 @@ function worksheetToMatrix(sheet: ExcelJS.Worksheet): unknown[][] {
   return matrix;
 }
 
-function worksheetToRows(sheet: ExcelJS.Worksheet): Record<string, unknown>[] {
+function worksheetToRows(sheet: ExcelWorksheet): Record<string, unknown>[] {
   const headers = Array.from({ length: sheet.columnCount }, (_, index) => String(getCellValue(sheet.getCell(1, index + 1).value) ?? ""));
   const linkHeader = createColumnMapping(headers).byField.jobLink;
   const rows: Record<string, unknown>[] = [];
@@ -338,14 +342,15 @@ function worksheetToRows(sheet: ExcelJS.Worksheet): Record<string, unknown>[] {
   return rows;
 }
 
-async function loadWorkbook(buffer: ArrayBuffer): Promise<ExcelJS.Workbook> {
-  // Keep spreadsheet parsing client-side without the vulnerable xlsx package.
+async function loadWorkbook(buffer: ArrayBuffer): Promise<ExcelWorkbook> {
+  // Defer the workbook parser until seed/import flows actually need it so normal navigation downloads less JavaScript.
+  const ExcelJS = await loadExcelJs();
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
   return workbook;
 }
 
-function extractResponseStatusOrderFromListSheet(sheet?: ExcelJS.Worksheet): string[] {
+function extractResponseStatusOrderFromListSheet(sheet?: ExcelWorksheet): string[] {
   if (!sheet) return [];
 
   const matrix = worksheetToMatrix(sheet);
@@ -383,7 +388,7 @@ type WorkbookParseResult = {
   warnings: string[];
 };
 
-function parseWorkbook(wb: ExcelJS.Workbook): WorkbookParseResult {
+function parseWorkbook(wb: ExcelWorkbook): WorkbookParseResult {
   const applicationsSheet = wb.getWorksheet("Applications") ?? wb.worksheets[0];
   // Empty workbooks cannot be mapped safely, so surface a clear import failure instead of a vague parser error.
   if (!applicationsSheet) throw new Error("Workbook does not contain any worksheets.");

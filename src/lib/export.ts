@@ -1,5 +1,5 @@
-import ExcelJS from "exceljs";
 import type { JobApplication } from "./types";
+import { loadExcelJs } from "./exceljs";
 
 const SPREADSHEET_FORMULA_PREFIX = /^[=+\-@\t\r]/;
 
@@ -77,7 +77,8 @@ export function exportCSV(apps: JobApplication[]) {
 }
 
 export async function exportXLSX(apps: JobApplication[]) {
-  // ExcelJS preserves XLSX export while avoiding the vulnerable xlsx dependency.
+  // Load ExcelJS only when the user explicitly exports XLSX data so the main app bundle stays leaner.
+  const ExcelJS = await loadExcelJs();
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Applications");
   const rows = toRows(apps);
