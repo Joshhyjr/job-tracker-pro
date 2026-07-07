@@ -23,12 +23,12 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      # Trusted first-party actions use Node 24-compatible major versions.
+      # Trusted first-party actions stay on current Node 24-compatible majors.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -51,10 +51,10 @@ jobs:
     steps:
       # Reviews package-lock and action changes on PRs before they merge.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Review dependency changes
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: moderate
 
@@ -69,18 +69,18 @@ jobs:
     steps:
       # CodeQL scans TypeScript/JavaScript paths for common vulnerability patterns.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
 
   gitleaks:
     name: Gitleaks secret scan
@@ -90,7 +90,7 @@ jobs:
     steps:
       # Gitleaks blocks accidental API keys and tokens before they reach deployment.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
