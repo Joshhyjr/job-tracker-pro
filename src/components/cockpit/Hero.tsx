@@ -21,7 +21,7 @@ export default function Hero() {
           </h1>
 
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">
-            Data Analyst · Technical Support Specialist · Developer
+          Data Analyst by title. Problem-solver by nature. Builder by habit.
           </p>
 
           <p className="max-w-xl text-lg leading-relaxed text-foreground/85">

@@ -44,8 +44,8 @@ Nav shows real labels with cockpit labels as small subtitles (e.g. "Projects · 
 ### 3.1 Cockpit (Hero)
 - **Purpose:** Instant identity + tagline + single gauge moment.
 - **Heading:** "Joshua Kivaria"
-- **Sub:** "Data Analyst · Technical Support Specialist · Developer — Halifax, NS"
-- **Tagline:** *"Driven by data. Tuned for support. Built to ship."*
+- **Sub:** "Data Analyst by title. Problem-solver by nature. Builder by habit — Halifax, NS"
+- **Tagline:** *"I’ve got 99 problems, but messy data won’t be one."*
 - **Visual:** one minimalist speedometer (0–100) reading "Availability: Open to work."
 - **CTAs:** `View The Garage` (primary) · `Download Spec Sheet` (outline) · `Start the Engine` (ghost).
 - **Restraint:** no avatar animation, no typing bubble, no secondary widgets.
