@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { buildResponseStatusOptions, buildStatusChangeApplication, computeStatusBreakdown, normalizeResponseStatus, normalizeResponseStatusList, syncEditedResponseStatus } from "@/lib/responseStatus";
+import {
+  buildQuickActionResponseStatuses,
+  buildResponseStatusChangeApplication,
+  buildResponseStatusOptions,
+  buildStatusChangeApplication,
+  computeStatusBreakdown,
+  mapResponseStatusToCurrentStatus,
+  normalizeResponseStatus,
+  normalizeResponseStatusList,
+  syncEditedResponseStatus,
+} from "@/lib/responseStatus";
 import { RESPONSE_STATUSES, type JobApplication } from "@/lib/types";
 
 function app(responseStatus: string): JobApplication {
@@ -27,6 +37,7 @@ describe("normalizeResponseStatus", () => {
     expect(normalizeResponseStatus("Rejected")).toBe("Rejected");
     expect(normalizeResponseStatus("No Response")).toBe("No Response");
     expect(normalizeResponseStatus("assessment")).toBe("Assessment");
+    expect(normalizeResponseStatus("hold")).toBe("On Hold");
     expect(normalizeResponseStatus("AUTO-REPLY RECEIVED")).toBe("Auto-reply received");
     expect(normalizeResponseStatus("human reply received")).toBe("Human reply received");
   });
@@ -110,5 +121,41 @@ describe("buildResponseStatusOptions", () => {
   it("keeps exact imported custom labels available in edit menus", () => {
     expect(buildResponseStatusOptions("Interview scheduled", RESPONSE_STATUSES)).toContain("Interview scheduled");
     expect(buildResponseStatusOptions("Interview", RESPONSE_STATUSES).filter((status) => status === "Interview")).toHaveLength(1);
+  });
+
+  it("includes On Hold in the default response-status options", () => {
+    expect(buildResponseStatusOptions("", RESPONSE_STATUSES)).toContain("On Hold");
+  });
+});
+
+describe("buildQuickActionResponseStatuses", () => {
+  it("prefers XLSX-provided statuses when an imported order exists", () => {
+    expect(buildQuickActionResponseStatuses(["Custom Stage", "Offer"], RESPONSE_STATUSES, "Applied")).toEqual([
+      "Custom Stage",
+      "Offer",
+    ]);
+  });
+
+  it("falls back to defaults including On Hold when no XLSX status list exists", () => {
+    expect(buildQuickActionResponseStatuses([], RESPONSE_STATUSES, "Applied")).toContain("On Hold");
+  });
+});
+
+describe("buildResponseStatusChangeApplication", () => {
+  it("saves the selected dynamic response status and maps to the closest current status", () => {
+    const updated = buildResponseStatusChangeApplication(
+      app("Applied"),
+      "On Hold",
+      "entry-3",
+      "2026-07-07T12:00:00.000Z",
+    );
+
+    // On Hold remains a dynamic response status while currentStatus stays in the closest fixed bucket.
+    expect(updated).toMatchObject({
+      currentStatus: "Applied",
+      responseStatus: "On Hold",
+    });
+    expect(updated.activityLog[0].message).toBe("Status changed to On Hold");
+    expect(mapResponseStatusToCurrentStatus("On Hold")).toBe("Applied");
   });
 });

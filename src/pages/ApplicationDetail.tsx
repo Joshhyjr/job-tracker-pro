@@ -8,11 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Clock, Edit2, ExternalLink, Save, Trash2 } from "lucide-react";
 import type { ActivityLogEntry, JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
-import { updateApplication, deleteApplication, generateId } from "@/lib/storage";
+import { updateApplication, deleteApplication, generateId, getPreferredResponseStatusOrder } from "@/lib/storage";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { formatDisplayDate } from "@/lib/utils";
-import { buildResponseStatusOptions, buildStatusChangeApplication, syncEditedResponseStatus } from "@/lib/responseStatus";
+import { buildQuickActionResponseStatuses, buildResponseStatusChangeApplication, buildResponseStatusOptions, syncEditedResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: (updatedApplication?: JobApplication) => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -21,6 +21,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   const { toast } = useToast();
   // Imported workbooks can contain custom response stages, so keep the current value selectable while editing.
   const responseStatusOptions = buildResponseStatusOptions(app.responseStatus, RESPONSE_STATUSES);
+  // Quick actions follow the XLSX status order when available, then fall back to defaults that include On Hold.
+  const quickActionStatuses = buildQuickActionResponseStatuses(getPreferredResponseStatusOrder(), RESPONSE_STATUSES, app.responseStatus);
 
   useEffect(() => {
     // Route changes and parent refreshes can provide a newer record; reset the local draft to avoid saving stale data.
@@ -43,11 +45,11 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
     toast({ title: "Saved", description: "Application updated." });
   }
 
-  function changeStatus(status: CurrentStatus) {
-    // Reuse the shared status-transition helper so list and detail views cannot drift.
-    const updated = buildStatusChangeApplication(app, status, generateId(), new Date().toISOString());
+  function changeResponseStatus(responseStatus: string) {
+    // Dynamic quick actions save the response-stage label and derive the closest fixed current status.
+    const updated = buildResponseStatusChangeApplication(app, responseStatus, generateId(), new Date().toISOString());
     persistApplication(updated);
-    toast({ title: "Status Updated", description: `Marked as ${status}` });
+    toast({ title: "Status Updated", description: `Marked as ${responseStatus}` });
   }
 
   function addFollowUp() {
@@ -194,8 +196,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
           <Card className="border-border/40 shadow-none">
             <CardHeader><CardTitle className="text-base font-medium">Quick Actions</CardTitle></CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {CURRENT_STATUSES.filter((s) => s !== app.currentStatus).map((s) => (
-                <Button key={s} variant="outline" size="sm" onClick={() => changeStatus(s)}>{s}</Button>
+              {quickActionStatuses.map((s) => (
+                <Button key={s} variant="outline" size="sm" onClick={() => changeResponseStatus(s)}>{s}</Button>
               ))}
             </CardContent>
           </Card>

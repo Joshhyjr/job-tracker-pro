@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationDetail from "@/pages/ApplicationDetail";
 import type { JobApplication } from "@/lib/types";
 
-const { updateApplicationMock } = vi.hoisted(() => ({
+const { getPreferredResponseStatusOrderMock, updateApplicationMock } = vi.hoisted(() => ({
+  getPreferredResponseStatusOrderMock: vi.fn(),
   updateApplicationMock: vi.fn(),
 }));
 
@@ -15,6 +16,7 @@ vi.mock("@/lib/storage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/storage")>("@/lib/storage");
   return {
     ...actual,
+    getPreferredResponseStatusOrder: getPreferredResponseStatusOrderMock,
     updateApplication: updateApplicationMock,
   };
 });
@@ -37,6 +39,7 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
 
 describe("ApplicationDetail", () => {
   beforeEach(() => {
+    getPreferredResponseStatusOrderMock.mockReturnValue([]);
     updateApplicationMock.mockClear();
   });
 
@@ -58,7 +61,7 @@ describe("ApplicationDetail", () => {
     expect(onUpdate).toHaveBeenCalled();
   });
 
-  it("preserves custom response status when quick actions change the current status", () => {
+  it("saves the selected quick action response status over a previous custom status", () => {
     const onBack = vi.fn();
     const onUpdate = vi.fn();
 
@@ -68,12 +71,52 @@ describe("ApplicationDetail", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Interview" }));
 
-    // Quick actions should not erase a more specific manually maintained response stage.
+    // Quick actions now intentionally save the selected response-stage label.
     expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
       currentStatus: "Interview",
-      responseStatus: "Human reply received",
+      responseStatus: "Interview",
     }));
     expect(onUpdate).toHaveBeenCalled();
+  });
+
+  it("falls back to default quick actions including On Hold when no XLSX status list exists", () => {
+    const onBack = vi.fn();
+    const onUpdate = vi.fn();
+
+    render(
+      <ApplicationDetail application={application({ currentStatus: "Applied", responseStatus: "Applied" })} onBack={onBack} onUpdate={onUpdate} />,
+    );
+
+    // The fallback action list should keep On Hold available even without an imported workbook list.
+    expect(screen.getByRole("button", { name: "On Hold" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "On Hold" }));
+
+    expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
+      currentStatus: "Applied",
+      responseStatus: "On Hold",
+    }));
+  });
+
+  it("uses XLSX-provided quick actions instead of default actions when a preferred order exists", () => {
+    const onBack = vi.fn();
+    const onUpdate = vi.fn();
+    getPreferredResponseStatusOrderMock.mockReturnValue(["Custom Stage", "Offer"]);
+
+    render(
+      <ApplicationDetail application={application({ currentStatus: "Applied", responseStatus: "Applied" })} onBack={onBack} onUpdate={onUpdate} />,
+    );
+
+    // Imported status lists take over the quick actions instead of mixing in fallback defaults.
+    expect(screen.getByRole("button", { name: "Custom Stage" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "On Hold" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Custom Stage" }));
+
+    expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
+      currentStatus: "Applied",
+      responseStatus: "Custom Stage",
+    }));
   });
 
   it("refreshes the local draft when the selected application changes", () => {

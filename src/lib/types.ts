@@ -13,6 +13,7 @@ export const RESPONSE_STATUSES: string[] = [
   "Interview",
   "Offer",
   "Rejected",
+  "On Hold",
   "Role Cancelled",
   "Auto-reply received",
   "Human reply received",

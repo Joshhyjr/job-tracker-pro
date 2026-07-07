@@ -9,6 +9,7 @@ const STANDARD_RESPONSE_STATUSES = new Set([
   "Rejected",
   "No Response",
   "Assessment",
+  "On Hold",
   "Role Cancelled",
 ]);
 
@@ -24,6 +25,7 @@ export function normalizeResponseStatus(raw: string | null | undefined): string 
   if (lower === "rejected") return "Rejected";
   if (lower === "no response" || lower === "no response yet") return "No Response";
   if (lower === "assessment") return "Assessment";
+  if (lower === "on hold" || lower === "hold") return "On Hold";
   if (lower === "auto-reply received" || lower === "auto reply received") return "Auto-reply received";
   if (lower === "human reply received" || lower === "human-reply received") return "Human reply received";
   if (lower === "role cancelled" || lower === "role canceled") return "Role Cancelled";
@@ -81,6 +83,7 @@ const RESPONSE_STATUS_COLORS: Record<string, string> = {
   "Human reply received": "hsl(271 70% 55%)",  // purple — distinct human reply
   Interview: "hsl(142 65% 45%)",               // green
   Offer: "hsl(152 75% 40%)",                   // emerald
+  "On Hold": "hsl(35 90% 48%)",                // amber
   "No Response": "hsl(215 14% 50%)",           // slate / grey
   "Pre-screen call": "hsl(243 75% 58%)",       // indigo
   Rejected: "hsl(0 72% 55%)",                  // red
@@ -123,6 +126,7 @@ export function getResponseStatusBadgeClass(raw: string, active: boolean): strin
   if (status === "Rejected") return active ? "bg-red-600 text-white border-red-600" : "bg-red-50 text-red-700 border-red-300";
   if (status === "Assessment") return active ? "bg-yellow-500 text-black border-yellow-500" : "bg-yellow-50 text-yellow-800 border-yellow-300";
   if (status === "Interview") return active ? "bg-green-600 text-white border-green-600" : "bg-green-50 text-green-700 border-green-300";
+  if (status === "On Hold") return active ? "bg-amber-600 text-white border-amber-600" : "bg-amber-50 text-amber-800 border-amber-300";
   if (status === "No Response") return active ? "bg-slate-700 text-white border-slate-700" : "bg-slate-100 text-slate-700 border-slate-300";
   if (status === "Pre-screen call") return active ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-700 border-blue-300";
 
@@ -169,6 +173,8 @@ export function mapResponseStatusToCurrentStatus(raw: string | null | undefined)
   if (status === "Rejected") return "Rejected";
   if (status === "No Response") return "No Response";
   if (status === "Interview" || status === "Assessment") return "Interview";
+  // On Hold is tracked as a response-stage label while the fixed current-status enum keeps it in the active Applied bucket.
+  if (status === "On Hold") return "Applied";
   // Cancelled roles are no longer active, so keep them out of the generic Applied bucket.
   if (status === "Role Cancelled") return "Withdrawn";
   if (status === "Withdrawn") return "Withdrawn";
@@ -237,6 +243,42 @@ export function buildStatusChangeApplication(
     // Quick actions should mirror edit-form behavior: advance the paired response status
     // when it is still status-derived, but keep deliberate custom stages intact.
     responseStatus: syncEditedResponseStatus(application.currentStatus, status, application.responseStatus),
+    activityLog: [entry, ...(application.activityLog || [])],
+  };
+}
+
+export function buildQuickActionResponseStatuses(
+  preferredOrder: string[],
+  defaults: string[],
+  currentResponseStatus: string,
+): string[] {
+  const source = preferredOrder.length > 0 ? preferredOrder : defaults;
+  const current = normalizeResponseStatus(currentResponseStatus);
+
+  // Quick actions prefer the workbook's status list, falling back to app defaults when no XLSX list was imported.
+  return normalizeResponseStatusList(source).filter((status) => status !== current);
+}
+
+export function buildResponseStatusChangeApplication(
+  application: JobApplication,
+  responseStatus: string,
+  entryId: string,
+  changedAt: string,
+): JobApplication {
+  const normalizedResponseStatus = normalizeResponseStatus(responseStatus);
+  const nextCurrentStatus = mapResponseStatusToCurrentStatus(normalizedResponseStatus);
+  const entry: ActivityLogEntry = {
+    id: entryId,
+    date: changedAt,
+    type: "status_change",
+    message: `Status changed to ${normalizedResponseStatus}`,
+  };
+
+  // Dynamic quick actions save the selected response label, then mirror the closest fixed current-status bucket.
+  return {
+    ...application,
+    currentStatus: nextCurrentStatus,
+    responseStatus: normalizedResponseStatus,
     activityLog: [entry, ...(application.activityLog || [])],
   };
 }
