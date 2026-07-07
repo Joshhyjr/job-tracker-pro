@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadInitialApplications, useApplications } from "@/hooks/useApplications";
 import { markSeeded, saveApplications } from "@/lib/storage";
@@ -84,5 +84,21 @@ describe("useApplications", () => {
 
     // The hook should recover into an empty state instead of leaving the app shell on a loading spinner forever.
     expect(result.current.applications).toEqual([]);
+  });
+
+  it("replaces a saved application in visible state without waiting for a full storage refresh", async () => {
+    saveApplications([application({ id: "saved-app", jobTitle: "Original Role" })]);
+    const { result } = renderHook(() => useApplications());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    act(() => {
+      // Detail-page saves pass the updated record directly so the route cannot keep rendering stale props.
+      result.current.refresh(application({ id: "saved-app", jobTitle: "Updated Role" }));
+    });
+
+    expect(result.current.applications).toMatchObject([{ id: "saved-app", jobTitle: "Updated Role" }]);
   });
 });

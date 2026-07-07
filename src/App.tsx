@@ -21,7 +21,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 const queryClient = new QueryClient();
 
-function ApplicationDetailRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: () => void }) {
+function ApplicationDetailRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: (updatedApplication?: JobApplication) => void }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const app = applications.find((a) => a.id === id);
@@ -30,7 +30,7 @@ function ApplicationDetailRoute({ applications, onUpdate }: { applications: JobA
 }
 
 // Keep application selection in the URL so details remain shareable and refresh-safe.
-function ApplicationsListRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: () => void }) {
+function ApplicationsListRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: (updatedApplication?: JobApplication) => void }) {
   const navigate = useNavigate();
 
   return (

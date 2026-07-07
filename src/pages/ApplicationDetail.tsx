@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDisplayDate } from "@/lib/utils";
 import { buildResponseStatusOptions, buildStatusChangeApplication, syncEditedResponseStatus } from "@/lib/responseStatus";
 
-export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: () => void }) {
+export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: (updatedApplication?: JobApplication) => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
   const [editing, setEditing] = useState(false);
   const [followNote, setFollowNote] = useState("");
@@ -33,7 +33,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   function persistApplication(next: JobApplication) {
     setApp(next);
     updateApplication(next);
-    onUpdate();
+    // Hand the saved record upward so browser storage and the visible route state stay in sync immediately.
+    onUpdate(next);
   }
 
   function save() {

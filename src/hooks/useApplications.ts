@@ -48,7 +48,15 @@ export function useApplications() {
     };
   }, []);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((updatedApplication?: JobApplication) => {
+    if (updatedApplication) {
+      // Save actions already wrote to storage; replace the visible row immediately so the page cannot show a stale draft.
+      setApplications((currentApplications) =>
+        currentApplications.map((application) => application.id === updatedApplication.id ? updatedApplication : application)
+      );
+      return;
+    }
+
     setApplications(getApplications());
   }, []);
 

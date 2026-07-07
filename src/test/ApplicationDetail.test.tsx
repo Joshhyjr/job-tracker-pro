@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationDetail from "@/pages/ApplicationDetail";
 import type { JobApplication } from "@/lib/types";
 
@@ -36,6 +36,10 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
 }
 
 describe("ApplicationDetail", () => {
+  beforeEach(() => {
+    updateApplicationMock.mockClear();
+  });
+
   it("keeps response status in sync when quick actions change the current status", () => {
     const onBack = vi.fn();
     const onUpdate = vi.fn();
@@ -109,6 +113,27 @@ describe("ApplicationDetail", () => {
     expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
       currentStatus: "Interview",
       responseStatus: "Interview",
+    }));
+  });
+
+  it("passes the saved edit back to the app state after writing storage", () => {
+    const onBack = vi.fn();
+    const onUpdate = vi.fn();
+
+    render(
+      <ApplicationDetail application={application({ jobTitle: "Frontend Engineer" })} onBack={onBack} onUpdate={onUpdate} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByDisplayValue("Frontend Engineer"), { target: { value: "Senior Frontend Engineer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // The saved object is passed upward so the routed detail page and list use the same just-persisted data.
+    expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
+      jobTitle: "Senior Frontend Engineer",
+    }));
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      jobTitle: "Senior Frontend Engineer",
     }));
   });
 
