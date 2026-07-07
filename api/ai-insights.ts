@@ -18,6 +18,24 @@ interface AiInsightSummary {
   topCompanies: Array<{ name: string; count: number }>;
   topRoles: Array<{ name: string; count: number }>;
   topLocations: Array<{ name: string; count: number }>;
+  dataSource: {
+    type: "xlsx-import" | "browser-records";
+    fileName: string;
+    rowCount: number;
+    importedAt: string;
+    warningCount: number;
+  };
+  spreadsheetCoverage: {
+    withSalary: number;
+    withRecruiter: number;
+    withCoverLetter: number;
+    withInterviewDate: number;
+    withTags: number;
+    withCustomFields: number;
+    withLocation: number;
+    withCoordinates: number;
+    customFieldHeaders: string[];
+  };
   recentMomentum: "up" | "down" | "flat";
   improvementSignals: string[];
 }
@@ -35,6 +53,7 @@ const MAX_REQUEST_BYTES = 16_384;
 const MAX_TEXT_LENGTH = 160;
 const MAX_LIST_ITEMS = 8;
 const MAX_RESPONSE_ITEMS = 4;
+const MAX_CUSTOM_FIELD_HEADERS = 6;
 
 type HandlerOptions = {
   apiKey?: string;
@@ -112,6 +131,49 @@ function parseSignals(value: unknown): string[] | null {
   return signals.every((item): item is string => item !== null) ? signals : null;
 }
 
+function parseDataSource(value: unknown): AiInsightSummary["dataSource"] | null {
+  if (!isRecord(value)) return null;
+  const type = value.type;
+  const fileName = typeof value.fileName === "string" && value.fileName.length <= MAX_TEXT_LENGTH ? value.fileName.trim() : null;
+  const rowCount = boundedNumber(value.rowCount);
+  const warningCount = boundedNumber(value.warningCount);
+  const importedAt = typeof value.importedAt === "string" && value.importedAt.length <= MAX_TEXT_LENGTH ? value.importedAt.trim() : null;
+  if (!["xlsx-import", "browser-records"].includes(String(type)) || fileName === null || rowCount === null || importedAt === null || warningCount === null) return null;
+
+  // Only metadata about the workbook is forwarded; the original XLSX and private cells never leave the browser.
+  return {
+    type: type as AiInsightSummary["dataSource"]["type"],
+    fileName,
+    rowCount,
+    importedAt,
+    warningCount,
+  };
+}
+
+function parseSpreadsheetCoverage(value: unknown): AiInsightSummary["spreadsheetCoverage"] | null {
+  if (!isRecord(value)) return null;
+  const numberFields = [
+    "withSalary",
+    "withRecruiter",
+    "withCoverLetter",
+    "withInterviewDate",
+    "withTags",
+    "withCustomFields",
+    "withLocation",
+    "withCoordinates",
+  ] as const;
+  const numbers = Object.fromEntries(numberFields.map((field) => [field, boundedNumber(value[field])]));
+  const customFieldHeaders = Array.isArray(value.customFieldHeaders)
+    ? value.customFieldHeaders.map(boundedText).filter((item): item is string => item !== null).slice(0, MAX_CUSTOM_FIELD_HEADERS)
+    : null;
+  if (Object.values(numbers).some((item) => item === null) || customFieldHeaders === null) return null;
+
+  return {
+    ...(numbers as unknown as Pick<AiInsightSummary["spreadsheetCoverage"], typeof numberFields[number]>),
+    customFieldHeaders,
+  };
+}
+
 function parseSummary(value: unknown): AiInsightSummary | null {
   if (!isRecord(value)) return null;
 
@@ -135,9 +197,11 @@ function parseSummary(value: unknown): AiInsightSummary | null {
   const topCompanies = parseCountItems(value.topCompanies, "name", 3);
   const topRoles = parseCountItems(value.topRoles, "name", 3);
   const topLocations = parseCountItems(value.topLocations, "name", 3);
+  const dataSource = parseDataSource(value.dataSource);
+  const spreadsheetCoverage = parseSpreadsheetCoverage(value.spreadsheetCoverage);
   const improvementSignals = parseSignals(value.improvementSignals);
   const recentMomentum = value.recentMomentum;
-  if (!statusBreakdown || !topCompanies || !topRoles || !topLocations || !improvementSignals || !["up", "down", "flat"].includes(String(recentMomentum))) return null;
+  if (!statusBreakdown || !topCompanies || !topRoles || !topLocations || !dataSource || !spreadsheetCoverage || !improvementSignals || !["up", "down", "flat"].includes(String(recentMomentum))) return null;
 
   // Rebuilding the object from allowed fields prevents accidental private fields from reaching Gemini.
   return {
@@ -146,6 +210,8 @@ function parseSummary(value: unknown): AiInsightSummary | null {
     topCompanies: topCompanies as AiInsightSummary["topCompanies"],
     topRoles: topRoles as AiInsightSummary["topRoles"],
     topLocations: topLocations as AiInsightSummary["topLocations"],
+    dataSource,
+    spreadsheetCoverage,
     recentMomentum: recentMomentum as AiInsightSummary["recentMomentum"],
     improvementSignals,
   };

@@ -15,6 +15,12 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
     notes: overrides.notes ?? "Private note should not appear in the AI summary.",
     followUpDate: overrides.followUpDate ?? "",
     recruiterContactName: overrides.recruiterContactName ?? "Private recruiter",
+    salary: overrides.salary,
+    coverLetterIncluded: overrides.coverLetterIncluded,
+    interviewDate: overrides.interviewDate,
+    tags: overrides.tags,
+    latitude: overrides.latitude,
+    longitude: overrides.longitude,
     customFields: overrides.customFields ?? { Secret: "Do not send" },
     activityLog: overrides.activityLog ?? [],
   };
@@ -27,8 +33,42 @@ describe("buildAiInsightSummary", () => {
     const summary = buildAiInsightSummary([], now);
 
     expect(summary.totalApplications).toBe(0);
+    expect(summary.dataSource.type).toBe("browser-records");
     expect(summary.improvementSignals).toContain("No applications are tracked yet, so recommendations should focus on getting started.");
     expect(JSON.stringify(summary)).not.toContain("Private");
+  });
+
+  it("adds XLSX metadata and spreadsheet coverage without private cell values", () => {
+    const summary = buildAiInsightSummary([
+      application({
+        salary: "$90k",
+        coverLetterIncluded: true,
+        interviewDate: "2026-06-05",
+        tags: "remote, frontend",
+        latitude: 44.65,
+        longitude: -63.57,
+      }),
+    ], now, {
+      fileName: "job-search.xlsx",
+      importedAt: "2026-06-02T12:00:00.000Z",
+      rowCount: 1,
+      warningCount: 0,
+    });
+
+    expect(summary.dataSource).toMatchObject({ type: "xlsx-import", fileName: "job-search.xlsx", rowCount: 1 });
+    expect(summary.spreadsheetCoverage).toMatchObject({
+      withSalary: 1,
+      withRecruiter: 1,
+      withCoverLetter: 1,
+      withInterviewDate: 1,
+      withTags: 1,
+      withCustomFields: 1,
+      withLocation: 1,
+      withCoordinates: 1,
+    });
+    expect(summary.spreadsheetCoverage.customFieldHeaders).toEqual(["Secret"]);
+    expect(summary.improvementSignals).toContain("Recommendations should account for the latest imported workbook: job-search.xlsx.");
+    expect(JSON.stringify(summary)).not.toContain("Do not send");
   });
 
   it("captures low-data momentum and improvement signals", () => {
@@ -149,6 +189,16 @@ describe("hosted AI insights", () => {
     const localGenerator = vi.fn().mockResolvedValue(hostedInsights);
 
     await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).resolves.toEqual(hostedInsights);
+    expect(localGenerator).toHaveBeenCalledWith(summary);
+  });
+
+  it("uses Ollama directly when no hosted access token is provided", async () => {
+    setHostedAiAccessToken("");
+    const hostedGenerator = vi.fn();
+    const localGenerator = vi.fn().mockResolvedValue(hostedInsights);
+
+    await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).resolves.toEqual(hostedInsights);
+    expect(hostedGenerator).not.toHaveBeenCalled();
     expect(localGenerator).toHaveBeenCalledWith(summary);
   });
 

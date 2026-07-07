@@ -11,7 +11,7 @@ import { buildAiInsightSummary, generateAiInsightsWithFallback, getConfiguredOll
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle } from "@/lib/responseStatus";
-import { getPreferredResponseStatusOrder } from "@/lib/storage";
+import { getLastImportMetadata, getPreferredResponseStatusOrder } from "@/lib/storage";
 import { formatDisplayDate } from "@/lib/utils";
 
 /** Safely parse an ISO date string, returning null for blank/invalid values */
@@ -30,6 +30,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
   const now = useMemo(() => new Date(), []);
   const weekStart = useMemo(() => startOfWeek(now, { weekStartsOn: 1 }), [now]);
   const monthStart = useMemo(() => startOfMonth(now), [now]);
+  const importMetadata = useMemo(() => getLastImportMetadata(), [applications.length]);
 
   // Compute summary stats from the applications dataset
   const stats = useMemo(() => {
@@ -162,18 +163,13 @@ export default function Dashboard({ applications }: { applications: JobApplicati
   ];
 
   async function handleGenerateAiInsights() {
-    if (!aiAccessToken.trim()) {
-      setAiError("Enter the same AI_INSIGHTS_ACCESS_TOKEN configured in Vercel before generating hosted insights.");
-      return;
-    }
-
     setAiLoading(true);
     setAiError("");
 
     try {
-      // Only summary fields are sent to Gemini or Ollama; notes, links, recruiters, and custom fields stay out of the prompt.
+      // Only summary fields are sent to Gemini or Ollama; notes, links, recruiters, and custom field values stay out of the prompt.
       setHostedAiAccessToken(aiAccessToken);
-      const summary = buildAiInsightSummary(applications, now);
+      const summary = buildAiInsightSummary(applications, now, importMetadata);
       const generated = await generateAiInsightsWithFallback(summary);
       setAiInsights(generated);
     } catch (error) {
@@ -332,7 +328,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
         </CardContent>
       </Card>
 
-      {/* Insights & Recommendations — deterministic fallback plus optional local Ollama coaching */}
+      {/* Insights & Recommendations — deterministic signals plus hosted Gemini or local Ollama coaching */}
       {(insights.length > 0 || aiInsights || applications.length > 0) && (
         <Card className="glass-subtle border-border/40 shadow-none">
           <CardHeader>
@@ -354,6 +350,16 @@ export default function Dashboard({ applications }: { applications: JobApplicati
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1">
+                {importMetadata ? `Using XLSX import: ${importMetadata.fileName}` : "Using current dashboard records"}
+              </span>
+              {importMetadata && (
+                <span className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1">
+                  {importMetadata.rowCount} rows imported
+                </span>
+              )}
+            </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Input
                 type="password"
@@ -363,7 +369,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
                 placeholder="Hosted AI access token (session only)"
                 aria-label="Hosted AI access token"
               />
-              <p className="text-xs text-muted-foreground sm:max-w-56">Enter the exact AI_INSIGHTS_ACCESS_TOKEN value configured in Vercel. It stays only in this browser session.</p>
+              <p className="text-xs text-muted-foreground sm:max-w-56">Optional. Leave blank to use local Ollama, or enter the Vercel token for hosted Gemini.</p>
             </div>
 
             {aiError && (

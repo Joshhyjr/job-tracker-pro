@@ -2,6 +2,7 @@ import { differenceInDays, isBefore, isValid, parseISO, startOfMonth, startOfWee
 import { safeSessionStorageGetItem, safeSessionStorageRemoveItem, safeSessionStorageSetItem } from "./browserStorage";
 import type { JobApplication } from "./types";
 import { isApplicationOverdue } from "./overdue";
+import type { LastImportMetadata } from "./storage";
 
 export interface AiInsightSummary {
   totalApplications: number;
@@ -19,6 +20,24 @@ export interface AiInsightSummary {
   topCompanies: Array<{ name: string; count: number }>;
   topRoles: Array<{ name: string; count: number }>;
   topLocations: Array<{ name: string; count: number }>;
+  dataSource: {
+    type: "xlsx-import" | "browser-records";
+    fileName: string;
+    rowCount: number;
+    importedAt: string;
+    warningCount: number;
+  };
+  spreadsheetCoverage: {
+    withSalary: number;
+    withRecruiter: number;
+    withCoverLetter: number;
+    withInterviewDate: number;
+    withTags: number;
+    withCustomFields: number;
+    withLocation: number;
+    withCoordinates: number;
+    customFieldHeaders: string[];
+  };
   recentMomentum: "up" | "down" | "flat";
   improvementSignals: string[];
 }
@@ -37,6 +56,7 @@ const OLLAMA_TAGS_URL = "http://localhost:11434/api/tags";
 const DEFAULT_OLLAMA_MODEL = "qwen2.5:7b";
 const MAX_LIST_ITEMS = 3;
 const MAX_RESPONSE_ITEMS = 4;
+const MAX_CUSTOM_FIELD_HEADERS = 6;
 const HOSTED_AI_INSIGHTS_URL = "/api/ai-insights";
 const HOSTED_AI_ACCESS_TOKEN_KEY = "job-tracker-ai-access-token";
 
@@ -84,11 +104,62 @@ function getImprovementSignals(summary: Omit<AiInsightSummary, "improvementSigna
   if (summary.missingFollowUpDateCount > 0) signals.push(`${summary.missingFollowUpDateCount} follow-up-enabled applications are missing a follow-up date.`);
   if (summary.appliedThisWeek < summary.appliedLastWeek) signals.push("Application pace is lower this week than last week.");
   if (summary.offerRate === 0 && summary.totalApplications >= 5) signals.push("No offers are tracked yet across at least five applications.");
+  if (summary.dataSource.type === "xlsx-import") signals.push(`Recommendations should account for the latest imported workbook: ${summary.dataSource.fileName}.`);
+  if (summary.spreadsheetCoverage.withSalary === 0 && summary.totalApplications > 0) signals.push("No salary fields are populated, so compensation targeting cannot be compared yet.");
+  if (summary.spreadsheetCoverage.withLocation < summary.totalApplications) signals.push("Some applications are missing location data, which limits geographic insight quality.");
 
   return signals;
 }
 
-export function buildAiInsightSummary(applications: JobApplication[], now = new Date()): AiInsightSummary {
+function buildDataSource(importMetadata?: LastImportMetadata | null): AiInsightSummary["dataSource"] {
+  // Workbook metadata lets the model acknowledge XLSX-backed analysis without retaining the original spreadsheet.
+  return {
+    type: importMetadata ? "xlsx-import" : "browser-records",
+    fileName: importMetadata?.fileName || "",
+    rowCount: importMetadata?.rowCount || 0,
+    importedAt: importMetadata?.importedAt || "",
+    warningCount: importMetadata?.warningCount || 0,
+  };
+}
+
+function buildSpreadsheetCoverage(applications: JobApplication[]): AiInsightSummary["spreadsheetCoverage"] {
+  const customFieldHeaders = new Set<string>();
+
+  const coverage = applications.reduce(
+    (acc, application) => {
+      if (application.salary) acc.withSalary++;
+      if (application.recruiterContactName) acc.withRecruiter++;
+      if (application.coverLetterIncluded === true) acc.withCoverLetter++;
+      if (application.interviewDate) acc.withInterviewDate++;
+      if (application.tags) acc.withTags++;
+      if (application.location || application.city || application.region || application.country) acc.withLocation++;
+      if (application.latitude !== undefined && application.longitude !== undefined) acc.withCoordinates++;
+      if (application.customFields && Object.keys(application.customFields).length > 0) {
+        acc.withCustomFields++;
+        Object.keys(application.customFields).forEach((header) => customFieldHeaders.add(header));
+      }
+      return acc;
+    },
+    {
+      withSalary: 0,
+      withRecruiter: 0,
+      withCoverLetter: 0,
+      withInterviewDate: 0,
+      withTags: 0,
+      withCustomFields: 0,
+      withLocation: 0,
+      withCoordinates: 0,
+      customFieldHeaders: [] as string[],
+    },
+  );
+
+  return {
+    ...coverage,
+    customFieldHeaders: Array.from(customFieldHeaders).sort((a, b) => a.localeCompare(b)).slice(0, MAX_CUSTOM_FIELD_HEADERS),
+  };
+}
+
+export function buildAiInsightSummary(applications: JobApplication[], now = new Date(), importMetadata?: LastImportMetadata | null): AiInsightSummary {
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
   const lastWeekStart = subDays(weekStart, 7);
   const monthStart = startOfMonth(now);
@@ -142,6 +213,8 @@ export function buildAiInsightSummary(applications: JobApplication[], now = new 
     topCompanies: topItems(companyCounts),
     topRoles: topItems(roleCounts),
     topLocations: topItems(locationCounts),
+    dataSource: buildDataSource(importMetadata),
+    spreadsheetCoverage: buildSpreadsheetCoverage(applications),
     recentMomentum: appliedThisWeek > appliedLastWeek ? "up" : appliedThisWeek < appliedLastWeek ? "down" : "flat",
   } satisfies Omit<AiInsightSummary, "improvementSignals">;
 
@@ -313,6 +386,11 @@ export async function generateAiInsightsWithFallback(
   hostedGenerator = generateHostedAiInsights,
   localGenerator = generateLocalAiInsights,
 ): Promise<AiInsights> {
+  if (!getHostedAiAccessToken()) {
+    // A blank hosted token is an intentional privacy-first choice: skip Gemini and ask local Ollama directly.
+    return localGenerator(summary);
+  }
+
   try {
     return await hostedGenerator(summary);
   } catch (hostedError) {
