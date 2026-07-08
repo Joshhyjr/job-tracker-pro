@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,12 @@ export default function Dashboard({ applications }: { applications: JobApplicati
   const now = useMemo(() => new Date(), []);
   const weekStart = useMemo(() => startOfWeek(now, { weekStartsOn: 1 }), [now]);
   const monthStart = useMemo(() => startOfMonth(now), [now]);
-  const importMetadata = useMemo(() => getLastImportMetadata(), [applications.length]);
+  const [importMetadata, setImportMetadata] = useState(() => getLastImportMetadata());
+
+  useEffect(() => {
+    // Imports can swap in a same-sized dataset, so re-read the workbook metadata after every visible application refresh.
+    setImportMetadata(getLastImportMetadata());
+  }, [applications]);
 
   // Compute summary stats from the applications dataset
   const stats = useMemo(() => {
