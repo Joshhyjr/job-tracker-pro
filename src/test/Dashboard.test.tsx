@@ -99,4 +99,19 @@ describe("Dashboard", () => {
     // Imports can replace the dataset without changing the total row count, so the dashboard must re-read the workbook metadata on any dataset refresh.
     expect(screen.getByText("Using XLSX import: week-2.xlsx")).toBeInTheDocument();
   });
+
+  it("counts pre-screen calls toward the interview-rate insight", () => {
+    render(
+      <Dashboard
+        applications={[
+          application({ id: "app-1", responseStatus: "Pre-screen call" }),
+          application({ id: "app-2", responseStatus: "Interview" }),
+          application({ id: "app-3", responseStatus: "Applied" }),
+        ]}
+      />,
+    );
+
+    // Early positive signals should count the same way in the dashboard as they do in AI summaries.
+    expect(screen.getByText("Your interview rate: 67%")).toBeInTheDocument();
+  });
 });

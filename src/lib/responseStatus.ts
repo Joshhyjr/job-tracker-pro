@@ -197,6 +197,12 @@ export function mapCurrentStatusToResponseStatus(status: CurrentStatus): string 
   return null;
 }
 
+export function isInterviewPipelineResponseStatus(raw: string | null | undefined): boolean {
+  const status = normalizeResponseStatus(raw);
+  // Keep interview-rate math aligned across the dashboard and AI insights so pre-screens and assessments are counted once everywhere.
+  return status === "Pre-screen call" || status === "Interview" || status === "Assessment" || status === "Offer";
+}
+
 function isStandardResponseStatus(status: string): boolean {
   return STANDARD_RESPONSE_STATUSES.has(status);
 }

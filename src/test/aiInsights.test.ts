@@ -104,7 +104,7 @@ describe("buildAiInsightSummary", () => {
 
   it("recognizes high-response datasets without low conversion warnings", () => {
     const summary = buildAiInsightSummary([
-      application({ responseStatus: "Interview", dateApplied: "2026-06-01" }),
+      application({ responseStatus: "Pre-screen call", dateApplied: "2026-06-01" }),
       application({ responseStatus: "Assessment", dateApplied: "2026-05-25" }),
       application({ responseStatus: "Offer", dateApplied: "2026-05-24" }),
       application({ responseStatus: "Applied", dateApplied: "2026-05-23" }),

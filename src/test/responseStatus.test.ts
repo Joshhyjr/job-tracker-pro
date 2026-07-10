@@ -5,6 +5,7 @@ import {
   buildResponseStatusOptions,
   buildStatusChangeApplication,
   computeStatusBreakdown,
+  isInterviewPipelineResponseStatus,
   mapResponseStatusToCurrentStatus,
   normalizeResponseStatus,
   normalizeResponseStatusList,
@@ -138,6 +139,17 @@ describe("buildQuickActionResponseStatuses", () => {
 
   it("falls back to defaults including On Hold when no XLSX status list exists", () => {
     expect(buildQuickActionResponseStatuses([], RESPONSE_STATUSES, "Applied")).toContain("On Hold");
+  });
+});
+
+describe("isInterviewPipelineResponseStatus", () => {
+  it("counts pre-screens, assessments, interviews, and offers as pipeline progress", () => {
+    expect(isInterviewPipelineResponseStatus("Pre-screen call")).toBe(true);
+    expect(isInterviewPipelineResponseStatus("Assessment")).toBe(true);
+    expect(isInterviewPipelineResponseStatus("Interview scheduled")).toBe(true);
+    expect(isInterviewPipelineResponseStatus("Offer received")).toBe(true);
+    expect(isInterviewPipelineResponseStatus("Human reply received")).toBe(false);
+    expect(isInterviewPipelineResponseStatus("Applied")).toBe(false);
   });
 });
 

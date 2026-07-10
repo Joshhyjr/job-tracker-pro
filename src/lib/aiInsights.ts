@@ -3,6 +3,7 @@ import { safeSessionStorageGetItem, safeSessionStorageRemoveItem, safeSessionSto
 import type { JobApplication } from "./types";
 import { isApplicationOverdue } from "./overdue";
 import type { LastImportMetadata } from "./storage";
+import { isInterviewPipelineResponseStatus, normalizeResponseStatus } from "./responseStatus";
 
 export interface AiInsightSummary {
   totalApplications: number;
@@ -178,15 +179,15 @@ export function buildAiInsightSummary(applications: JobApplication[], now = new 
 
   applications.forEach((application) => {
     const appliedDate = safeParseDate(application.dateApplied);
-    const responseStatus = application.responseStatus || application.currentStatus || "Applied";
+    const responseStatus = normalizeResponseStatus(application.responseStatus || application.currentStatus || "Applied");
 
     increment(statusCounts, responseStatus);
     increment(companyCounts, application.companyName);
     increment(roleCounts, application.jobTitle);
     increment(locationCounts, application.location || application.country || application.city);
 
-    if (/interview|assessment|screen|offer/i.test(responseStatus)) interviewCount++;
-    if (/offer/i.test(responseStatus)) offerCount++;
+    if (isInterviewPipelineResponseStatus(responseStatus)) interviewCount++;
+    if (responseStatus === "Offer") offerCount++;
     if (application.followUps && !application.followUpDate) missingFollowUpDateCount++;
     if (isApplicationOverdue(application, now)) overdueFollowUpCount++;
 

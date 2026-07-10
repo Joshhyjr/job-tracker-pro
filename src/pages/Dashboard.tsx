@@ -10,7 +10,7 @@ import type { AiInsights } from "@/lib/aiInsights";
 import { buildAiInsightSummary, generateAiInsightsWithFallback, getConfiguredOllamaModel, getHostedAiAccessToken, setHostedAiAccessToken } from "@/lib/aiInsights";
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
-import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle } from "@/lib/responseStatus";
+import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle, isInterviewPipelineResponseStatus } from "@/lib/responseStatus";
 import { getLastImportMetadata, getPreferredResponseStatusOrder } from "@/lib/storage";
 import { formatDisplayDate } from "@/lib/utils";
 
@@ -117,7 +117,7 @@ export default function Dashboard({ applications }: { applications: JobApplicati
     }
 
     // Interview rate
-    const interviewCount = applications.filter((a) => /interview|offer/i.test(a.responseStatus || "")).length;
+    const interviewCount = applications.filter((a) => isInterviewPipelineResponseStatus(a.responseStatus)).length;
     if (applications.length >= 3) {
       const rate = Math.round((interviewCount / applications.length) * 100);
       items.push({
