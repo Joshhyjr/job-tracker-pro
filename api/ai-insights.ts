@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { FirebaseAdminConfigurationError, verifyOwnerIdToken } from "./_shared/firebaseAuth";
-import { enforceRateLimit, isAllowedBrowserRequest, jsonResponse } from "./_shared/security";
+// Explicit JavaScript specifiers remain resolvable after Vercel emits these TypeScript functions as Node ESM.
+import { FirebaseAdminConfigurationError, verifyOwnerIdToken } from "./_shared/firebaseAuth.js";
+import { enforceRateLimit, isAllowedBrowserRequest, jsonResponse } from "./_shared/security.js";
 
 // Keep the function contract local so Vercel's Node runtime does not import browser-only modules.
 interface AiInsightSummary {

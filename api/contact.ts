@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { enforceRateLimit, isAllowedBrowserRequest, jsonResponse } from "./_shared/security";
+// Explicit JavaScript specifiers remain resolvable after Vercel emits these TypeScript functions as Node ESM.
+import { enforceRateLimit, isAllowedBrowserRequest, jsonResponse } from "./_shared/security.js";
 
 const MAX_REQUEST_BYTES = 8_192;
 const MAX_NAME_LENGTH = 120;
