@@ -14,7 +14,7 @@ import { getPreferredResponseStatusOrder, generateId } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
 import { buildStatusChangeApplication, computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, normalizeResponseStatus } from "@/lib/responseStatus";
 
-export default function ApplicationsList({ applications, onSelect, onUpdate }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: (application: JobApplication) => Promise<JobApplication> }) {
+export default function ApplicationsList({ applications, onSelect, onUpdate, isDemo = false }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: (application: JobApplication) => Promise<JobApplication>; isDemo?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
@@ -32,8 +32,9 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
 
   // Dynamic response-status breakdown from current dataset
   const responseBreakdown = useMemo(
-    () => computeStatusBreakdown(applications, getPreferredResponseStatusOrder()),
-    [applications]
+    // Demo pages must not read the owner's browser-only workbook preferences after sign-out.
+    () => computeStatusBreakdown(applications, isDemo ? [] : getPreferredResponseStatusOrder()),
+    [applications, isDemo]
   );
 
   // Filter + sort the applications list

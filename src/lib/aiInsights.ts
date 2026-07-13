@@ -1,5 +1,4 @@
 import { differenceInDays, isBefore, isValid, parseISO, startOfMonth, startOfWeek, subDays } from "date-fns";
-import { safeSessionStorageGetItem, safeSessionStorageRemoveItem, safeSessionStorageSetItem } from "./browserStorage";
 import type { JobApplication } from "./types";
 import { isApplicationOverdue } from "./overdue";
 import type { LastImportMetadata } from "./storage";
@@ -59,18 +58,6 @@ const MAX_LIST_ITEMS = 3;
 const MAX_RESPONSE_ITEMS = 4;
 const MAX_CUSTOM_FIELD_HEADERS = 6;
 const HOSTED_AI_INSIGHTS_URL = "/api/ai-insights";
-const HOSTED_AI_ACCESS_TOKEN_KEY = "job-tracker-ai-access-token";
-
-export function getHostedAiAccessToken(): string {
-  // Keep the operator-provided token session-only so it is neither bundled nor retained across browser restarts.
-  return safeSessionStorageGetItem(HOSTED_AI_ACCESS_TOKEN_KEY) || "";
-}
-
-export function setHostedAiAccessToken(token: string): void {
-  const normalized = token.trim();
-  if (normalized) safeSessionStorageSetItem(HOSTED_AI_ACCESS_TOKEN_KEY, normalized);
-  else safeSessionStorageRemoveItem(HOSTED_AI_ACCESS_TOKEN_KEY);
-}
 
 function safeParseDate(value: string): Date | null {
   const parsed = value ? parseISO(value) : null;
@@ -280,17 +267,16 @@ function hasAiInsights(insights: AiInsights): boolean {
   return Boolean(insights.summary || insights.strengths.length || insights.improvementAreas.length || insights.recommendedNextActions.length);
 }
 
-export async function generateHostedAiInsights(summary: AiInsightSummary): Promise<AiInsights> {
+export async function generateHostedAiInsights(summary: AiInsightSummary, idToken: string): Promise<AiInsights> {
   let response: Response;
-  const accessToken = getHostedAiAccessToken();
-  if (!accessToken) throw new Error("Hosted AI insights require an access token.");
+  if (!idToken) throw new Error("Sign in with the approved Google account to use hosted AI insights.");
 
   try {
-    // The server endpoint owns the Gemini key; the browser sends only the session token and pre-filtered summary.
+    // The server endpoint owns the Gemini key and verifies the short-lived Firebase ID token on every request.
     response = await fetch(HOSTED_AI_INSIGHTS_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${idToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ summary }),
@@ -384,20 +370,18 @@ export function getConfiguredOllamaModel(): string {
 
 export async function generateAiInsightsWithFallback(
   summary: AiInsightSummary,
+  idToken: string,
   hostedGenerator = generateHostedAiInsights,
   localGenerator = generateLocalAiInsights,
 ): Promise<AiInsights> {
-  if (!getHostedAiAccessToken()) {
-    // A blank hosted token is an intentional privacy-first choice: skip Gemini and ask local Ollama directly.
-    return localGenerator(summary);
-  }
+  if (!idToken) throw new Error("Sign in with the approved Google account to use hosted AI insights.");
 
   try {
-    return await hostedGenerator(summary);
+    return await hostedGenerator(summary, idToken);
   } catch (hostedError) {
     const hostedMessage = hostedError instanceof Error ? hostedError.message : "Hosted AI insights failed.";
     // Authentication/configuration failures require operator action; Ollama fallback would hide the useful error.
-    if (/access token|authentication required|authentication is not configured/i.test(hostedMessage)) {
+    if (/sign in|authentication required|not authorized|authentication is not configured/i.test(hostedMessage)) {
       throw new Error(hostedMessage);
     }
 

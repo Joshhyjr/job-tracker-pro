@@ -2,6 +2,9 @@
   "name": "vite_react_shadcn_ts",
   "private": true,
   "version": "0.0.0",
+  "engines": {
+    "node": "22.x"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -53,6 +56,7 @@
     "embla-carousel-react": "^8.6.0",
     "exceljs": "^4.4.0",
     "firebase": "^12.1.0",
+    "firebase-admin": "^14.1.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",

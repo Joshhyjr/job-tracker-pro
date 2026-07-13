@@ -15,6 +15,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Keep Firebase Admin service-account credentials out of source control.
+*firebase-adminsdk*.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

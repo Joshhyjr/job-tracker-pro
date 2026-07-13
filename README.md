@@ -73,7 +73,7 @@ npm run dev
 
 ## Authentication and cloud sync
 
-Job Tracker uses Google Authentication and Cloud Firestore to synchronize application records across trusted devices. The portfolio at `/` remains public; `/app/*` accepts only the verified Google account `joshuakivaria@gmail.com`.
+Job Tracker uses Google Authentication and Cloud Firestore to synchronize application records across trusted devices. The portfolio at `/` and an interactive synthetic-data demo at `/app/*` remain public. Signing in with the verified Google account `joshuakivaria@gmail.com` switches the same interface to the private Firestore workspace; other accounts remain in demo mode.
 
 1. Create a Firebase project and register a Web app.
 2. In **Authentication → Sign-in method**, enable Google.
@@ -114,10 +114,12 @@ Add these server-side environment variables locally and in Vercel:
 ```sh
 GEMINI_API_KEY="your-google-ai-studio-key"
 GEMINI_MODEL="gemini-3.5-flash"
-AI_INSIGHTS_ACCESS_TOKEN="a-long-random-access-token"
+FIREBASE_ADMIN_PROJECT_ID="your-project-id"
+FIREBASE_ADMIN_CLIENT_EMAIL="firebase-adminsdk-...@your-project.iam.gserviceaccount.com"
+FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
-`GEMINI_MODEL` selects the primary model. After redeploying, enter the exact same `AI_INSIGHTS_ACCESS_TOKEN` value into the dashboard's **Hosted AI access token (session only)** field before generating hosted insights. The browser cannot read Vercel secrets, so it keeps the entered token only for the current session. Capacity failures automatically retry with `gemini-3.1-flash-lite` before using Ollama. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products. Never prefix either secret with `VITE_`, because Vite exposes those variables to browser code.
+Create the Admin credentials from **Firebase Console → Project settings → Service accounts**, then copy only the required fields into private environment variables. Never commit the downloaded service-account JSON. The signed-in browser sends its short-lived Firebase ID token, and the Vercel function verifies that token and the approved email before calling Gemini; no shared access token is entered in the UI. `GEMINI_MODEL` selects the primary model. Capacity failures automatically retry with `gemini-3.1-flash-lite` before using Ollama. Gemini's free tier has usage limits, and Google may use free-tier requests to improve its products. Never prefix the Gemini or Admin secrets with `VITE_`, because Vite exposes those variables to browser code.
 
 Use `vercel dev` to run the frontend and Gemini function together locally. Plain `npm run dev` runs only Vite, so hosted requests will fall back to Ollama.
 

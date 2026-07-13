@@ -1,5 +1,6 @@
-import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { FirebaseAdminConfigurationError, verifyOwnerIdToken } from "./_shared/firebaseAuth";
+import { enforceRateLimit, isAllowedBrowserRequest, jsonResponse } from "./_shared/security";
 
 // Keep the function contract local so Vercel's Node runtime does not import browser-only modules.
 interface AiInsightSummary {
@@ -54,46 +55,21 @@ const MAX_TEXT_LENGTH = 160;
 const MAX_LIST_ITEMS = 8;
 const MAX_RESPONSE_ITEMS = 4;
 const MAX_CUSTOM_FIELD_HEADERS = 6;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 12;
 
 type HandlerOptions = {
   apiKey?: string;
-  accessToken?: string;
   model?: string;
   fetchImpl?: typeof fetch;
+  verifyIdToken?: (idToken: string) => Promise<boolean>;
 };
 
-function jsonResponse(body: unknown, status: number): Response {
-  return Response.json(body, {
-    status,
-    headers: {
-      "Cache-Control": "no-store",
-      "Content-Type": "application/json; charset=utf-8",
-    },
-  });
-}
-
-function getExpectedOrigin(request: Request): string {
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || new URL(request.url).host;
-  const protocol = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
-  return `${protocol}://${host}`;
-}
-
-function isSameOrigin(request: Request): boolean {
-  // Require an Origin header that matches the deployed host. Missing Origin is rejected so non-browser
-  // clients (curl, scripts) cannot trigger Gemini calls and exhaust the API key quota.
-  const origin = request.headers.get("origin");
-  return origin !== null && origin === getExpectedOrigin(request);
-}
-
-function isAuthorized(request: Request, expectedToken: string): boolean {
+function getBearerToken(request: Request): string {
   const authorization = request.headers.get("authorization");
   const token = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-  if (!token || token.length > 512) return false;
-
-  // Constant-time comparison avoids leaking useful token-prefix timing to remote callers.
-  const provided = Buffer.from(token);
-  const expected = Buffer.from(expectedToken);
-  return provided.length === expected.length && timingSafeEqual(provided, expected);
+  // Firebase JWTs are longer than the legacy shared token, but still bounded to reject abusive headers.
+  return token.length <= 4_096 ? token : "";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -278,10 +254,20 @@ function extractGeminiText(payload: unknown): string | null {
 
 export async function handleAiInsightsRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405);
-  if (!isSameOrigin(request)) return jsonResponse({ error: "Cross-origin requests are not allowed." }, 403);
-  const accessToken = options.accessToken ?? process.env.AI_INSIGHTS_ACCESS_TOKEN;
-  if (!accessToken) return jsonResponse({ error: "Hosted AI insights authentication is not configured." }, 503);
-  if (!isAuthorized(request, accessToken)) return jsonResponse({ error: "Authentication required." }, 401);
+  if (!isAllowedBrowserRequest(request)) return jsonResponse({ error: "Cross-origin requests are not allowed." }, 403);
+  const idToken = getBearerToken(request);
+  if (!idToken) return jsonResponse({ error: "Google authentication required." }, 401);
+  try {
+    const isApprovedOwner = await (options.verifyIdToken ?? verifyOwnerIdToken)(idToken);
+    if (!isApprovedOwner) return jsonResponse({ error: "This Google account is not authorized." }, 403);
+  } catch (error) {
+    // Missing server credentials are operational failures; invalid or expired user tokens remain authentication failures.
+    if (error instanceof FirebaseAdminConfigurationError) return jsonResponse({ error: error.message }, 503);
+    return jsonResponse({ error: "Google authentication required." }, 401);
+  }
+  // Count only authenticated requests so unauthenticated traffic cannot exhaust the owner's AI bucket.
+  const rateLimitResponse = enforceRateLimit(request, "ai-insights", RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_MS);
+  if (rateLimitResponse) return rateLimitResponse;
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return jsonResponse({ error: "Content-Type must be application/json." }, 415);
 
   const contentLength = Number(request.headers.get("content-length") || 0);

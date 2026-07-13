@@ -6,6 +6,8 @@ import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, s
 
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
+const DEMO_STORAGE_KEY = "job-tracker-demo-data";
+const DEMO_SEEDED_KEY = "job-tracker-demo-seeded";
 const RESPONSE_STATUS_ORDER_KEY = "job-tracker-response-status-order";
 const IMPORT_WARNINGS_KEY = "job-tracker-import-warnings";
 const LAST_IMPORT_METADATA_KEY = "job-tracker-last-import";
@@ -475,12 +477,13 @@ export function getPreferredResponseStatusOrder(): string[] {
 }
 
 /// Functions below handle parsing and mapping of Excel data to our application's data model.
-export async function loadSeedData(): Promise<JobApplication[]> {
+export async function loadSeedData({ persistPreferredOrder = true }: { persistPreferredOrder?: boolean } = {}): Promise<JobApplication[]> {
   const resp = await fetch("/seed-data.xlsx");
   const buf = await resp.arrayBuffer();
   const wb = await loadWorkbook(buf);
   const parsed = parseWorkbook(wb);
-  setPreferredResponseStatusOrder(parsed.preferredOrder);
+  // Demo bootstrapping must not overwrite the signed-in owner's workbook-derived status preferences.
+  if (persistPreferredOrder) setPreferredResponseStatusOrder(parsed.preferredOrder);
   return parsed.applications;
 }
 
@@ -581,8 +584,8 @@ export function mapRowsToApplications(rows: Record<string, unknown>[]): JobAppli
   return mapRowsToApplicationsWithValidation(rows).applications;
 }
 
-export function getApplications(): JobApplication[] {
-  const raw = safeLocalStorageGetItem(STORAGE_KEY);
+function getStoredApplications(storageKey: string): JobApplication[] {
+  const raw = safeLocalStorageGetItem(storageKey);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -603,8 +606,29 @@ export function getApplications(): JobApplication[] {
   }
 }
 
+export function getApplications(): JobApplication[] {
+  return getStoredApplications(STORAGE_KEY);
+}
+
 export function saveApplications(apps: JobApplication[]) {
   safeStorageSetItem(STORAGE_KEY, JSON.stringify(apps));
+}
+
+export function getDemoApplications(): JobApplication[] {
+  // Public preview records live in their own namespace and can never enter the owner's migration path.
+  return getStoredApplications(DEMO_STORAGE_KEY);
+}
+
+export function saveDemoApplications(apps: JobApplication[]) {
+  safeStorageSetItem(DEMO_STORAGE_KEY, JSON.stringify(apps));
+}
+
+export function isDemoSeeded(): boolean {
+  return safeLocalStorageGetItem(DEMO_SEEDED_KEY) === "true";
+}
+
+export function markDemoSeeded() {
+  safeStorageSetItem(DEMO_SEEDED_KEY, "true");
 }
 
 export function isSeeded(): boolean {

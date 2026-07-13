@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { buildEditedApplicationWithStatusHistory, buildQuickActionResponseStatuses, buildResponseStatusChangeApplication, buildResponseStatusOptions, getResponseStatusBadgeClass, mapResponseStatusToCurrentStatus, syncEditedResponseStatus } from "@/lib/responseStatus";
 
-export default function ApplicationDetail({ application, onBack, onUpdate, onDelete }: { application: JobApplication; onBack: () => void; onUpdate: (application?: JobApplication) => void | Promise<JobApplication>; onDelete?: (id: string) => Promise<void> }) {
+export default function ApplicationDetail({ application, onBack, onUpdate, onDelete, isDemo = false }: { application: JobApplication; onBack: () => void; onUpdate: (application?: JobApplication) => void | Promise<JobApplication>; onDelete?: (id: string) => Promise<void>; isDemo?: boolean }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
   const [editing, setEditing] = useState(false);
   const [followNote, setFollowNote] = useState("");
@@ -22,7 +22,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
   // Imported workbooks can contain custom response stages, so keep the current value selectable while editing.
   const responseStatusOptions = buildResponseStatusOptions(app.responseStatus, RESPONSE_STATUSES);
   // Quick actions follow the XLSX status order when available, then fall back to defaults that include On Hold.
-  const quickActionStatuses = buildQuickActionResponseStatuses(getPreferredResponseStatusOrder(), RESPONSE_STATUSES, app.responseStatus);
+  // The public sandbox derives actions from public defaults instead of the owner's local workbook settings.
+  const quickActionStatuses = buildQuickActionResponseStatuses(isDemo ? [] : getPreferredResponseStatusOrder(), RESPONSE_STATUSES, app.responseStatus);
 
   useEffect(() => {
     // Route changes and parent refreshes can provide a newer record; reset the local draft to avoid saving stale data.

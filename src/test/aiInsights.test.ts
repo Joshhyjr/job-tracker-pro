@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildAiInsightSummary, generateAiInsightsWithFallback, generateHostedAiInsights, getHostedAiAccessToken, parseLocalAiInsightsContent, setHostedAiAccessToken } from "@/lib/aiInsights";
+import { buildAiInsightSummary, generateAiInsightsWithFallback, generateHostedAiInsights, parseLocalAiInsightsContent } from "@/lib/aiInsights";
 import type { JobApplication } from "@/lib/types";
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
@@ -139,31 +139,9 @@ describe("hosted AI insights", () => {
     recommendedNextActions: ["Schedule a follow-up"],
   };
 
-  beforeEach(() => {
-    // Hosted calls authenticate with a session-only token instead of a secret embedded in the Vite bundle.
-    sessionStorage.clear();
-    setHostedAiAccessToken("test-access-token");
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
-  });
-
-  it("falls back to an empty token when session storage blocks reads", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-
-    expect(getHostedAiAccessToken()).toBe("");
-  });
-
-  it("does not throw when session storage blocks token writes", () => {
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-
-    expect(() => setHostedAiAccessToken("test-access-token")).not.toThrow();
   });
 
   it("sends only the privacy-filtered summary to the hosted endpoint", async () => {
@@ -173,11 +151,11 @@ describe("hosted AI insights", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(generateHostedAiInsights(summary)).resolves.toEqual(hostedInsights);
+    await expect(generateHostedAiInsights(summary, "firebase-id-token")).resolves.toEqual(hostedInsights);
 
     const [, request] = fetchMock.mock.calls[0];
     const body = JSON.parse(request.body);
-    expect(request.headers.Authorization).toBe("Bearer test-access-token");
+    expect(request.headers.Authorization).toBe("Bearer firebase-id-token");
     expect(body).toEqual({ summary });
     expect(JSON.stringify(body)).not.toContain("Private note");
     expect(JSON.stringify(body)).not.toContain("Private recruiter");
@@ -188,26 +166,28 @@ describe("hosted AI insights", () => {
     const hostedGenerator = vi.fn().mockRejectedValue(new Error("Hosted unavailable"));
     const localGenerator = vi.fn().mockResolvedValue(hostedInsights);
 
-    await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).resolves.toEqual(hostedInsights);
+    await expect(generateAiInsightsWithFallback(summary, "firebase-id-token", hostedGenerator, localGenerator)).resolves.toEqual(hostedInsights);
+    expect(hostedGenerator).toHaveBeenCalledWith(summary, "firebase-id-token");
     expect(localGenerator).toHaveBeenCalledWith(summary);
   });
 
-  it("uses Ollama directly when no hosted access token is provided", async () => {
-    setHostedAiAccessToken("");
+  it("requires a Google session before calling either hosted or local AI", async () => {
     const hostedGenerator = vi.fn();
-    const localGenerator = vi.fn().mockResolvedValue(hostedInsights);
+    const localGenerator = vi.fn();
 
-    await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).resolves.toEqual(hostedInsights);
+    await expect(generateAiInsightsWithFallback(summary, "", hostedGenerator, localGenerator)).rejects.toThrow(
+      "Sign in with the approved Google account",
+    );
     expect(hostedGenerator).not.toHaveBeenCalled();
-    expect(localGenerator).toHaveBeenCalledWith(summary);
+    expect(localGenerator).not.toHaveBeenCalled();
   });
 
   it("surfaces hosted authentication errors without an unrelated Ollama fallback", async () => {
-    const hostedGenerator = vi.fn().mockRejectedValue(new Error("Hosted AI insights require an access token."));
+    const hostedGenerator = vi.fn().mockRejectedValue(new Error("Google authentication required."));
     const localGenerator = vi.fn();
 
-    await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).rejects.toThrow(
-      "Hosted AI insights require an access token.",
+    await expect(generateAiInsightsWithFallback(summary, "firebase-id-token", hostedGenerator, localGenerator)).rejects.toThrow(
+      "Google authentication required.",
     );
     expect(localGenerator).not.toHaveBeenCalled();
   });
@@ -216,7 +196,7 @@ describe("hosted AI insights", () => {
     const hostedGenerator = vi.fn().mockRejectedValue(new Error("Hosted unavailable"));
     const localGenerator = vi.fn().mockRejectedValue(new Error("Ollama unavailable"));
 
-    await expect(generateAiInsightsWithFallback(summary, hostedGenerator, localGenerator)).rejects.toThrow(
+    await expect(generateAiInsightsWithFallback(summary, "firebase-id-token", hostedGenerator, localGenerator)).rejects.toThrow(
       "Gemini failed: Hosted unavailable Ollama fallback failed: Ollama unavailable",
     );
   });

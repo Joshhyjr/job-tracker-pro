@@ -1,14 +1,17 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Dashboard from "@/pages/Dashboard";
 import type { JobApplication } from "@/lib/types";
+import type { User } from "firebase/auth";
 
 const {
-  getHostedAiAccessTokenMock,
+  buildAiInsightSummaryMock,
+  generateAiInsightsWithFallbackMock,
   getLastImportMetadataMock,
   getPreferredResponseStatusOrderMock,
 } = vi.hoisted(() => ({
-  getHostedAiAccessTokenMock: vi.fn(),
+  buildAiInsightSummaryMock: vi.fn(),
+  generateAiInsightsWithFallbackMock: vi.fn(),
   getLastImportMetadataMock: vi.fn(),
   getPreferredResponseStatusOrderMock: vi.fn(),
 }));
@@ -31,11 +34,9 @@ vi.mock("recharts", () => ({
 }));
 
 vi.mock("@/lib/aiInsights", () => ({
-  buildAiInsightSummary: vi.fn(),
-  generateAiInsightsWithFallback: vi.fn(),
+  buildAiInsightSummary: buildAiInsightSummaryMock,
+  generateAiInsightsWithFallback: generateAiInsightsWithFallbackMock,
   getConfiguredOllamaModel: vi.fn(() => "llama3"),
-  getHostedAiAccessToken: getHostedAiAccessTokenMock,
-  setHostedAiAccessToken: vi.fn(),
 }));
 
 vi.mock("@/lib/storage", async () => {
@@ -65,7 +66,8 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
 
 describe("Dashboard", () => {
   beforeEach(() => {
-    getHostedAiAccessTokenMock.mockReturnValue("");
+    buildAiInsightSummaryMock.mockReset();
+    generateAiInsightsWithFallbackMock.mockReset();
     getPreferredResponseStatusOrderMock.mockReturnValue([]);
     getLastImportMetadataMock.mockReset();
   });
@@ -113,5 +115,30 @@ describe("Dashboard", () => {
 
     // Early positive signals should count the same way in the dashboard as they do in AI summaries.
     expect(screen.getByText("Your interview rate: 67%")).toBeInTheDocument();
+  });
+
+  it("uses the signed-in Firebase ID token without rendering a manual token field", async () => {
+    const summary = { totalApplications: 1 };
+    const getIdToken = vi.fn().mockResolvedValue("firebase-id-token");
+    buildAiInsightSummaryMock.mockReturnValue(summary);
+    generateAiInsightsWithFallbackMock.mockResolvedValue({
+      summary: "Authenticated insight",
+      strengths: [],
+      improvementAreas: [],
+      recommendedNextActions: [],
+    });
+    const user = { email: "joshuakivaria@gmail.com", getIdToken } as unknown as User;
+
+    render(<Dashboard applications={[application()]} user={user} />);
+
+    // Google authentication replaces the old operator-entered bearer secret in the owner dashboard.
+    expect(screen.queryByLabelText("Hosted AI access token")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Generate AI insights" }));
+
+    await waitFor(() => {
+      expect(generateAiInsightsWithFallbackMock).toHaveBeenCalledWith(summary, "firebase-id-token");
+    });
+    expect(getIdToken).toHaveBeenCalledOnce();
+    expect(screen.getByText("Authenticated insight")).toBeInTheDocument();
   });
 });

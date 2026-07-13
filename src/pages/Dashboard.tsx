@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown, Building2, BarChart3, Timer, Lightbulb, Sparkles, Loader2 } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
+import type { User } from "firebase/auth";
 import type { AiInsights } from "@/lib/aiInsights";
-import { buildAiInsightSummary, generateAiInsightsWithFallback, getConfiguredOllamaModel, getHostedAiAccessToken, setHostedAiAccessToken } from "@/lib/aiInsights";
+import { buildAiInsightSummary, generateAiInsightsWithFallback, getConfiguredOllamaModel } from "@/lib/aiInsights";
 import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
 import { isApplicationOverdue } from "@/lib/overdue";
 import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle, isInterviewPipelineResponseStatus } from "@/lib/responseStatus";
@@ -21,21 +21,20 @@ function safeParseDate(d: string) {
   return isValid(p) ? p : null;
 }
 
-export default function Dashboard({ applications }: { applications: JobApplication[] }) {
+export default function Dashboard({ applications, isDemo = false, user }: { applications: JobApplication[]; isDemo?: boolean; user?: User }) {
   const navigate = useNavigate();
   const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
-  const [aiAccessToken, setAiAccessToken] = useState(getHostedAiAccessToken);
   const now = useMemo(() => new Date(), []);
   const weekStart = useMemo(() => startOfWeek(now, { weekStartsOn: 1 }), [now]);
   const monthStart = useMemo(() => startOfMonth(now), [now]);
-  const [importMetadata, setImportMetadata] = useState(() => getLastImportMetadata());
+  const [importMetadata, setImportMetadata] = useState(() => isDemo ? null : getLastImportMetadata());
 
   useEffect(() => {
     // Imports can swap in a same-sized dataset, so re-read the workbook metadata after every visible application refresh.
-    setImportMetadata(getLastImportMetadata());
-  }, [applications]);
+    setImportMetadata(isDemo ? null : getLastImportMetadata());
+  }, [applications, isDemo]);
 
   // Compute summary stats from the applications dataset
   const stats = useMemo(() => {
@@ -55,8 +54,9 @@ export default function Dashboard({ applications }: { applications: JobApplicati
 
   // Dynamic status breakdown based on responseStatus field
   const statusBreakdown = useMemo(
-    () => computeStatusBreakdown(applications, getPreferredResponseStatusOrder()),
-    [applications]
+    // Demo analytics must not reveal or depend on the owner's workbook-derived status configuration.
+    () => computeStatusBreakdown(applications, isDemo ? [] : getPreferredResponseStatusOrder()),
+    [applications, isDemo]
   );
 
   const pieData = statusBreakdown.map((item) => ({
@@ -168,14 +168,15 @@ export default function Dashboard({ applications }: { applications: JobApplicati
   ];
 
   async function handleGenerateAiInsights() {
+    if (isDemo || !user) return;
     setAiLoading(true);
     setAiError("");
 
     try {
       // Only summary fields are sent to Gemini or Ollama; notes, links, recruiters, and custom field values stay out of the prompt.
-      setHostedAiAccessToken(aiAccessToken);
+      const idToken = await user.getIdToken();
       const summary = buildAiInsightSummary(applications, now, importMetadata);
-      const generated = await generateAiInsightsWithFallback(summary);
+      const generated = await generateAiInsightsWithFallback(summary, idToken);
       setAiInsights(generated);
     } catch (error) {
       setAiInsights(null);
@@ -346,11 +347,11 @@ export default function Dashboard({ applications }: { applications: JobApplicati
                 type="button"
                 size="sm"
                 onClick={handleGenerateAiInsights}
-                disabled={aiLoading || applications.length === 0}
+                disabled={isDemo || !user || aiLoading || applications.length === 0}
                 className="w-full gap-2 sm:w-auto"
               >
                 {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {aiInsights ? "Regenerate AI insights" : "Generate AI insights"}
+                {isDemo ? "Log in for AI insights" : aiInsights ? "Regenerate AI insights" : "Generate AI insights"}
               </Button>
             </div>
           </CardHeader>
@@ -365,17 +366,12 @@ export default function Dashboard({ applications }: { applications: JobApplicati
                 </span>
               )}
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                type="password"
-                autoComplete="off"
-                value={aiAccessToken}
-                onChange={(event) => setAiAccessToken(event.target.value)}
-                placeholder="Hosted AI access token (session only)"
-                aria-label="Hosted AI access token"
-              />
-              <p className="text-xs text-muted-foreground sm:max-w-56">Optional. Leave blank to use local Ollama, or enter the Vercel token for hosted Gemini.</p>
-            </div>
+            {isDemo ? (
+              <p className="text-xs text-muted-foreground">AI generation is disabled in the public sandbox so private access tokens never appear in demo mode.</p>
+            ) : (
+              // Google authentication replaces the manual shared-secret field for the private owner workspace.
+              <p className="text-xs text-muted-foreground">Gemini requests are authenticated with your signed-in Google session{user?.email ? ` (${user.email})` : ""}.</p>
+            )}
 
             {aiError && (
               <div className="rounded-md border border-[hsl(var(--status-rejected)/0.25)] bg-[hsl(var(--status-rejected)/0.08)] px-3 py-2 text-sm text-[hsl(var(--status-rejected))]">
