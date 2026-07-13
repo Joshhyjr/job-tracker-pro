@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildQuickActionResponseStatuses,
   buildResponseStatusChangeApplication,
+  buildEditedApplicationWithStatusHistory,
   buildResponseStatusOptions,
   buildStatusChangeApplication,
   computeStatusBreakdown,
@@ -87,7 +88,9 @@ describe("buildStatusChangeApplication", () => {
       id: "entry-1",
       date: "2026-06-23T12:00:00.000Z",
       type: "status_change",
-      message: "Status changed to Interview",
+      message: "Status changed from Applied to Interview",
+      fromStatus: "Applied",
+      toStatus: "Interview",
     });
   });
 
@@ -167,7 +170,36 @@ describe("buildResponseStatusChangeApplication", () => {
       currentStatus: "Applied",
       responseStatus: "On Hold",
     });
-    expect(updated.activityLog[0].message).toBe("Status changed to On Hold");
+    expect(updated.activityLog[0]).toMatchObject({
+      message: "Status changed from Applied to On Hold",
+      fromStatus: "Applied",
+      toStatus: "On Hold",
+    });
     expect(mapResponseStatusToCurrentStatus("On Hold")).toBe("Applied");
+  });
+});
+
+describe("buildEditedApplicationWithStatusHistory", () => {
+  it("records manual response-stage edits with their previous and next values", () => {
+    const previous = app("Interview");
+    const updated = buildEditedApplicationWithStatusHistory(
+      previous,
+      { ...previous, currentStatus: "Applied", responseStatus: "On Hold" },
+      "entry-4",
+      "2026-07-13T12:00:00.000Z",
+    );
+
+    // Manual edits should be indistinguishable from Quick Actions in the visible status timeline.
+    expect(updated.activityLog[0]).toMatchObject({
+      message: "Status changed from Interview to On Hold",
+      fromStatus: "Interview",
+      toStatus: "On Hold",
+    });
+  });
+
+  it("does not add history when an edit leaves both status fields unchanged", () => {
+    const previous = app("Interview");
+
+    expect(buildEditedApplicationWithStatusHistory(previous, { ...previous, notes: "Updated" }, "entry-5", "2026-07-13T12:00:00.000Z").activityLog).toEqual([]);
   });
 });

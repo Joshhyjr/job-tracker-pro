@@ -240,7 +240,10 @@ export function buildStatusChangeApplication(
     id: entryId,
     date: changedAt,
     type: "status_change",
-    message: `Status changed to ${status}`,
+    message: `Status changed from ${application.currentStatus} to ${status}`,
+    // Fixed-status actions keep their exact endpoints so the history remains meaningful even when a custom response label is preserved.
+    fromStatus: application.currentStatus,
+    toStatus: status,
   };
 
   return {
@@ -277,7 +280,10 @@ export function buildResponseStatusChangeApplication(
     id: entryId,
     date: changedAt,
     type: "status_change",
-    message: `Status changed to ${normalizedResponseStatus}`,
+    message: `Status changed from ${normalizeResponseStatus(application.responseStatus)} to ${normalizedResponseStatus}`,
+    // Dynamic response stages include values such as On Hold that do not exist in the fixed current-status enum.
+    fromStatus: normalizeResponseStatus(application.responseStatus),
+    toStatus: normalizedResponseStatus,
   };
 
   // Dynamic quick actions save the selected response label, then mirror the closest fixed current-status bucket.
@@ -286,5 +292,36 @@ export function buildResponseStatusChangeApplication(
     currentStatus: nextCurrentStatus,
     responseStatus: normalizedResponseStatus,
     activityLog: [entry, ...(application.activityLog || [])],
+  };
+}
+
+export function buildEditedApplicationWithStatusHistory(
+  previousApplication: JobApplication,
+  editedApplication: JobApplication,
+  entryId: string,
+  changedAt: string,
+): JobApplication {
+  const previousResponseStatus = normalizeResponseStatus(previousApplication.responseStatus);
+  const nextResponseStatus = normalizeResponseStatus(editedApplication.responseStatus);
+  const responseStatusChanged = previousResponseStatus !== nextResponseStatus;
+  const currentStatusChanged = previousApplication.currentStatus !== editedApplication.currentStatus;
+
+  if (!responseStatusChanged && !currentStatusChanged) return editedApplication;
+
+  // Prefer the user-facing response stage (including On Hold), then fall back to the fixed status when only that field changed.
+  const fromStatus = responseStatusChanged ? previousResponseStatus : previousApplication.currentStatus;
+  const toStatus = responseStatusChanged ? nextResponseStatus : editedApplication.currentStatus;
+  const entry: ActivityLogEntry = {
+    id: entryId,
+    date: changedAt,
+    type: "status_change",
+    message: `Status changed from ${fromStatus} to ${toStatus}`,
+    fromStatus,
+    toStatus,
+  };
+
+  return {
+    ...editedApplication,
+    activityLog: [entry, ...(previousApplication.activityLog || [])],
   };
 }

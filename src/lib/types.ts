@@ -24,6 +24,9 @@ export interface ActivityLogEntry {
   date: string;
   type: "status_change" | "follow_up" | "note";
   message: string;
+  /** Structured status values let the detail page render a clear from-to history while keeping older message-only entries compatible. */
+  fromStatus?: string;
+  toStatus?: string;
 }
 
 export interface JobApplication {

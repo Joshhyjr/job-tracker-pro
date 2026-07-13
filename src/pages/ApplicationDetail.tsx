@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Clock, Edit2, ExternalLink, Save, Trash2 } from "lucide-react";
 import type { ActivityLogEntry, JobApplication, CurrentStatus } from "@/lib/types";
@@ -11,8 +11,8 @@ import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { updateApplication, deleteApplication, generateId, getPreferredResponseStatusOrder } from "@/lib/storage";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { formatDisplayDate } from "@/lib/utils";
-import { buildQuickActionResponseStatuses, buildResponseStatusChangeApplication, buildResponseStatusOptions, syncEditedResponseStatus } from "@/lib/responseStatus";
+import { cn, formatDisplayDate } from "@/lib/utils";
+import { buildEditedApplicationWithStatusHistory, buildQuickActionResponseStatuses, buildResponseStatusChangeApplication, buildResponseStatusOptions, getResponseStatusBadgeClass, mapResponseStatusToCurrentStatus, syncEditedResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: (updatedApplication?: JobApplication) => void }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -40,7 +40,9 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   }
 
   function save() {
-    persistApplication(app);
+    // Manual edits must produce the same durable status history as one-click Quick Actions.
+    const updated = buildEditedApplicationWithStatusHistory(application, app, generateId(), new Date().toISOString());
+    persistApplication(updated);
     setEditing(false);
     toast({ title: "Saved", description: "Application updated." });
   }
@@ -90,6 +92,9 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   }
 
   const jobPostingHref = getSafeExternalHref(app.jobLink);
+  // Keep status changes in their own discoverable timeline instead of burying them among notes and follow-ups.
+  const statusHistoryEntries = app.activityLog.filter((entry) => entry.type === "status_change");
+  const otherActivityEntries = app.activityLog.filter((entry) => entry.type !== "status_change");
 
   return (
     <div className="space-y-8">
@@ -100,7 +105,10 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
           <h1 className="text-2xl font-semibold">{app.jobTitle}</h1>
           <p className="text-muted-foreground">{app.companyName} · {app.location}</p>
         </div>
-        <StatusBadge status={app.currentStatus} />
+        {/* The prominent badge follows the user-facing response stage, including dynamic values such as On Hold. */}
+        <Badge variant="outline" className={cn("text-xs font-medium", getResponseStatusBadgeClass(app.responseStatus, false))}>
+          {app.responseStatus || app.currentStatus}
+        </Badge>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -175,7 +183,15 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
             <div>
               <label className="text-xs font-medium text-muted-foreground">Response Status</label>
               {editing ? (
-                <Select value={app.responseStatus} onValueChange={(v) => setApp({ ...app, responseStatus: v })}>
+                <Select
+                  value={app.responseStatus}
+                  onValueChange={(v) => setApp({
+                    ...app,
+                    // Keep fixed current-status filters aligned when a dynamic response stage is edited manually.
+                    currentStatus: mapResponseStatusToCurrentStatus(v),
+                    responseStatus: v,
+                  })}
+                >
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{responseStatusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
@@ -212,13 +228,41 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
         </div>
       </div>
 
-      {/* Activity Timeline */}
-      {app.activityLog.length > 0 && (
+      {/* Status History stays visible even before the first transition so users know future changes will be recorded. */}
+      <Card className="border-border/40 shadow-none">
+        <CardHeader><CardTitle className="text-base font-medium">Status History</CardTitle></CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex gap-3 text-sm">
+              <div className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
+              <div>
+                <p className="font-medium">Current: {app.responseStatus || app.currentStatus}</p>
+                <p className="text-xs text-muted-foreground">Latest application stage</p>
+              </div>
+            </div>
+            {statusHistoryEntries.map((entry) => (
+              <div key={entry.id} className="flex gap-3 border-l border-border pl-3 text-sm">
+                <Clock className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                <div>
+                  <p>{entry.fromStatus && entry.toStatus ? `${entry.fromStatus} → ${entry.toStatus}` : entry.message}</p>
+                  <p className="text-xs text-muted-foreground">{format(new Date(entry.date), "MMM d, yyyy h:mm a")}</p>
+                </div>
+              </div>
+            ))}
+            {statusHistoryEntries.length === 0 && (
+              <p className="text-sm text-muted-foreground">No earlier status changes have been recorded yet.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Non-status notes and follow-ups remain available without duplicating the dedicated status timeline. */}
+      {otherActivityEntries.length > 0 && (
         <Card className="border-border/40 shadow-none">
           <CardHeader><CardTitle className="text-base font-medium">Activity Timeline</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {app.activityLog.map((entry) => (
+              {otherActivityEntries.map((entry) => (
                 <div key={entry.id} className="flex gap-3 text-sm">
                   <Clock className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
                   <div>

@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
-import { addApplication, updateApplication } from "@/lib/storage";
+import { addApplication, generateId, updateApplication } from "@/lib/storage";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { buildResponseStatusOptions, syncEditedResponseStatus } from "@/lib/responseStatus";
+import { buildEditedApplicationWithStatusHistory, buildResponseStatusOptions, mapResponseStatusToCurrentStatus, syncEditedResponseStatus } from "@/lib/responseStatus";
 
 const schema = z.object({
   jobTitle: z.string().trim().min(1, "Required").max(200),
@@ -89,7 +89,14 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
     };
 
     if (existing) {
-      updateApplication({ ...existing, ...applicationInput });
+      // Preserve status transitions when this reusable form is used in edit mode outside the detail page.
+      const editedApplication = buildEditedApplicationWithStatusHistory(
+        existing,
+        { ...existing, ...applicationInput },
+        generateId(),
+        new Date().toISOString(),
+      );
+      updateApplication(editedApplication);
       toast({ title: "Updated", description: "Application updated." });
     } else {
       addApplication(applicationInput);
@@ -144,7 +151,14 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
                 )} />
                 <FormField control={form.control} name="responseStatus" render={({ field }) => (
                   <FormItem><FormLabel>Response Status</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        // Dynamic response-stage edits still update the closest fixed bucket used by app-wide filters.
+                        form.setValue("currentStatus", mapResponseStatusToCurrentStatus(value), { shouldDirty: true });
+                      }}
+                    >
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>{responseStatusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select><FormMessage /></FormItem>

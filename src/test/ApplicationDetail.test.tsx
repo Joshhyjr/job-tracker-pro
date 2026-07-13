@@ -180,6 +180,48 @@ describe("ApplicationDetail", () => {
     }));
   });
 
+  it("records and displays a manual Interview to On Hold status change", () => {
+    const onBack = vi.fn();
+    const onUpdate = vi.fn();
+
+    render(
+      <ApplicationDetail application={application({ currentStatus: "Interview", responseStatus: "Interview" })} onBack={onBack} onUpdate={onUpdate} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getAllByRole("combobox")[1]);
+    fireEvent.click(screen.getByRole("option", { name: "On Hold" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // The history captures the exact user-facing stages, including dynamic labels that do not exist in CurrentStatus.
+    expect(updateApplicationMock).toHaveBeenCalledWith(expect.objectContaining({
+      currentStatus: "Applied",
+      responseStatus: "On Hold",
+      activityLog: expect.arrayContaining([
+        expect.objectContaining({ fromStatus: "Interview", toStatus: "On Hold" }),
+      ]),
+    }));
+    expect(screen.getByText("Interview → On Hold")).toBeInTheDocument();
+    expect(screen.getByText("On Hold", { selector: "div.inline-flex" })).toBeInTheDocument();
+  });
+
+  it("renders older message-only status entries in the dedicated history", () => {
+    render(
+      <ApplicationDetail
+        application={application({
+          responseStatus: "On Hold",
+          activityLog: [{ id: "old-entry", date: "2026-07-12T12:00:00.000Z", type: "status_change", message: "Status changed to On Hold" }],
+        })}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    // Existing localStorage records remain readable after structured from/to fields are introduced.
+    expect(screen.getByRole("heading", { name: "Status History" })).toBeInTheDocument();
+    expect(screen.getByText("Status changed to On Hold")).toBeInTheDocument();
+  });
+
   it("keeps an imported custom response status selectable while editing", () => {
     const onBack = vi.fn();
     const onUpdate = vi.fn();

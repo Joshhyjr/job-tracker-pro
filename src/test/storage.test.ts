@@ -353,6 +353,35 @@ describe("getApplications", () => {
     });
   });
 
+  it("preserves structured status history when applications are reloaded", () => {
+    saveApplications([{
+      id: "app-history",
+      jobTitle: "Marine Engineer",
+      companyName: "Mariner",
+      location: "Halifax",
+      currentStatus: "Applied",
+      responseStatus: "On Hold",
+      followUps: false,
+      dateApplied: "2026-07-01",
+      notes: "",
+      followUpDate: "",
+      activityLog: [{
+        id: "status-entry",
+        date: "2026-07-13T12:00:00.000Z",
+        type: "status_change",
+        message: "Status changed from Interview to On Hold",
+        fromStatus: "Interview",
+        toStatus: "On Hold",
+      }],
+    }]);
+
+    // A storage round trip must not strip the endpoints used by the dedicated status-history timeline.
+    expect(getApplications()[0].activityLog[0]).toMatchObject({
+      fromStatus: "Interview",
+      toStatus: "On Hold",
+    });
+  });
+
   it("does not throw when browser storage rejects application writes", () => {
     const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("quota exceeded");

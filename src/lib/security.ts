@@ -73,8 +73,13 @@ export function sanitizeActivityLog(value: unknown): ActivityLogEntry[] {
     const message = sanitizeMultilineText(record.message);
     const date = sanitizeSingleLineText(record.date);
     const type = ACTIVITY_LOG_TYPES.includes(record.type as ActivityLogEntry["type"]) ? record.type : undefined;
+    // Preserve structured status-history labels only on status changes; older activity entries remain valid without them.
+    const fromStatus = type === "status_change" ? sanitizeSingleLineText(record.fromStatus) : "";
+    const toStatus = type === "status_change" ? sanitizeSingleLineText(record.toStatus) : "";
 
-    return id && message && date && type ? [{ id, message, date, type }] : [];
+    return id && message && date && type
+      ? [{ id, message, date, type, ...(fromStatus ? { fromStatus } : {}), ...(toStatus ? { toStatus } : {}) }]
+      : [];
   });
 }
 
