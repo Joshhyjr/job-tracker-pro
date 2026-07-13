@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:rules": "firebase emulators:exec --only firestore \"vitest run src/test/firestore.rules.test.ts\""
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
@@ -51,6 +52,7 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "exceljs": "^4.4.0",
+    "firebase": "^12.1.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
@@ -69,6 +71,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",

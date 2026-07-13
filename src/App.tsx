@@ -18,19 +18,22 @@ import { importApplicationsFromFile, markSeeded, saveApplications } from "@/lib/
 import type { JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const queryClient = new QueryClient();
 
-function ApplicationDetailRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: (updatedApplication?: JobApplication) => void }) {
+function ApplicationDetailRoute({ applications, onUpdate, onDelete }: { applications: JobApplication[]; onUpdate: (application: JobApplication) => Promise<JobApplication>; onDelete: (id: string) => Promise<void> }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const app = applications.find((a) => a.id === id);
   if (!app) return <NotFound />;
-  return <ApplicationDetail application={app} onBack={() => navigate("/app/applications")} onUpdate={onUpdate} />;
+  return <ApplicationDetail application={app} onBack={() => navigate("/app/applications")} onUpdate={onUpdate} onDelete={onDelete} />;
 }
 
 // Keep application selection in the URL so details remain shareable and refresh-safe.
-function ApplicationsListRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: (updatedApplication?: JobApplication) => void }) {
+function ApplicationsListRoute({ applications, onUpdate }: { applications: JobApplication[]; onUpdate: (application: JobApplication) => Promise<JobApplication> }) {
   const navigate = useNavigate();
 
   return (
@@ -44,15 +47,17 @@ function ApplicationsListRoute({ applications, onUpdate }: { applications: JobAp
 
 // Job Tracker app shell — only mounted under /app/* so the portfolio at / stays clean.
 function JobTrackerApp() {
-  const { applications, loading, refresh } = useApplications();
+  const { user, signOut } = useAuth();
+  const { applications, loading, syncing, offline, syncError, createApplication, updateApplication, deleteApplication, replaceApplications } = useApplications(user!);
   const { toast } = useToast();
 
   async function handleImportXLSX(file: File) {
     try {
       const { applications: imported, warnings } = await importApplicationsFromFile(file);
+      await replaceApplications(imported);
+      // Keep a recoverable browser backup only after the cloud replacement succeeds.
       saveApplications(imported);
       markSeeded();
-      refresh();
       toast({ title: "Import complete", description: `Loaded ${imported.length} applications from ${file.name}.` });
       warnings.forEach((warning) => {
         toast({ title: "Import warning", description: warning });
@@ -72,19 +77,46 @@ function JobTrackerApp() {
 
   return (
     <>
-      <AppNavbar onExportCSV={() => exportCSV(applications)} onExportXLSX={() => exportXLSX(applications)} onImportXLSX={handleImportXLSX} />
+      <AppNavbar
+        user={user!}
+        syncing={syncing}
+        offline={offline}
+        onSignOut={signOut}
+        onExportCSV={() => exportCSV(applications)}
+        onExportXLSX={() => exportXLSX(applications)}
+        onImportXLSX={handleImportXLSX}
+      />
       <main className="container py-8">
+        {syncError && <Alert variant="destructive" className="mb-6"><AlertDescription>{syncError}</AlertDescription></Alert>}
         <Routes>
           <Route index element={<Dashboard applications={applications} />} />
-          <Route path="applications" element={<ApplicationsListRoute applications={applications} onUpdate={refresh} />} />
+          <Route path="applications" element={<ApplicationsListRoute applications={applications} onUpdate={updateApplication} />} />
           <Route path="locations" element={<Locations applications={applications} />} />
-          <Route path="applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={refresh} />} />
+          <Route path="applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} />} />
           <Route path="follow-ups" element={<FollowUps applications={applications} />} />
-          <Route path="add" element={<ApplicationForm onSaved={refresh} />} />
+          <Route path="add" element={<ApplicationForm onCreate={createApplication} onUpdate={updateApplication} />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
     </>
+  );
+}
+
+function AuthenticatedJobTracker() {
+  const { user, loading, error, signInWithGoogle } = useAuth();
+
+  if (loading) return <div className="flex min-h-screen items-center justify-center"><p className="text-muted-foreground">Checking your account...</p></div>;
+  if (user) return <JobTrackerApp />;
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="glass w-full max-w-md space-y-5 rounded-2xl p-8 text-center">
+        <h1 className="text-2xl font-semibold">Sign in to Job Tracker</h1>
+        <p className="text-sm text-muted-foreground">Use the approved Google account to securely sync applications across devices.</p>
+        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+        <Button onClick={() => void signInWithGoogle()} className="w-full">Continue with Google</Button>
+      </div>
+    </div>
   );
 }
 
@@ -99,7 +131,7 @@ function AppContent() {
     </Routes>
   ) : (
     <Routes>
-      <Route path="/app/*" element={<JobTrackerApp />} />
+      <Route path="/app/*" element={<AuthenticatedJobTracker />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

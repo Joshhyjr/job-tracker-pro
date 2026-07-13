@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isApprovedOwner(userId) {
+      // Authentication, the path owner, and the allowlisted email must all agree.
+      return request.auth != null
+        && request.auth.uid == userId
+        && request.auth.token.email == 'joshuakivaria@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    match /users/{userId}/applications/{applicationId} {
+      allow read, create, update, delete: if isApprovedOwner(userId);
+    }
+
+    match /users/{userId}/metadata/{documentId} {
+      allow read, create, update: if isApprovedOwner(userId);
+      allow delete: if false;
+    }
+
+    // No other Firestore paths are accessible from the browser client.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

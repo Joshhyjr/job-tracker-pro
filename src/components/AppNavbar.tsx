@@ -1,10 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download, Upload, Globe2 } from "lucide-react";
+import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download, Upload, Globe2, LogOut, Cloud, CloudOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChangeEvent, useRef, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTheme } from "next-themes";
 import { BrandLogo } from "@/components/BrandLogo";
+import type { User } from "firebase/auth";
 
 // Navigation link definitions — Job Tracker lives under /app/* now (portfolio is at /).
 const links = [
@@ -19,10 +20,18 @@ export default function AppNavbar({
   onExportCSV,
   onExportXLSX,
   onImportXLSX,
+  user,
+  syncing,
+  offline,
+  onSignOut,
 }: {
   onExportCSV: () => void;
   onExportXLSX: () => void;
   onImportXLSX: (file: File) => Promise<void>;
+  user: User;
+  syncing: boolean;
+  offline: boolean;
+  onSignOut: () => Promise<void>;
 }) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -90,6 +99,13 @@ export default function AppNavbar({
             <Button variant="outline" size="sm" onClick={handleImportClick}><Upload className="h-3.5 w-3.5 mr-1" />Import XLSX</Button>
             <Button variant="outline" size="sm" onClick={handleExportCSV}><Download className="h-3.5 w-3.5 mr-1" />CSV</Button>
             <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-3.5 w-3.5 mr-1" />XLSX</Button>
+            <div className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title={user.email || "Signed in"}>
+              {offline ? <CloudOff className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />}
+              {syncing ? "Syncing" : offline ? "Offline" : "Synced"}
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => void onSignOut()} aria-label={`Sign out ${user.email || "account"}`}>
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
@@ -124,6 +140,12 @@ export default function AppNavbar({
               <Button variant="outline" size="sm" className="flex-1" onClick={handleImportClick}>Import</Button>
               <Button variant="outline" size="sm" className="flex-1" onClick={handleExportCSV}>CSV</Button>
               <Button variant="outline" size="sm" className="flex-1" onClick={handleExportXLSX}>XLSX</Button>
+            </div>
+            {/* Mobile account controls expose both identity and cloud status without crowding the primary links. */}
+            <div className="flex items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+              <span className="truncate">{user.email}</span>
+              <span>{syncing ? "Syncing" : offline ? "Offline" : "Synced"}</span>
+              <Button variant="ghost" size="sm" onClick={() => void onSignOut()}><LogOut className="mr-1 h-3.5 w-3.5" />Sign out</Button>
             </div>
           </div>
         </div>

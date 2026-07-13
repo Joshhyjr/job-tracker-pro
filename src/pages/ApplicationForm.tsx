@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
-import { addApplication, generateId, updateApplication } from "@/lib/storage";
+import { addApplication as addLocalApplication, generateId, updateApplication as updateLocalApplication } from "@/lib/storage";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { buildEditedApplicationWithStatusHistory, buildResponseStatusOptions, mapResponseStatusToCurrentStatus, syncEditedResponseStatus } from "@/lib/responseStatus";
@@ -61,7 +61,17 @@ function getDefaultValues(existing?: JobApplication): FormData {
   };
 }
 
-export default function ApplicationForm({ existing, onSaved }: { existing?: JobApplication; onSaved: () => void }) {
+export default function ApplicationForm({
+  existing,
+  onCreate,
+  onUpdate,
+  onSaved,
+}: {
+  existing?: JobApplication;
+  onCreate?: (application: Omit<JobApplication, "id" | "activityLog" | "createdAt" | "updatedAt">) => Promise<JobApplication>;
+  onUpdate?: (application: JobApplication) => Promise<JobApplication>;
+  onSaved?: () => void;
+}) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -72,7 +82,7 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
   // Keep imported custom statuses editable instead of forcing users back to the canned list.
   const responseStatusOptions = buildResponseStatusOptions(form.watch("responseStatus"), RESPONSE_STATUSES);
 
-  function onSubmit(data: FormData) {
+  async function onSubmit(data: FormData) {
     // Storage performs the final sanitisation pass; future AI/API calls must stay server-side with private keys off the Vite client.
     const applicationInput: Omit<JobApplication, "id" | "activityLog"> = {
       jobTitle: data.jobTitle,
@@ -96,13 +106,16 @@ export default function ApplicationForm({ existing, onSaved }: { existing?: JobA
         generateId(),
         new Date().toISOString(),
       );
-      updateApplication(editedApplication);
+      if (onUpdate) await onUpdate(editedApplication);
+      else updateLocalApplication(editedApplication);
       toast({ title: "Updated", description: "Application updated." });
     } else {
-      addApplication(applicationInput);
+      if (onCreate) await onCreate(applicationInput);
+      else addLocalApplication(applicationInput);
       toast({ title: "Added", description: "New application added." });
     }
-    onSaved();
+    // Navigate only after Firestore confirms the write so failed saves remain visible and retryable.
+    onSaved?.();
     navigate("/app/applications");
   }
 

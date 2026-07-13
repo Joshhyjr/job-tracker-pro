@@ -11,5 +11,10 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import App from "./App.tsx";
 import "./index.css";
+import { AuthProvider } from "./contexts/AuthContext.tsx";
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <AuthProvider>
+    <App />
+  </AuthProvider>,
+);

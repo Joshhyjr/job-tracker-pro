@@ -71,6 +71,38 @@ npm install
 npm run dev
 ```
 
+## Authentication and cloud sync
+
+Job Tracker uses Google Authentication and Cloud Firestore to synchronize application records across trusted devices. The portfolio at `/` remains public; `/app/*` accepts only the verified Google account `joshuakivaria@gmail.com`.
+
+1. Create a Firebase project and register a Web app.
+2. In **Authentication → Sign-in method**, enable Google.
+3. Add local and production hostnames under **Authentication → Settings → Authorized domains**.
+4. Create a standard Cloud Firestore database, then deploy the repository rules with `firebase deploy --only firestore:rules`.
+5. Copy the Firebase Web app configuration into `.env.local` and the matching Vercel environment variables:
+
+```sh
+VITE_FIREBASE_API_KEY="your-public-web-api-key"
+VITE_FIREBASE_AUTH_DOMAIN="your-project.firebaseapp.com"
+VITE_FIREBASE_PROJECT_ID="your-project-id"
+VITE_FIREBASE_STORAGE_BUCKET="your-project.firebasestorage.app"
+VITE_FIREBASE_MESSAGING_SENDER_ID="your-sender-id"
+VITE_FIREBASE_APP_ID="your-web-app-id"
+```
+
+These `VITE_FIREBASE_*` values identify the public Firebase Web app and are safe to bundle. Authorization is enforced by `firestore.rules`; never add a Firebase Admin private key, service-account JSON, `GEMINI_API_KEY`, or another server secret to a `VITE_` variable.
+
+On the first successful sign-in, browser-local applications are merged into the account once. Existing cloud records win ID conflicts, and the browser copy is retained as a recovery backup. Subsequent edits use Firestore realtime listeners and persistent browser caching. Concurrent edits use document-level last-write-wins behavior; v1 does not merge individual fields.
+
+For this single-user project, configure Firebase budget alerts even when expected usage is within the free quota.
+
+Install the Firebase CLI and run the rule suite against the local emulator before deploying rule changes:
+
+```sh
+npm install --global firebase-tools
+npm run test:rules
+```
+
 ## AI Insights
 
 AI insights use Google Gemini through the server-side `/api/ai-insights` Vercel Function. Only the dashboard's summarized application metrics are sent; notes, links, recruiter names, custom fields, and complete application records remain in the browser.

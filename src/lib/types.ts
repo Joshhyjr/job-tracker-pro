@@ -31,6 +31,9 @@ export interface ActivityLogEntry {
 
 export interface JobApplication {
   id: string;
+  /** Cloud sync timestamps remain optional so existing XLSX and browser records stay compatible. */
+  createdAt?: string;
+  updatedAt?: string;
   jobTitle: string;
   companyName: string;
   location: string;

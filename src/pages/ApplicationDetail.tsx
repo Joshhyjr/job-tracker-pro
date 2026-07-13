@@ -8,13 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Clock, Edit2, ExternalLink, Save, Trash2 } from "lucide-react";
 import type { ActivityLogEntry, JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
-import { updateApplication, deleteApplication, generateId, getPreferredResponseStatusOrder } from "@/lib/storage";
+import { deleteApplication as deleteLocalApplication, generateId, getPreferredResponseStatusOrder, updateApplication as updateLocalApplication } from "@/lib/storage";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { buildEditedApplicationWithStatusHistory, buildQuickActionResponseStatuses, buildResponseStatusChangeApplication, buildResponseStatusOptions, getResponseStatusBadgeClass, mapResponseStatusToCurrentStatus, syncEditedResponseStatus } from "@/lib/responseStatus";
 
-export default function ApplicationDetail({ application, onBack, onUpdate }: { application: JobApplication; onBack: () => void; onUpdate: (updatedApplication?: JobApplication) => void }) {
+export default function ApplicationDetail({ application, onBack, onUpdate, onDelete }: { application: JobApplication; onBack: () => void; onUpdate: (application?: JobApplication) => void | Promise<JobApplication>; onDelete?: (id: string) => Promise<void> }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
   const [editing, setEditing] = useState(false);
   const [followNote, setFollowNote] = useState("");
@@ -32,43 +32,62 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
   }, [application]);
 
   // Keep local state, storage, and parent data synchronized after every mutation.
-  function persistApplication(next: JobApplication) {
+  async function persistApplication(next: JobApplication) {
     setApp(next);
-    updateApplication(next);
-    // Hand the saved record upward so browser storage and the visible route state stay in sync immediately.
-    onUpdate(next);
+    if (onDelete) await onUpdate(next);
+    else {
+      // The local fallback keeps this reusable page compatible with isolated previews and legacy tests.
+      updateLocalApplication(next);
+      onUpdate(next);
+    }
   }
 
-  function save() {
+  async function save() {
     // Manual edits must produce the same durable status history as one-click Quick Actions.
     const updated = buildEditedApplicationWithStatusHistory(application, app, generateId(), new Date().toISOString());
-    persistApplication(updated);
-    setEditing(false);
-    toast({ title: "Saved", description: "Application updated." });
+    try {
+      await persistApplication(updated);
+      setEditing(false);
+      toast({ title: "Saved", description: "Application updated." });
+    } catch {
+      toast({ title: "Sync failed", description: "Changes were not saved. Please retry.", variant: "destructive" });
+    }
   }
 
-  function changeResponseStatus(responseStatus: string) {
+  async function changeResponseStatus(responseStatus: string) {
     // Dynamic quick actions save the response-stage label and derive the closest fixed current status.
     const updated = buildResponseStatusChangeApplication(app, responseStatus, generateId(), new Date().toISOString());
-    persistApplication(updated);
-    toast({ title: "Status Updated", description: `Marked as ${responseStatus}` });
+    try {
+      await persistApplication(updated);
+      toast({ title: "Status Updated", description: `Marked as ${responseStatus}` });
+    } catch {
+      toast({ title: "Sync failed", description: "The status was not saved. Please retry.", variant: "destructive" });
+    }
   }
 
-  function addFollowUp() {
+  async function addFollowUp() {
     if (!followNote.trim()) return;
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "follow_up", message: followNote };
     const updated = { ...app, followUps: true, activityLog: [entry, ...app.activityLog] };
-    persistApplication(updated);
-    setFollowNote("");
-    toast({ title: "Follow-up Added" });
+    try {
+      await persistApplication(updated);
+      setFollowNote("");
+      toast({ title: "Follow-up Added" });
+    } catch {
+      toast({ title: "Sync failed", description: "The follow-up was not saved. Please retry.", variant: "destructive" });
+    }
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (confirm("Are you sure you want to delete this application?")) {
-      deleteApplication(app.id);
-      onUpdate();
-      onBack();
-      toast({ title: "Deleted", description: "Application removed." });
+      try {
+        if (onDelete) await onDelete(app.id);
+        else deleteLocalApplication(app.id);
+        onBack();
+        toast({ title: "Deleted", description: "Application removed." });
+      } catch {
+        toast({ title: "Sync failed", description: "The application was not deleted. Please retry.", variant: "destructive" });
+      }
     }
   }
 

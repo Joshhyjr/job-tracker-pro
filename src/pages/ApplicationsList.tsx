@@ -10,11 +10,11 @@ import { CURRENT_STATUSES } from "@/lib/types";
 import { badgeVariants } from "@/components/ui/badge";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { getPreferredResponseStatusOrder, updateApplication, generateId } from "@/lib/storage";
+import { getPreferredResponseStatusOrder, generateId } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
 import { buildStatusChangeApplication, computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, normalizeResponseStatus } from "@/lib/responseStatus";
 
-export default function ApplicationsList({ applications, onSelect, onUpdate }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: () => void }) {
+export default function ApplicationsList({ applications, onSelect, onUpdate }: { applications: JobApplication[]; onSelect: (app: JobApplication) => void; onUpdate: (application: JobApplication) => Promise<JobApplication> }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
@@ -56,12 +56,16 @@ export default function ApplicationsList({ applications, onSelect, onUpdate }: {
     return list;
   }, [applications, activeResponseStatus, activeStatus, search, sortAsc]);
 
-  function handleChangeStatus(app: JobApplication, status: CurrentStatus) {
+  async function handleChangeStatus(app: JobApplication, status: CurrentStatus) {
     // Share the exact same transition logic as the detail view to avoid duplicate status-sync code.
     const updatedApp = buildStatusChangeApplication(app, status, generateId(), new Date().toISOString());
-    updateApplication(updatedApp);
-    onUpdate();
-    toast({ title: "Status Updated", description: `Marked as ${status}` });
+    try {
+      await onUpdate(updatedApp);
+      toast({ title: "Status Updated", description: `Marked as ${status}` });
+    } catch {
+      // Keep cloud failures actionable instead of claiming the remote status was updated.
+      toast({ title: "Sync failed", description: "The status was not saved. Please retry.", variant: "destructive" });
+    }
   }
 
   return (
