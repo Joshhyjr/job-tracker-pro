@@ -92,6 +92,8 @@ VITE_FIREBASE_APP_ID="your-web-app-id"
 
 These `VITE_FIREBASE_*` values identify the public Firebase Web app and are safe to bundle. Authorization is enforced by `firestore.rules`; never add a Firebase Admin private key, service-account JSON, `GEMINI_API_KEY`, or another server secret to a `VITE_` variable.
 
+The production Content Security Policy must retain the Firebase auth helper iframe and Google API origins defined in `vercel.json`. Removing those origins prevents `signInWithPopup` from initializing and Firebase may report the blocked request as `auth/internal-error`.
+
 On the first successful sign-in, browser-local applications are merged into the account once. Existing cloud records win ID conflicts, and the browser copy is retained as a recovery backup. Subsequent edits use Firestore realtime listeners and persistent browser caching. Concurrent edits use document-level last-write-wins behavior; v1 does not merge individual fields.
 
 For this single-user project, configure Firebase budget alerts even when expected usage is within the free quota.

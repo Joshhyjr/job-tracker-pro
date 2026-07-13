@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FirebaseError } from "firebase/app";
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
@@ -21,6 +22,14 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function getSignInErrorMessage(error: unknown): string {
+  // Firebase reports blocked helper frames and API requests as an internal error, so surface a deploy-actionable message.
+  if (error instanceof FirebaseError && error.code === "auth/internal-error") {
+    return "Google sign-in could not start. Verify the deployed Firebase settings and Content Security Policy, then retry.";
+  }
+  return error instanceof Error ? error.message : "Google sign-in failed. Please retry.";
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -65,7 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (signInError) {
         // Popup cancellation and provider failures should remain recoverable from the login screen.
-        setError(signInError instanceof Error ? signInError.message : "Google sign-in failed. Please retry.");
+        console.error("[firebase-auth] Google sign-in failed", signInError);
+        setError(getSignInErrorMessage(signInError));
       }
     },
     signOut: async () => {
