@@ -6,6 +6,7 @@ import {
   Camera, StickyNote, Users, Download, ExternalLink, Plus, Send,
 } from "lucide-react";
 import avatarImg from "@/assets/joshua-avatar.png";
+import { EXTERNAL_LINK_REL } from "@/lib/security";
 
 /* ──────────────────────────────────────────────────────────────
    Joshua Kivaria — Retro Social Profile Portfolio
@@ -269,12 +270,12 @@ function CenterColumn() {
           </div>
           {/* Keep the primary project and resume actions visible near the profile heading. */}
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href="/resume.pdf"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-sm border border-[hsl(var(--retro-border))] bg-white px-2.5 py-1 text-[12px] font-semibold text-[hsl(var(--retro-navy))] hover:bg-[hsl(var(--retro-soft))]"
-            >
+              <a
+                href="/resume.pdf"
+                target="_blank"
+                rel={EXTERNAL_LINK_REL}
+                className="inline-flex items-center gap-1.5 rounded-sm border border-[hsl(var(--retro-border))] bg-white px-2.5 py-1 text-[12px] font-semibold text-[hsl(var(--retro-navy))] hover:bg-[hsl(var(--retro-soft))]"
+              >
               <FileText className="h-3.5 w-3.5" /> View Resume
             </a>
             <Link
@@ -392,7 +393,7 @@ function CenterColumn() {
                     l.href.startsWith("/") ? (
                       <Link key={l.label} to={l.href} className="retro-link">{l.label}</Link>
                     ) : (
-                      <a key={l.label} href={l.href} className="retro-link" target="_blank" rel="noreferrer">
+                      <a key={l.label} href={l.href} className="retro-link" target="_blank" rel={EXTERNAL_LINK_REL}>
                         {l.label}
                       </a>
                     ),
@@ -593,12 +594,12 @@ function RightSidebar() {
                 {c.code}
               </div>
               <div className="min-w-0">
-                <a
-                  href={c.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="retro-link font-semibold leading-tight"
-                >
+                  <a
+                    href={c.href}
+                    target="_blank"
+                    rel={EXTERNAL_LINK_REL}
+                    className="retro-link font-semibold leading-tight"
+                  >
                   {c.title}
                 </a>
                 <div className="text-[10px] text-[hsl(var(--retro-muted))]">Issued: {c.issued}</div>
@@ -668,13 +669,13 @@ function RightSidebar() {
         <ul className="mt-3 space-y-1.5 border-t border-[hsl(var(--retro-border))] pt-3 text-[12px]">
           <li className="flex items-center gap-1.5">
             <Linkedin className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link" href="https://www.linkedin.com/in/joshua-kivaria/" target="_blank" rel="noreferrer">
+            <a className="retro-link" href="https://www.linkedin.com/in/joshua-kivaria/" target="_blank" rel={EXTERNAL_LINK_REL}>
               LinkedIn
             </a>
           </li>
           <li className="flex items-center gap-1.5">
             <Github className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link" href="https://github.com/Joshhyjr" target="_blank" rel="noreferrer">
+            <a className="retro-link" href="https://github.com/Joshhyjr" target="_blank" rel={EXTERNAL_LINK_REL}>
               GitHub
             </a>
           </li>

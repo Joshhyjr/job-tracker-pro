@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { EXTERNAL_LINK_REL } from "@/lib/security";
 import SectionPanel from "./SectionPanel";
 import { SectionReveal } from "./SectionReveal";
 import { useToast } from "@/hooks/use-toast";
@@ -110,7 +111,7 @@ export default function Ignition() {
                   <a
                     href={l.href}
                     target="_blank"
-                    rel="noreferrer"
+                    rel={EXTERNAL_LINK_REL}
                     className="group flex items-center gap-3 rounded-lg border border-border/60 bg-secondary/30 px-4 py-3 text-sm transition-colors hover:border-primary/40 hover:bg-secondary/60"
                   >
                     <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-primary">

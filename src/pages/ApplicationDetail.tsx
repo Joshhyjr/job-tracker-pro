@@ -11,6 +11,7 @@ import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { updateApplication, deleteApplication, generateId, getPreferredResponseStatusOrder } from "@/lib/storage";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { EXTERNAL_LINK_REL } from "@/lib/security";
 import { formatDisplayDate } from "@/lib/utils";
 import { buildQuickActionResponseStatuses, buildResponseStatusChangeApplication, buildResponseStatusOptions, syncEditedResponseStatus } from "@/lib/responseStatus";
 
@@ -136,12 +137,12 @@ export default function ApplicationDetail({ application, onBack, onUpdate }: { a
                       {f.key === "dateApplied" || f.key === "followUpDate" ? formatDisplayDate(app[f.key]) : (app[f.key] || "—")}
                     </p>
                     {f.key === "jobTitle" && jobPostingHref && (
-                      <a
-                        href={jobPostingHref}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                      >
+                        <a
+                          href={jobPostingHref}
+                          target="_blank"
+                          rel={EXTERNAL_LINK_REL}
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                        >
                         Open posting <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     )}

@@ -1,6 +1,7 @@
 import { ArrowUpRight, Github } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { EXTERNAL_LINK_REL } from "@/lib/security";
 import SectionPanel from "./SectionPanel";
 import { SectionReveal } from "./SectionReveal";
 
@@ -120,14 +121,14 @@ export default function Garage() {
                   </Button>
                 ) : (
                   <Button asChild size="sm">
-                    <a href={p.open.href} target="_blank" rel="noreferrer">
+                    <a href={p.open.href} target="_blank" rel={EXTERNAL_LINK_REL}>
                       {p.open.label ?? "Open"} <ArrowUpRight className="h-4 w-4" />
                     </a>
                   </Button>
                 )}
                 {p.source ? (
                   <Button asChild size="sm" variant="outline">
-                    <a href={p.source} target="_blank" rel="noreferrer">
+                    <a href={p.source} target="_blank" rel={EXTERNAL_LINK_REL}>
                       <Github className="h-4 w-4" /> Source
                     </a>
                   </Button>
@@ -140,7 +141,7 @@ export default function Garage() {
 
       <SectionReveal className="mt-10 text-center">
         <Button asChild size="sm" variant="ghost">
-          <a href="https://github.com/Joshhyjr" target="_blank" rel="noreferrer">
+          <a href="https://github.com/Joshhyjr" target="_blank" rel={EXTERNAL_LINK_REL}>
             See more on GitHub <ArrowUpRight className="h-4 w-4" />
           </a>
         </Button>

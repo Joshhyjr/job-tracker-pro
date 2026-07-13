@@ -6,6 +6,9 @@ const MAX_NOTES_LENGTH = 2000;
 const MAX_URL_LENGTH = 2048;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ACTIVITY_LOG_TYPES: ActivityLogEntry["type"][] = ["status_change", "follow_up", "note"];
+const SAFE_CSS_IDENTIFIER_FALLBACK = "safe";
+
+export const EXTERNAL_LINK_REL = "noopener noreferrer";
 
 export type SanitizedApplicationInput = Omit<JobApplication, "id" | "activityLog">;
 
@@ -36,6 +39,17 @@ export function sanitizeMultilineText(value: unknown, maxLength = MAX_NOTES_LENG
 export function sanitizeDateInput(value: unknown): string {
   const date = sanitizeSingleLineText(value, 10);
   return DATE_PATTERN.test(date) ? date : "";
+}
+
+export function sanitizeCssIdentifier(value: unknown, fallback = SAFE_CSS_IDENTIFIER_FALLBACK): string {
+  const normalized = sanitizeSingleLineText(value, 120).toLowerCase();
+  const sanitized = normalized
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+  // CSS variable names and attribute selectors should never be built from raw user or config strings.
+  return sanitized || fallback;
 }
 
 export function sanitizeCurrentStatus(value: unknown): CurrentStatus {

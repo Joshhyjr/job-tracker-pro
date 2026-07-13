@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EXTERNAL_LINK_REL } from "@/lib/security";
 import SectionPanel from "./SectionPanel";
 import { SectionReveal } from "./SectionReveal";
 
@@ -71,7 +72,7 @@ export default function Licenses() {
               </p>
               <div className="mt-auto pt-4">
                 <Button asChild size="sm" variant="outline" className="w-fit">
-                  <a href={c.href} target="_blank" rel="noreferrer">
+                  <a href={c.href} target="_blank" rel={EXTERNAL_LINK_REL}>
                     Verify <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 </Button>
