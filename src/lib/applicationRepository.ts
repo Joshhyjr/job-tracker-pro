@@ -107,18 +107,22 @@ async function commitOperations(
 }
 
 export async function replaceApplications(userId: string, applications: JobApplication[]): Promise<void> {
+  // Invalid workbooks can parse to zero rows; never turn that failure into an implicit full cloud deletion.
+  if (applications.length === 0) throw new Error("Cannot replace applications with an empty dataset.");
+
   const existing = await getDocs(applicationCollection(userId));
   const now = new Date().toISOString();
   const incomingIds = new Set(applications.map((application) => application.id));
   const operations: Array<{ type: "set"; application: JobApplication } | { type: "delete"; id: string }> = [];
 
-  existing.docs.forEach((item) => {
-    if (!incomingIds.has(item.id)) operations.push({ type: "delete", id: item.id });
-  });
+  // Queue replacement rows first so no stale deletion can commit unless every incoming row is durable.
   applications.forEach((application) => operations.push({
     type: "set",
     application: { ...application, createdAt: application.createdAt || now, updatedAt: now },
   }));
+  existing.docs.forEach((item) => {
+    if (!incomingIds.has(item.id)) operations.push({ type: "delete", id: item.id });
+  });
   await commitOperations(operations, userId);
 }
 
