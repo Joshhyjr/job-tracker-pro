@@ -65,6 +65,8 @@ vi.mock("maplibre-gl", () => {
 
     constructor(options: { element: HTMLButtonElement }) {
       this.element = options.element;
+      // Mirror the positioning classes that the real Marker constructor owns and app state must preserve.
+      this.element.classList.add("maplibregl-marker", "maplibregl-marker-anchor-center");
       mapLibreMocks.markers.push(this);
     }
 
@@ -154,7 +156,8 @@ describe("JobLocationsMap", () => {
       pitchWithRotate: false,
     });
     expect(map.addControl).toHaveBeenCalledOnce();
-    expect(await screen.findByRole("button", { name: "Halifax, Canada, 1 application" })).toBeInTheDocument();
+    const halifaxMarker = await screen.findByRole("button", { name: "Halifax, Canada, 1 application" });
+    expect(halifaxMarker).toHaveClass("maplibregl-marker", "maplibregl-marker-anchor-center");
     expect(mapLibreMocks.markers.some((marker) => marker.coordinates?.[0] === -63.5752 && marker.coordinates?.[1] === 44.6488)).toBe(true);
     expect(map.easeTo).toHaveBeenCalledWith(expect.objectContaining({ center: [-63.5752, 44.6488], zoom: 6 }));
     expect(screen.getByText("Drag or scroll to explore")).toBeInTheDocument();

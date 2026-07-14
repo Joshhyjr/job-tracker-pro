@@ -8,7 +8,6 @@ import { StatusBadge } from "@/components/StatusBadge";
 import type { JobApplication } from "@/lib/types";
 import { buildJobLocationGroups, buildJobLocationGroupsAsync, getApplicationLocationLabel, type JobLocationGroup, type JobLocationGroupsResult } from "@/lib/locations";
 import { getEffectiveCurrentStatus } from "@/lib/responseStatus";
-import { cn } from "@/lib/utils";
 
 // OpenFreeMap provides the detailed vector basemap without an account, API key, or billing setup.
 const OPEN_FREE_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
@@ -18,6 +17,9 @@ const INITIAL_MAP_LOAD_TIMEOUT_MS = 15_000;
 const MARKER_BASE_CLASSES = "flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-full border px-2 text-xs font-semibold shadow-md transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 const MARKER_ACTIVE_CLASSES = "scale-110 border-primary bg-primary text-primary-foreground";
 const MARKER_IDLE_CLASSES = "border-background bg-[hsl(var(--status-applied))] text-white hover:scale-110";
+const MARKER_BASE_CLASS_LIST = MARKER_BASE_CLASSES.split(" ");
+const MARKER_ACTIVE_CLASS_LIST = MARKER_ACTIVE_CLASSES.split(" ");
+const MARKER_IDLE_CLASS_LIST = MARKER_IDLE_CLASSES.split(" ");
 
 type MapLibreModule = typeof import("maplibre-gl");
 type MarkerBinding = {
@@ -28,7 +30,10 @@ type MarkerBinding = {
 };
 
 function setMarkerAppearance(element: HTMLButtonElement, active: boolean) {
-  element.className = cn(MARKER_BASE_CLASSES, active ? MARKER_ACTIVE_CLASSES : MARKER_IDLE_CLASSES);
+  // Toggle only app-owned classes so MapLibre retains its absolute positioning and anchor classes.
+  element.classList.add(...MARKER_BASE_CLASS_LIST);
+  element.classList.remove(...MARKER_ACTIVE_CLASS_LIST, ...MARKER_IDLE_CLASS_LIST);
+  element.classList.add(...(active ? MARKER_ACTIVE_CLASS_LIST : MARKER_IDLE_CLASS_LIST));
   element.setAttribute("aria-pressed", String(active));
   element.style.zIndex = active ? "2" : "1";
 }
