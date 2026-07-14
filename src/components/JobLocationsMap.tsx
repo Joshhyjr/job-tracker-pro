@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Building2, LocateFixed, MapPin, MinusCircle } from "lucide-react";
+import { AlertTriangle, Building2, LocateFixed, MapPin, Minus, MinusCircle, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { JobApplication } from "@/lib/types";
 import { buildJobLocationGroups, buildJobLocationGroupsAsync, getApplicationLocationLabel, projectGeoPoint, type JobLocationGroup, type JobLocationGroupsResult } from "@/lib/locations";
 import { getEffectiveCurrentStatus } from "@/lib/responseStatus";
 import { cn } from "@/lib/utils";
+
+// Bounded zoom steps keep the static map readable and prevent controls from pushing pins permanently out of view.
+const MIN_MAP_ZOOM = 1;
+const MAX_MAP_ZOOM = 2;
+const MAP_ZOOM_STEP = 0.25;
 
 function WorldMapBackground() {
   return (
@@ -63,7 +69,13 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
   const mappedApplicationCount = groups.reduce((total, group) => total + group.applications.length, 0);
   const [activeKey, setActiveKey] = useState<string | null>(groups[0]?.key ?? null);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [mapZoom, setMapZoom] = useState(MIN_MAP_ZOOM);
   const activeGroup = groups.find((group) => group.key === (hoveredKey ?? activeKey)) ?? groups[0];
+
+  // Clamp every zoom update so rapid or repeated clicks cannot exceed the supported map scale.
+  const changeMapZoom = (direction: 1 | -1) => {
+    setMapZoom((currentZoom) => Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, currentZoom + direction * MAP_ZOOM_STEP)));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -92,32 +104,70 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-3">
         <div className="relative aspect-[2/1] overflow-hidden rounded-lg border border-border/50 bg-white">
-          <WorldMapBackground />
-          {groups.map((group) => {
-            const point = projectGeoPoint(group.latitude, group.longitude);
-            const count = group.applications.length;
-            const isActive = activeGroup?.key === group.key;
+          {/* The image and pins share one transform layer so geographic alignment stays exact at every zoom level. */}
+          <div
+            data-testid="job-locations-map-canvas"
+            className="absolute inset-0 origin-center transition-transform duration-200 ease-out motion-reduce:transition-none"
+            style={{ transform: `scale(${mapZoom})` }}
+          >
+            <WorldMapBackground />
+            {groups.map((group) => {
+              const point = projectGeoPoint(group.latitude, group.longitude);
+              const count = group.applications.length;
+              const isActive = activeGroup?.key === group.key;
 
-            return (
-              <button
-                key={group.key}
+              return (
+                <button
+                  key={group.key}
+                  type="button"
+                  aria-label={`${group.label}, ${count} application${count === 1 ? "" : "s"}`}
+                  onMouseEnter={() => setHoveredKey(group.key)}
+                  onMouseLeave={() => setHoveredKey(null)}
+                  onFocus={() => setHoveredKey(group.key)}
+                  onBlur={() => setHoveredKey(null)}
+                  onClick={() => setActiveKey(group.key)}
+                  className={cn(
+                    "absolute flex h-8 min-w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-xs font-semibold shadow-sm transition-all",
+                    isActive ? "z-20 scale-110 border-primary bg-primary text-primary-foreground" : "z-10 border-background bg-[hsl(var(--status-applied))] text-white hover:scale-110",
+                  )}
+                  style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                >
+                  {count}
+                </button>
+              );
+            })}
+          </div>
+          {groups.length > 0 && (
+            <div className="absolute right-3 top-3 z-30 flex items-center gap-1 rounded-md border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm" role="group" aria-label="Map zoom controls">
+              <Button
                 type="button"
-                aria-label={`${group.label}, ${count} application${count === 1 ? "" : "s"}`}
-                onMouseEnter={() => setHoveredKey(group.key)}
-                onMouseLeave={() => setHoveredKey(null)}
-                onFocus={() => setHoveredKey(group.key)}
-                onBlur={() => setHoveredKey(null)}
-                onClick={() => setActiveKey(group.key)}
-                className={cn(
-                  "absolute flex h-8 min-w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-xs font-semibold shadow-sm transition-all",
-                  isActive ? "z-20 scale-110 border-primary bg-primary text-primary-foreground" : "z-10 border-background bg-[hsl(var(--status-applied))] text-white hover:scale-110",
-                )}
-                style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Zoom out"
+                title="Zoom out"
+                disabled={mapZoom <= MIN_MAP_ZOOM}
+                onClick={() => changeMapZoom(-1)}
               >
-                {count}
-              </button>
-            );
-          })}
+                <Minus className="h-4 w-4" />
+              </Button>
+              <span className="w-11 text-center text-xs font-medium tabular-nums" aria-live="polite">
+                {Math.round(mapZoom * 100)}%
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Zoom in"
+                title="Zoom in"
+                disabled={mapZoom >= MAX_MAP_ZOOM}
+                onClick={() => changeMapZoom(1)}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
           {groups.length === 0 && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center">
               <MapPin className="h-8 w-8 text-muted-foreground" />
