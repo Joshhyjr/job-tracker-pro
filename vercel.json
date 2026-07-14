@@ -17,7 +17,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://apis.google.com https://www.gstatic.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://cloudflareinsights.com http://localhost:11434 http://127.0.0.1:11434; frame-src https://job-tracker-pro-39f48.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+          "value": "default-src 'self'; script-src 'self' https://apis.google.com https://www.gstatic.com https://static.cloudflareinsights.com; worker-src 'self' blob:; child-src blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://lh3.googleusercontent.com https://tiles.openfreemap.org; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://cloudflareinsights.com https://tiles.openfreemap.org http://localhost:11434 http://127.0.0.1:11434; frame-src https://job-tracker-pro-39f48.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
         }
       ]
     }

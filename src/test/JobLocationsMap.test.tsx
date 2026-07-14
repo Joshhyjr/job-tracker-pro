@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { JobLocationsMap } from "@/components/JobLocationsMap";
@@ -18,6 +18,8 @@ const mapLibreMocks = vi.hoisted(() => ({
     coordinates: [number, number] | null;
     remove: ReturnType<typeof vi.fn>;
   }>,
+  autoLoad: true,
+  initialErrorListeners: [] as Array<() => void>,
 }));
 
 vi.mock("maplibre-gl", () => {
@@ -30,6 +32,19 @@ vi.mock("maplibre-gl", () => {
     remove = vi.fn();
     touchZoomRotate = { disableRotation: vi.fn() };
 
+    on(event: string, callback: () => void) {
+      if (event === "error") mapLibreMocks.initialErrorListeners.push(callback);
+      return this;
+    }
+
+    off(event: string, callback: () => void) {
+      if (event === "error") {
+        const listenerIndex = mapLibreMocks.initialErrorListeners.indexOf(callback);
+        if (listenerIndex >= 0) mapLibreMocks.initialErrorListeners.splice(listenerIndex, 1);
+      }
+      return this;
+    }
+
     constructor(options: Record<string, unknown>) {
       this.options = options;
       this.container = options.container as HTMLElement;
@@ -38,7 +53,7 @@ vi.mock("maplibre-gl", () => {
 
     once(event: string, callback: () => void) {
       // MapLibre's load event is asynchronous; mirror that timing so React effects settle naturally.
-      if (event === "load") queueMicrotask(callback);
+      if (event === "load" && mapLibreMocks.autoLoad) queueMicrotask(callback);
       return this;
     }
   }
@@ -118,6 +133,8 @@ describe("JobLocationsMap", () => {
   beforeEach(() => {
     mapLibreMocks.maps.length = 0;
     mapLibreMocks.markers.length = 0;
+    mapLibreMocks.autoLoad = true;
+    mapLibreMocks.initialErrorListeners.length = 0;
   });
 
   it("uses MapLibre with the free OpenFreeMap style and native controls", async () => {
@@ -161,5 +178,23 @@ describe("JobLocationsMap", () => {
     expect(screen.getByText("London, United Kingdom")).toBeInTheDocument();
     expect(screen.getByText("London Company")).toBeInTheDocument();
     expect(londonMarker).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("replaces the loading overlay when MapLibre reports an initial error", async () => {
+    mapLibreMocks.autoLoad = false;
+    render(
+      <MemoryRouter>
+        <JobLocationsMap applications={[mappedApplication]} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(mapLibreMocks.initialErrorListeners).toHaveLength(1));
+    expect(screen.getByText("Loading detailed map…")).toBeInTheDocument();
+
+    // CSP, worker, and style-fetch failures arrive asynchronously through MapLibre's error event.
+    act(() => mapLibreMocks.initialErrorListeners[0]());
+
+    expect(screen.queryByText("Loading detailed map…")).not.toBeInTheDocument();
+    expect(screen.getByText("The detailed map could not be loaded. Your saved job locations are unchanged.")).toBeInTheDocument();
   });
 });

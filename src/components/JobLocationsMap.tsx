@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 const OPEN_FREE_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const DEFAULT_MAP_CENTER: [number, number] = [10, 20];
 const DEFAULT_MAP_ZOOM = 1.25;
+const INITIAL_MAP_LOAD_TIMEOUT_MS = 15_000;
 const MARKER_BASE_CLASSES = "flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-full border px-2 text-xs font-semibold shadow-md transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 const MARKER_ACTIVE_CLASSES = "scale-110 border-primary bg-primary text-primary-foreground";
 const MARKER_IDLE_CLASSES = "border-background bg-[hsl(var(--status-applied))] text-white hover:scale-110";
@@ -99,6 +100,22 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
   useEffect(() => {
     let cancelled = false;
     let map: MapLibreMap | null = null;
+    let initialErrorHandler: (() => void) | null = null;
+    let loadTimeoutId: number | null = null;
+
+    const clearLoadTimeout = () => {
+      if (loadTimeoutId !== null) window.clearTimeout(loadTimeoutId);
+      loadTimeoutId = null;
+    };
+
+    const markInitialLoadFailed = () => {
+      clearLoadTimeout();
+      if (map && initialErrorHandler) map.off("error", initialErrorHandler);
+      if (!cancelled) {
+        setMapReady(false);
+        setMapError(true);
+      }
+    };
 
     const initializeMap = async () => {
       try {
@@ -120,11 +137,20 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
         mapRef.current = map;
         map.addControl(new maplibre.NavigationControl({ showCompass: false, showZoom: true }), "top-right");
         map.touchZoomRotate.disableRotation();
+        // Surface asynchronous style, tile, CSP, and worker failures instead of leaving the loading overlay indefinitely.
+        initialErrorHandler = markInitialLoadFailed;
+        map.on("error", initialErrorHandler);
+        loadTimeoutId = window.setTimeout(markInitialLoadFailed, INITIAL_MAP_LOAD_TIMEOUT_MS);
         map.once("load", () => {
-          if (!cancelled) setMapReady(true);
+          clearLoadTimeout();
+          if (map && initialErrorHandler) map.off("error", initialErrorHandler);
+          if (!cancelled) {
+            setMapError(false);
+            setMapReady(true);
+          }
         });
       } catch {
-        if (!cancelled) setMapError(true);
+        markInitialLoadFailed();
       }
     };
 
@@ -132,6 +158,8 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
 
     return () => {
       cancelled = true;
+      clearLoadTimeout();
+      if (map && initialErrorHandler) map.off("error", initialErrorHandler);
       map?.remove();
       mapRef.current = null;
       mapLibreModuleRef.current = null;
