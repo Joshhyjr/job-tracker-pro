@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Building2, LocateFixed, MapPin, Minus, MinusCircle, Plus } from "lucide-react";
+import { AlertTriangle, Building2, LocateFixed, MapPin, Minus, MinusCircle, Move, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -13,6 +13,10 @@ import { cn } from "@/lib/utils";
 const MIN_MAP_ZOOM = 1;
 const MAX_MAP_ZOOM = 2;
 const MAP_ZOOM_STEP = 0.25;
+const DRAG_THRESHOLD_PX = 3;
+
+type MapPan = { x: number; y: number };
+type MapDragStart = MapPan & { pointerId: number; clientX: number; clientY: number };
 
 function WorldMapBackground() {
   return (
@@ -70,11 +74,84 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
   const [activeKey, setActiveKey] = useState<string | null>(groups[0]?.key ?? null);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [mapZoom, setMapZoom] = useState(MIN_MAP_ZOOM);
+  const [mapPan, setMapPan] = useState<MapPan>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const mapViewportRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef<MapDragStart | null>(null);
+  const didDragRef = useRef(false);
+  const suppressClickUntilRef = useRef(0);
   const activeGroup = groups.find((group) => group.key === (hoveredKey ?? activeKey)) ?? groups[0];
 
-  // Clamp every zoom update so rapid or repeated clicks cannot exceed the supported map scale.
+  // Limit panning to the scaled overflow so the map always continues covering its viewport.
+  const clampMapPan = (pan: MapPan, zoom: number): MapPan => {
+    const viewport = mapViewportRef.current?.getBoundingClientRect();
+    if (!viewport || zoom <= MIN_MAP_ZOOM) return { x: 0, y: 0 };
+
+    const maxX = (viewport.width * (zoom - MIN_MAP_ZOOM)) / 2;
+    const maxY = (viewport.height * (zoom - MIN_MAP_ZOOM)) / 2;
+    return {
+      x: Math.min(maxX, Math.max(-maxX, pan.x)),
+      y: Math.min(maxY, Math.max(-maxY, pan.y)),
+    };
+  };
+
+  // Clamp every zoom update and recenter axes that no longer have scaled overflow.
   const changeMapZoom = (direction: 1 | -1) => {
-    setMapZoom((currentZoom) => Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, currentZoom + direction * MAP_ZOOM_STEP)));
+    const nextZoom = Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, mapZoom + direction * MAP_ZOOM_STEP));
+    setMapZoom(nextZoom);
+    setMapPan((currentPan) => clampMapPan(currentPan, nextZoom));
+  };
+
+  const handleMapPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const startedOnControls = event.target instanceof Element && event.target.closest("[data-map-zoom-controls]");
+    if (mapZoom <= MIN_MAP_ZOOM || event.button !== 0 || startedOnControls) return;
+
+    didDragRef.current = false;
+    dragStartRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      ...mapPan,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsDragging(true);
+  };
+
+  const handleMapPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragStart = dragStartRef.current;
+    if (!dragStart || dragStart.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - dragStart.clientX;
+    const deltaY = event.clientY - dragStart.clientY;
+    if (!didDragRef.current && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
+
+    didDragRef.current = true;
+    event.preventDefault();
+    setMapPan(clampMapPan({ x: dragStart.x + deltaX, y: dragStart.y + deltaY }, mapZoom));
+  };
+
+  const finishMapDrag = (event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
+    if (dragStartRef.current?.pointerId !== event.pointerId) return;
+
+    if (!cancelled && didDragRef.current) {
+      // Ignore the synthetic click emitted immediately after a completed drag, without blocking later pin clicks.
+      suppressClickUntilRef.current = Date.now() + 100;
+    }
+    dragStartRef.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    setIsDragging(false);
+  };
+
+  const handleMapClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const clickedControls = event.target instanceof Element && event.target.closest("[data-map-zoom-controls]");
+    if (clickedControls) {
+      suppressClickUntilRef.current = 0;
+      return;
+    }
+    if (Date.now() >= suppressClickUntilRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressClickUntilRef.current = 0;
   };
 
   useEffect(() => {
@@ -103,12 +180,29 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-3">
-        <div className="relative aspect-[2/1] overflow-hidden rounded-lg border border-border/50 bg-white">
+        <div
+          ref={mapViewportRef}
+          data-testid="job-locations-map-viewport"
+          role="region"
+          aria-label="Interactive job locations map"
+          onPointerDown={handleMapPointerDown}
+          onPointerMove={handleMapPointerMove}
+          onPointerUp={(event) => finishMapDrag(event)}
+          onPointerCancel={(event) => finishMapDrag(event, true)}
+          onClickCapture={handleMapClickCapture}
+          className={cn(
+            "relative aspect-[2/1] select-none overflow-hidden rounded-lg border border-border/50 bg-white",
+            mapZoom > MIN_MAP_ZOOM && (isDragging ? "cursor-grabbing touch-none" : "cursor-grab touch-none"),
+          )}
+        >
           {/* The image and pins share one transform layer so geographic alignment stays exact at every zoom level. */}
           <div
             data-testid="job-locations-map-canvas"
-            className="absolute inset-0 origin-center transition-transform duration-200 ease-out motion-reduce:transition-none"
-            style={{ transform: `scale(${mapZoom})` }}
+            className={cn(
+              "absolute inset-0 origin-center ease-out motion-reduce:transition-none",
+              !isDragging && "transition-transform duration-200",
+            )}
+            style={{ transform: `translate3d(${mapPan.x}px, ${mapPan.y}px, 0) scale(${mapZoom})` }}
           >
             <WorldMapBackground />
             {groups.map((group) => {
@@ -138,7 +232,7 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
             })}
           </div>
           {groups.length > 0 && (
-            <div className="absolute right-3 top-3 z-30 flex items-center gap-1 rounded-md border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm" role="group" aria-label="Map zoom controls">
+            <div data-map-zoom-controls className="absolute right-3 top-3 z-30 flex items-center gap-1 rounded-md border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm" role="group" aria-label="Map zoom controls">
               <Button
                 type="button"
                 variant="ghost"
@@ -178,6 +272,9 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1"><LocateFixed className="h-3.5 w-3.5" /> {groups.length} location{groups.length === 1 ? "" : "s"}</span>
           <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {mappedApplicationCount} pinned job{mappedApplicationCount === 1 ? "" : "s"}</span>
+          {groups.length > 0 && (
+            <span className="inline-flex items-center gap-1"><Move className="h-3.5 w-3.5" /> Zoom in, then drag to explore</span>
+          )}
           {ignored.length > 0 && (
             <span className="inline-flex items-center gap-1"><MinusCircle className="h-3.5 w-3.5" /> {ignored.length} remote/blank ignored</span>
           )}
