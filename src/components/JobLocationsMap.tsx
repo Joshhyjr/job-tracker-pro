@@ -1,31 +1,43 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Building2, LocateFixed, MapPin, Minus, MinusCircle, Move, Plus } from "lucide-react";
+import { AlertTriangle, Building2, LocateFixed, MapPin, MinusCircle, Move } from "lucide-react";
+import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { JobApplication } from "@/lib/types";
-import { buildJobLocationGroups, buildJobLocationGroupsAsync, getApplicationLocationLabel, projectGeoPoint, type JobLocationGroup, type JobLocationGroupsResult } from "@/lib/locations";
+import { buildJobLocationGroups, buildJobLocationGroupsAsync, getApplicationLocationLabel, type JobLocationGroup, type JobLocationGroupsResult } from "@/lib/locations";
 import { getEffectiveCurrentStatus } from "@/lib/responseStatus";
 import { cn } from "@/lib/utils";
 
-// Bounded zoom steps keep the static map readable and prevent controls from pushing pins permanently out of view.
-const MIN_MAP_ZOOM = 1;
-const MAX_MAP_ZOOM = 2;
-const MAP_ZOOM_STEP = 0.25;
-const DRAG_THRESHOLD_PX = 3;
+// OpenFreeMap provides the detailed vector basemap without an account, API key, or billing setup.
+const OPEN_FREE_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+const DEFAULT_MAP_CENTER: [number, number] = [10, 20];
+const DEFAULT_MAP_ZOOM = 1.25;
+const MARKER_BASE_CLASSES = "flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-full border px-2 text-xs font-semibold shadow-md transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+const MARKER_ACTIVE_CLASSES = "scale-110 border-primary bg-primary text-primary-foreground";
+const MARKER_IDLE_CLASSES = "border-background bg-[hsl(var(--status-applied))] text-white hover:scale-110";
 
-type MapPan = { x: number; y: number };
-type MapDragStart = MapPan & { pointerId: number; clientX: number; clientY: number };
+type MapLibreModule = typeof import("maplibre-gl");
+type MarkerBinding = {
+  key: string;
+  element: HTMLButtonElement;
+  marker: MapLibreMarker;
+  removeListeners: () => void;
+};
 
-function WorldMapBackground() {
-  return (
-    <div className="absolute inset-0 bg-white" aria-hidden="true">
-      {/* Public-domain Natural Earth equirectangular map; object-fill keeps pins aligned to percentage projection. */}
-      <img src="/worldmap-location-ned-50m.svg" alt="" className="h-full w-full object-fill" draggable={false} />
-      <div className="absolute inset-0 bg-background/10 mix-blend-multiply dark:bg-background/20" />
-    </div>
-  );
+function setMarkerAppearance(element: HTMLButtonElement, active: boolean) {
+  element.className = cn(MARKER_BASE_CLASSES, active ? MARKER_ACTIVE_CLASSES : MARKER_IDLE_CLASSES);
+  element.setAttribute("aria-pressed", String(active));
+  element.style.zIndex = active ? "2" : "1";
+}
+
+function removeMarkerBindings(bindings: MarkerBinding[]) {
+  // Explicit listener cleanup keeps marker replacement safe when async location resolution updates the groups.
+  bindings.forEach(({ marker, removeListeners }) => {
+    removeListeners();
+    marker.remove();
+  });
 }
 
 function LocationDetails({ group }: { group: JobLocationGroup }) {
@@ -73,86 +85,58 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
   const mappedApplicationCount = groups.reduce((total, group) => total + group.applications.length, 0);
   const [activeKey, setActiveKey] = useState<string | null>(groups[0]?.key ?? null);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-  const [mapZoom, setMapZoom] = useState(MIN_MAP_ZOOM);
-  const [mapPan, setMapPan] = useState<MapPan>({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const mapViewportRef = useRef<HTMLDivElement>(null);
-  const dragStartRef = useRef<MapDragStart | null>(null);
-  const didDragRef = useRef(false);
-  const suppressClickUntilRef = useRef(0);
-  const activeGroup = groups.find((group) => group.key === (hoveredKey ?? activeKey)) ?? groups[0];
+  const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState(false);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const mapLibreModuleRef = useRef<MapLibreModule | null>(null);
+  const markerBindingsRef = useRef<MarkerBinding[]>([]);
+  const selectedKey = hoveredKey ?? activeKey;
+  const selectedKeyRef = useRef(selectedKey);
+  selectedKeyRef.current = selectedKey;
+  const activeGroup = groups.find((group) => group.key === selectedKey) ?? groups[0];
 
-  // Limit panning to the scaled overflow so the map always continues covering its viewport.
-  const clampMapPan = (pan: MapPan, zoom: number): MapPan => {
-    const viewport = mapViewportRef.current?.getBoundingClientRect();
-    if (!viewport || zoom <= MIN_MAP_ZOOM) return { x: 0, y: 0 };
+  useEffect(() => {
+    let cancelled = false;
+    let map: MapLibreMap | null = null;
 
-    const maxX = (viewport.width * (zoom - MIN_MAP_ZOOM)) / 2;
-    const maxY = (viewport.height * (zoom - MIN_MAP_ZOOM)) / 2;
-    return {
-      x: Math.min(maxX, Math.max(-maxX, pan.x)),
-      y: Math.min(maxY, Math.max(-maxY, pan.y)),
+    const initializeMap = async () => {
+      try {
+        const maplibre = await import("maplibre-gl");
+        if (cancelled || !mapContainerRef.current) return;
+
+        mapLibreModuleRef.current = maplibre;
+        map = new maplibre.Map({
+          container: mapContainerRef.current,
+          style: OPEN_FREE_MAP_STYLE_URL,
+          center: DEFAULT_MAP_CENTER,
+          zoom: DEFAULT_MAP_ZOOM,
+          minZoom: 1,
+          maxZoom: 18,
+          attributionControl: true,
+          dragRotate: false,
+          pitchWithRotate: false,
+        });
+        mapRef.current = map;
+        map.addControl(new maplibre.NavigationControl({ showCompass: false, showZoom: true }), "top-right");
+        map.touchZoomRotate.disableRotation();
+        map.once("load", () => {
+          if (!cancelled) setMapReady(true);
+        });
+      } catch {
+        if (!cancelled) setMapError(true);
+      }
     };
-  };
 
-  // Clamp every zoom update and recenter axes that no longer have scaled overflow.
-  const changeMapZoom = (direction: 1 | -1) => {
-    const nextZoom = Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, mapZoom + direction * MAP_ZOOM_STEP));
-    setMapZoom(nextZoom);
-    setMapPan((currentPan) => clampMapPan(currentPan, nextZoom));
-  };
+    void initializeMap();
 
-  const handleMapPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const startedOnControls = event.target instanceof Element && event.target.closest("[data-map-zoom-controls]");
-    if (mapZoom <= MIN_MAP_ZOOM || event.button !== 0 || startedOnControls) return;
-
-    didDragRef.current = false;
-    dragStartRef.current = {
-      pointerId: event.pointerId,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      ...mapPan,
+    return () => {
+      cancelled = true;
+      map?.remove();
+      mapRef.current = null;
+      mapLibreModuleRef.current = null;
     };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    setIsDragging(true);
-  };
-
-  const handleMapPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const dragStart = dragStartRef.current;
-    if (!dragStart || dragStart.pointerId !== event.pointerId) return;
-
-    const deltaX = event.clientX - dragStart.clientX;
-    const deltaY = event.clientY - dragStart.clientY;
-    if (!didDragRef.current && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
-
-    didDragRef.current = true;
-    event.preventDefault();
-    setMapPan(clampMapPan({ x: dragStart.x + deltaX, y: dragStart.y + deltaY }, mapZoom));
-  };
-
-  const finishMapDrag = (event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
-    if (dragStartRef.current?.pointerId !== event.pointerId) return;
-
-    if (!cancelled && didDragRef.current) {
-      // Ignore the synthetic click emitted immediately after a completed drag, without blocking later pin clicks.
-      suppressClickUntilRef.current = Date.now() + 100;
-    }
-    dragStartRef.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    setIsDragging(false);
-  };
-
-  const handleMapClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
-    const clickedControls = event.target instanceof Element && event.target.closest("[data-map-zoom-controls]");
-    if (clickedControls) {
-      suppressClickUntilRef.current = 0;
-      return;
-    }
-    if (Date.now() >= suppressClickUntilRef.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-    suppressClickUntilRef.current = 0;
-  };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,93 +161,107 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
     }
   }, [activeKey, groups]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    const maplibre = mapLibreModuleRef.current;
+    if (!mapReady || !map || !maplibre) return;
+
+    const bindings: MarkerBinding[] = groups.map((group) => {
+      const count = group.applications.length;
+      const element = document.createElement("button");
+      element.type = "button";
+      element.textContent = String(count);
+      element.title = group.label;
+      element.setAttribute("aria-label", `${group.label}, ${count} application${count === 1 ? "" : "s"}`);
+      setMarkerAppearance(element, group.key === selectedKeyRef.current);
+
+      const handleClick = (event: MouseEvent) => {
+        event.stopPropagation();
+        setActiveKey(group.key);
+      };
+      const handleMouseEnter = () => setHoveredKey(group.key);
+      const handleMouseLeave = () => setHoveredKey(null);
+      const handleFocus = () => setHoveredKey(group.key);
+      const handleBlur = () => setHoveredKey(null);
+
+      element.addEventListener("click", handleClick);
+      element.addEventListener("mouseenter", handleMouseEnter);
+      element.addEventListener("mouseleave", handleMouseLeave);
+      element.addEventListener("focus", handleFocus);
+      element.addEventListener("blur", handleBlur);
+
+      const marker = new maplibre.Marker({ element, anchor: "center" })
+        .setLngLat([group.longitude, group.latitude])
+        .addTo(map);
+
+      return {
+        key: group.key,
+        element,
+        marker,
+        removeListeners: () => {
+          element.removeEventListener("click", handleClick);
+          element.removeEventListener("mouseenter", handleMouseEnter);
+          element.removeEventListener("mouseleave", handleMouseLeave);
+          element.removeEventListener("focus", handleFocus);
+          element.removeEventListener("blur", handleBlur);
+        },
+      };
+    });
+
+    markerBindingsRef.current = bindings;
+
+    // Fit all job locations into view while retaining useful street-level detail for a single location.
+    if (groups.length === 1) {
+      const group = groups[0];
+      map.easeTo({
+        center: [group.longitude, group.latitude],
+        zoom: group.source === "country" ? 3 : 6,
+        duration: 500,
+      });
+    } else if (groups.length > 1) {
+      const bounds = new maplibre.LngLatBounds();
+      groups.forEach((group) => bounds.extend([group.longitude, group.latitude]));
+      map.fitBounds(bounds, { padding: 52, maxZoom: 7, duration: 500 });
+    } else {
+      map.easeTo({ center: DEFAULT_MAP_CENTER, zoom: DEFAULT_MAP_ZOOM, duration: 0 });
+    }
+
+    return () => {
+      removeMarkerBindings(bindings);
+      if (markerBindingsRef.current === bindings) markerBindingsRef.current = [];
+    };
+  }, [groups, mapReady]);
+
+  useEffect(() => {
+    markerBindingsRef.current.forEach(({ key, element }) => {
+      setMarkerAppearance(element, key === selectedKey);
+    });
+  }, [selectedKey]);
+
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-3">
-        <div
-          ref={mapViewportRef}
-          data-testid="job-locations-map-viewport"
-          role="region"
-          aria-label="Interactive job locations map"
-          onPointerDown={handleMapPointerDown}
-          onPointerMove={handleMapPointerMove}
-          onPointerUp={(event) => finishMapDrag(event)}
-          onPointerCancel={(event) => finishMapDrag(event, true)}
-          onClickCapture={handleMapClickCapture}
-          className={cn(
-            "relative aspect-[2/1] select-none overflow-hidden rounded-lg border border-border/50 bg-white",
-            mapZoom > MIN_MAP_ZOOM && (isDragging ? "cursor-grabbing touch-none" : "cursor-grab touch-none"),
-          )}
-        >
-          {/* The image and pins share one transform layer so geographic alignment stays exact at every zoom level. */}
+        <div className="job-locations-map relative aspect-[2/1] overflow-hidden rounded-lg border border-border/50 bg-muted/30">
           <div
+            ref={mapContainerRef}
             data-testid="job-locations-map-canvas"
-            className={cn(
-              "absolute inset-0 origin-center ease-out motion-reduce:transition-none",
-              !isDragging && "transition-transform duration-200",
-            )}
-            style={{ transform: `translate3d(${mapPan.x}px, ${mapPan.y}px, 0) scale(${mapZoom})` }}
-          >
-            <WorldMapBackground />
-            {groups.map((group) => {
-              const point = projectGeoPoint(group.latitude, group.longitude);
-              const count = group.applications.length;
-              const isActive = activeGroup?.key === group.key;
-
-              return (
-                <button
-                  key={group.key}
-                  type="button"
-                  aria-label={`${group.label}, ${count} application${count === 1 ? "" : "s"}`}
-                  onMouseEnter={() => setHoveredKey(group.key)}
-                  onMouseLeave={() => setHoveredKey(null)}
-                  onFocus={() => setHoveredKey(group.key)}
-                  onBlur={() => setHoveredKey(null)}
-                  onClick={() => setActiveKey(group.key)}
-                  className={cn(
-                    "absolute flex h-8 min-w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-xs font-semibold shadow-sm transition-all",
-                    isActive ? "z-20 scale-110 border-primary bg-primary text-primary-foreground" : "z-10 border-background bg-[hsl(var(--status-applied))] text-white hover:scale-110",
-                  )}
-                  style={{ left: `${point.x}%`, top: `${point.y}%` }}
-                >
-                  {count}
-                </button>
-              );
-            })}
-          </div>
-          {groups.length > 0 && (
-            <div data-map-zoom-controls className="absolute right-3 top-3 z-30 flex items-center gap-1 rounded-md border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm" role="group" aria-label="Map zoom controls">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                aria-label="Zoom out"
-                title="Zoom out"
-                disabled={mapZoom <= MIN_MAP_ZOOM}
-                onClick={() => changeMapZoom(-1)}
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
-              <span className="w-11 text-center text-xs font-medium tabular-nums" aria-live="polite">
-                {Math.round(mapZoom * 100)}%
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                aria-label="Zoom in"
-                title="Zoom in"
-                disabled={mapZoom >= MAX_MAP_ZOOM}
-                onClick={() => changeMapZoom(1)}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
+            role="region"
+            aria-label="Interactive job locations map"
+            className="absolute inset-0"
+          />
+          {!mapReady && !mapError && groups.length > 0 && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 text-sm text-muted-foreground backdrop-blur-[1px]">
+              Loading detailed map…
             </div>
           )}
-          {groups.length === 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center">
+          {mapError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90 p-8 text-center">
+              <AlertTriangle className="h-8 w-8 text-muted-foreground" />
+              <p className="max-w-sm text-sm text-muted-foreground">The detailed map could not be loaded. Your saved job locations are unchanged.</p>
+            </div>
+          )}
+          {groups.length === 0 && !mapError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 p-8 text-center">
               <MapPin className="h-8 w-8 text-muted-foreground" />
               <p className="max-w-sm text-sm text-muted-foreground">No applications have enough city, country, or coordinate data to place on the map yet.</p>
             </div>
@@ -273,7 +271,7 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
           <span className="inline-flex items-center gap-1"><LocateFixed className="h-3.5 w-3.5" /> {groups.length} location{groups.length === 1 ? "" : "s"}</span>
           <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {mappedApplicationCount} pinned job{mappedApplicationCount === 1 ? "" : "s"}</span>
           {groups.length > 0 && (
-            <span className="inline-flex items-center gap-1"><Move className="h-3.5 w-3.5" /> Zoom in, then drag to explore</span>
+            <span className="inline-flex items-center gap-1"><Move className="h-3.5 w-3.5" /> Drag or scroll to explore</span>
           )}
           {ignored.length > 0 && (
             <span className="inline-flex items-center gap-1"><MinusCircle className="h-3.5 w-3.5" /> {ignored.length} remote/blank ignored</span>

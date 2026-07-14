@@ -1,8 +1,93 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { JobLocationsMap } from "@/components/JobLocationsMap";
 import type { JobApplication } from "@/lib/types";
+
+const mapLibreMocks = vi.hoisted(() => ({
+  maps: [] as Array<{
+    options: Record<string, unknown>;
+    container: HTMLElement;
+    addControl: ReturnType<typeof vi.fn>;
+    easeTo: ReturnType<typeof vi.fn>;
+    fitBounds: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  }>,
+  markers: [] as Array<{
+    element: HTMLButtonElement;
+    coordinates: [number, number] | null;
+    remove: ReturnType<typeof vi.fn>;
+  }>,
+}));
+
+vi.mock("maplibre-gl", () => {
+  class MockMap {
+    options: Record<string, unknown>;
+    container: HTMLElement;
+    addControl = vi.fn();
+    easeTo = vi.fn();
+    fitBounds = vi.fn();
+    remove = vi.fn();
+    touchZoomRotate = { disableRotation: vi.fn() };
+
+    constructor(options: Record<string, unknown>) {
+      this.options = options;
+      this.container = options.container as HTMLElement;
+      mapLibreMocks.maps.push(this);
+    }
+
+    once(event: string, callback: () => void) {
+      // MapLibre's load event is asynchronous; mirror that timing so React effects settle naturally.
+      if (event === "load") queueMicrotask(callback);
+      return this;
+    }
+  }
+
+  class MockMarker {
+    element: HTMLButtonElement;
+    coordinates: [number, number] | null = null;
+    remove = vi.fn(() => this.element.remove());
+
+    constructor(options: { element: HTMLButtonElement }) {
+      this.element = options.element;
+      mapLibreMocks.markers.push(this);
+    }
+
+    setLngLat(coordinates: [number, number]) {
+      this.coordinates = coordinates;
+      return this;
+    }
+
+    addTo(map: MockMap) {
+      map.container.appendChild(this.element);
+      return this;
+    }
+  }
+
+  class MockNavigationControl {
+    options: Record<string, unknown>;
+
+    constructor(options: Record<string, unknown>) {
+      this.options = options;
+    }
+  }
+
+  class MockLngLatBounds {
+    coordinates: Array<[number, number]> = [];
+
+    extend(coordinates: [number, number]) {
+      this.coordinates.push(coordinates);
+      return this;
+    }
+  }
+
+  return {
+    Map: MockMap,
+    Marker: MockMarker,
+    NavigationControl: MockNavigationControl,
+    LngLatBounds: MockLngLatBounds,
+  };
+});
 
 const mappedApplication: JobApplication = {
   id: "application-1",
@@ -20,81 +105,61 @@ const mappedApplication: JobApplication = {
   activityLog: [],
 };
 
+const londonApplication: JobApplication = {
+  ...mappedApplication,
+  id: "application-2",
+  companyName: "London Company",
+  location: "London, United Kingdom",
+  latitude: 51.5072,
+  longitude: -0.1276,
+};
+
 describe("JobLocationsMap", () => {
-  it("zooms the map canvas in and out while respecting its limits", async () => {
-    render(
-      <MemoryRouter>
-        <JobLocationsMap applications={[mappedApplication]} />
-      </MemoryRouter>,
-    );
-
-    const mapCanvas = screen.getByTestId("job-locations-map-canvas");
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
-    const zoomOut = screen.getByRole("button", { name: "Zoom out" });
-
-    // Flush the component's asynchronous location enhancement before exercising zoom state.
-    await act(async () => undefined);
-
-    // The default full-world view cannot zoom out past 100%.
-    expect(mapCanvas).toHaveStyle({ transform: "translate3d(0px, 0px, 0) scale(1)" });
-    expect(zoomOut).toBeDisabled();
-
-    fireEvent.click(zoomIn);
-    expect(mapCanvas).toHaveStyle({ transform: "translate3d(0px, 0px, 0) scale(1.25)" });
-    expect(screen.getByText("125%")).toBeInTheDocument();
-    expect(zoomOut).toBeEnabled();
-
-    fireEvent.click(zoomOut);
-    expect(mapCanvas).toHaveStyle({ transform: "translate3d(0px, 0px, 0) scale(1)" });
-
-    // Four steps reach the maximum supported scale and disable further zooming.
-    for (let step = 0; step < 4; step += 1) fireEvent.click(zoomIn);
-    expect(mapCanvas).toHaveStyle({ transform: "translate3d(0px, 0px, 0) scale(2)" });
-    expect(screen.getByText("200%")).toBeInTheDocument();
-    expect(zoomIn).toBeDisabled();
+  beforeEach(() => {
+    mapLibreMocks.maps.length = 0;
+    mapLibreMocks.markers.length = 0;
   });
 
-  it("pans a zoomed map by pointer drag and keeps it within the viewport", async () => {
-    render(
+  it("uses MapLibre with the free OpenFreeMap style and native controls", async () => {
+    const { unmount } = render(
       <MemoryRouter>
         <JobLocationsMap applications={[mappedApplication]} />
       </MemoryRouter>,
     );
 
-    const mapViewport = screen.getByTestId("job-locations-map-viewport");
-    const mapCanvas = screen.getByTestId("job-locations-map-canvas");
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
-    const zoomOut = screen.getByRole("button", { name: "Zoom out" });
+    await waitFor(() => expect(mapLibreMocks.maps).toHaveLength(1));
+    const map = mapLibreMocks.maps[0];
 
-    // A stable viewport size makes the pan boundary deterministic in JSDOM.
-    mapViewport.getBoundingClientRect = () => ({
-      x: 0,
-      y: 0,
-      width: 800,
-      height: 400,
-      top: 0,
-      right: 800,
-      bottom: 400,
-      left: 0,
-      toJSON: () => ({}),
+    expect(map.options).toMatchObject({
+      style: "https://tiles.openfreemap.org/styles/liberty",
+      attributionControl: true,
+      dragRotate: false,
+      pitchWithRotate: false,
     });
-    await act(async () => undefined);
+    expect(map.addControl).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("button", { name: "Halifax, Canada, 1 application" })).toBeInTheDocument();
+    expect(mapLibreMocks.markers.some((marker) => marker.coordinates?.[0] === -63.5752 && marker.coordinates?.[1] === 44.6488)).toBe(true);
+    expect(map.easeTo).toHaveBeenCalledWith(expect.objectContaining({ center: [-63.5752, 44.6488], zoom: 6 }));
+    expect(screen.getByText("Drag or scroll to explore")).toBeInTheDocument();
 
-    // The full-world view has no overflow and therefore does not start a drag.
-    fireEvent.pointerDown(mapViewport, { pointerId: 1, button: 0, clientX: 400, clientY: 200 });
-    fireEvent.pointerMove(mapViewport, { pointerId: 1, clientX: 500, clientY: 250 });
-    fireEvent.pointerUp(mapViewport, { pointerId: 1, clientX: 500, clientY: 250 });
-    expect(mapCanvas).toHaveStyle({ transform: "translate3d(0px, 0px, 0) scale(1)" });
+    unmount();
+    expect(map.remove).toHaveBeenCalledOnce();
+  });
 
-    fireEvent.click(zoomIn);
-    fireEvent.pointerDown(mapViewport, { pointerId: 2, button: 0, clientX: 400, clientY: 200 });
-    fireEvent.pointerMove(mapViewport, { pointerId: 2, clientX: 650, clientY: 350 });
-    fireEvent.pointerUp(mapViewport, { pointerId: 2, clientX: 650, clientY: 350 });
+  it("fits multiple locations and keeps marker selection connected to the details panel", async () => {
+    render(
+      <MemoryRouter>
+        <JobLocationsMap applications={[mappedApplication, londonApplication]} />
+      </MemoryRouter>,
+    );
 
-    // At 125%, the 800x400 viewport permits at most 100px horizontal and 50px vertical movement.
-    expect(mapCanvas).toHaveStyle({ transform: "translate3d(100px, 50px, 0) scale(1.25)" });
+    const londonMarker = await screen.findByRole("button", { name: "London, United Kingdom, 1 application" });
+    const map = mapLibreMocks.maps[0];
+    await waitFor(() => expect(map.fitBounds).toHaveBeenCalled());
 
-    fireEvent.click(zoomOut);
-    expect(mapCanvas).toHaveStyle({ transform: "translate3d(0px, 0px, 0) scale(1)" });
+    fireEvent.click(londonMarker);
+    expect(screen.getByText("London, United Kingdom")).toBeInTheDocument();
+    expect(screen.getByText("London Company")).toBeInTheDocument();
+    expect(londonMarker).toHaveAttribute("aria-pressed", "true");
   });
 });
