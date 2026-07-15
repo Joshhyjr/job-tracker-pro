@@ -73,7 +73,7 @@ export type StatusBreakdownItem = {
 };
 
 // Central colour mapping for all application statuses — single source of truth
-// used by the pie chart, legend, badges, recent applications list, and insights.
+// used by the dashboard bars, badges, recent applications list, and insights.
 // Keeps colours consistent across the app and readable on light + dark themes.
 const RESPONSE_STATUS_COLORS: Record<string, string> = {
   Applied: "hsl(213 90% 56%)",                // blue

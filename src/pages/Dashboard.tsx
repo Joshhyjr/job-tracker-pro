@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown, Building2, BarChart3, Timer, Lightbulb, Sparkles, Loader2 } from "lucide-react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
 import type { User } from "firebase/auth";
 import type { AiInsights } from "@/lib/aiInsights";
@@ -59,12 +59,18 @@ export default function Dashboard({ applications, isDemo = false, user }: { appl
     [applications, isDemo]
   );
 
-  const pieData = statusBreakdown.map((item) => ({
-    name: item.label,
-    value: item.count,
-    color: getResponseStatusColor(item.key),
-    key: item.key,
-  }));
+  const statusTotal = statusBreakdown.reduce((total, item) => total + item.count, 0);
+  const statusChartData = [...statusBreakdown]
+    // Largest categories come first so the horizontal bars are easy to compare at a glance.
+    .sort((a, b) => b.count - a.count)
+    .map((item) => ({
+      name: item.label,
+      value: item.count,
+      color: getResponseStatusColor(item.key),
+      key: item.key,
+      percentage: statusTotal === 0 ? 0 : Math.round((item.count / statusTotal) * 100),
+    }));
+  const maxStatusCount = Math.max(1, ...statusChartData.map((item) => item.value));
 
   // Group applications by month for the bar chart
   const monthlyData = useMemo(() => {
@@ -206,46 +212,49 @@ export default function Dashboard({ applications, isDemo = false, user }: { appl
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Status breakdown — clean card */}
+        {/* Status breakdown — direct labels and horizontal bars make close category counts easier to compare. */}
         <Card className="border-border/40 shadow-none">
-          <CardHeader><CardTitle className="text-base font-medium">Status Breakdown</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base font-medium">Status Breakdown</CardTitle>
+            <CardDescription>
+              Share of {statusTotal} {statusTotal === 1 ? "application" : "applications"} · Select a bar to filter
+            </CardDescription>
+          </CardHeader>
           <CardContent>
-            <div className="flex flex-col items-center gap-4 sm:flex-row">
-              <ResponsiveContainer width={180} height={180}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={52} outerRadius={78} dataKey="value" strokeWidth={1.5} stroke="hsl(var(--card))">
-                    {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                  {/* Glass-styled tooltip */}
-                  <Tooltip
-                    content={({ payload }) => {
-                      if (!payload?.length) return null;
-                      const d = payload[0];
-                      return (
-                        <div className="glass rounded-xl px-3 py-1.5 text-xs">
-                          <p className="font-medium">{d.name}</p>
-                          <p className="text-muted-foreground">{d.value} applications</p>
-                        </div>
-                      );
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="grid grid-cols-2 gap-1">
-                {statusBreakdown.map((item) => (
-                  <Button
-                    key={item.key}
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start gap-2 text-xs"
-                    onClick={() => navigate(`/app/applications?responseStatus=${encodeURIComponent(item.key)}`)}
-                  >
-                    <span className="h-2 w-2 rounded-full" style={{ background: getResponseStatusColor(item.key) }} />
-                    {item.label} ({item.count})
-                  </Button>
+            {statusChartData.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No application status data yet</p>
+            ) : (
+              <div className="space-y-2" role="list" aria-label="Application status breakdown">
+                {statusChartData.map((item) => (
+                  <div key={item.key} role="listitem">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-auto w-full flex-col items-stretch gap-2 whitespace-normal px-2 py-2 text-left"
+                      onClick={() => navigate(`/app/applications?responseStatus=${encodeURIComponent(item.key)}`)}
+                      aria-label={`View ${item.name} applications: ${item.value}, ${item.percentage}%`}
+                    >
+                      <span className="flex w-full items-center justify-between gap-3 text-xs">
+                        <span className="min-w-0 truncate" title={item.name}>{item.name}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                          {item.value} ({item.percentage}%)
+                        </span>
+                      </span>
+                      <span className="h-2.5 w-full overflow-hidden rounded-full bg-muted/60" aria-hidden="true">
+                        {/* Bar length is scaled to the largest category; the label reports share of all applications. */}
+                        <span
+                          className="block h-full rounded-full transition-[width] duration-300"
+                          style={{
+                            width: `${(item.value / maxStatusCount) * 100}%`,
+                            backgroundColor: item.color,
+                          }}
+                        />
+                      </span>
+                    </Button>
+                  </div>
                 ))}
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -314,7 +323,7 @@ export default function Dashboard({ applications, isDemo = false, user }: { appl
                     <p className="truncate text-xs text-muted-foreground">{app.jobTitle}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    {/* Status pill uses the central colour helper so it matches the pie + legend */}
+                    {/* Status pill uses the central colour helper so it matches the dashboard bars. */}
                     <span
                       className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium"
                       style={getResponseStatusBadgeStyle(app.responseStatus)}

@@ -9,21 +9,20 @@ const {
   generateAiInsightsWithFallbackMock,
   getLastImportMetadataMock,
   getPreferredResponseStatusOrderMock,
+  navigateMock,
 } = vi.hoisted(() => ({
   buildAiInsightSummaryMock: vi.fn(),
   generateAiInsightsWithFallbackMock: vi.fn(),
   getLastImportMetadataMock: vi.fn(),
   getPreferredResponseStatusOrderMock: vi.fn(),
+  navigateMock: vi.fn(),
 }));
 
 vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigateMock,
 }));
 
 vi.mock("recharts", () => ({
-  PieChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Pie: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Cell: () => null,
   BarChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Bar: () => null,
   XAxis: () => null,
@@ -70,6 +69,7 @@ describe("Dashboard", () => {
     generateAiInsightsWithFallbackMock.mockReset();
     getPreferredResponseStatusOrderMock.mockReturnValue([]);
     getLastImportMetadataMock.mockReset();
+    navigateMock.mockReset();
   });
 
   it("refreshes import metadata when the applications change without changing row count", () => {
@@ -115,6 +115,29 @@ describe("Dashboard", () => {
 
     // Early positive signals should count the same way in the dashboard as they do in AI summaries.
     expect(screen.getByText("Your interview rate: 67%")).toBeInTheDocument();
+  });
+
+  it("shows status counts as horizontal bars and preserves click-to-filter navigation", () => {
+    render(
+      <Dashboard
+        applications={[
+          application({ id: "app-1", responseStatus: "Interview" }),
+          application({ id: "app-2", responseStatus: "Interview" }),
+          application({ id: "app-3", responseStatus: "No Response" }),
+          application({ id: "app-4", responseStatus: "Offer" }),
+        ]}
+      />,
+    );
+
+    // Direct labels expose the exact count and share without relying on color or a hover tooltip.
+    const interviewBar = screen.getByRole("button", { name: "View Interview applications: 2, 50%" });
+    expect(screen.getByRole("button", { name: "View No Response applications: 1, 25%" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View Offer applications: 1, 25%" })).toBeInTheDocument();
+    expect(screen.getByText("Share of 4 applications · Select a bar to filter")).toBeInTheDocument();
+
+    fireEvent.click(interviewBar);
+
+    expect(navigateMock).toHaveBeenCalledWith("/app/applications?responseStatus=Interview");
   });
 
   it("uses the signed-in Firebase ID token without rendering a manual token field", async () => {
