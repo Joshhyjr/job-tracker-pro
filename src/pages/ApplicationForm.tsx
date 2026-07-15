@@ -1,4 +1,5 @@
 import { useForm } from "react-hook-form";
+import { useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useNavigate } from "react-router-dom";
@@ -74,6 +75,8 @@ export default function ApplicationForm({
 }) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const submissionInFlight = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -83,6 +86,11 @@ export default function ApplicationForm({
   const responseStatusOptions = buildResponseStatusOptions(form.watch("responseStatus"), RESPONSE_STATUSES);
 
   async function onSubmit(data: FormData) {
+    // A ref closes the same-render gap where two submit events can arrive before the disabled state is painted.
+    if (submissionInFlight.current) return;
+    submissionInFlight.current = true;
+    setIsSaving(true);
+
     // Storage performs the final sanitisation pass; future AI/API calls must stay server-side with private keys off the Vite client.
     const applicationInput: Omit<JobApplication, "id" | "activityLog"> = {
       jobTitle: data.jobTitle,
@@ -98,25 +106,37 @@ export default function ApplicationForm({
       followUpDate: data.followUpDate ?? "",
     };
 
-    if (existing) {
-      // Preserve status transitions when this reusable form is used in edit mode outside the detail page.
-      const editedApplication = buildEditedApplicationWithStatusHistory(
-        existing,
-        { ...existing, ...applicationInput },
-        generateId(),
-        new Date().toISOString(),
-      );
-      if (onUpdate) await onUpdate(editedApplication);
-      else updateLocalApplication(editedApplication);
-      toast({ title: "Updated", description: "Application updated." });
-    } else {
-      if (onCreate) await onCreate(applicationInput);
-      else addLocalApplication(applicationInput);
-      toast({ title: "Added", description: "New application added." });
+    try {
+      if (existing) {
+        // Preserve status transitions when this reusable form is used in edit mode outside the detail page.
+        const editedApplication = buildEditedApplicationWithStatusHistory(
+          existing,
+          { ...existing, ...applicationInput },
+          generateId(),
+          new Date().toISOString(),
+        );
+        if (onUpdate) await onUpdate(editedApplication);
+        else updateLocalApplication(editedApplication);
+        toast({ title: "Updated", description: "Application updated." });
+      } else {
+        if (onCreate) await onCreate(applicationInput);
+        else addLocalApplication(applicationInput);
+        toast({ title: "Added", description: "New application added." });
+      }
+      // Navigate only after Firestore confirms the write so failed saves remain visible and retryable.
+      onSaved?.();
+      navigate("/app/applications");
+    } catch {
+      // Keep the completed form in place so transient cloud failures can be retried without re-entering data.
+      toast({
+        title: existing ? "Update failed" : "Add failed",
+        description: "The application was not saved. Please retry.",
+        variant: "destructive",
+      });
+    } finally {
+      submissionInFlight.current = false;
+      setIsSaving(false);
     }
-    // Navigate only after Firestore confirms the write so failed saves remain visible and retryable.
-    onSaved?.();
-    navigate("/app/applications");
   }
 
   return (
@@ -125,7 +145,7 @@ export default function ApplicationForm({
       <Card>
         <CardContent className="pt-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" aria-busy={isSaving}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField control={form.control} name="jobTitle" render={({ field }) => (
                   <FormItem><FormLabel>Job Title</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -184,8 +204,10 @@ export default function ApplicationForm({
                 <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <div className="flex gap-3 pt-2">
-                <Button type="submit">{existing ? "Save Changes" : "Add Application"}</Button>
-                <Button type="button" variant="outline" onClick={() => navigate("/app/applications")}>Cancel</Button>
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving ? (existing ? "Saving Changes..." : "Adding Application...") : (existing ? "Save Changes" : "Add Application")}
+                </Button>
+                <Button type="button" variant="outline" disabled={isSaving} onClick={() => navigate("/app/applications")}>Cancel</Button>
               </div>
             </form>
           </Form>
