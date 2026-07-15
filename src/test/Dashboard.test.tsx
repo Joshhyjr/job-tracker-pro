@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Dashboard from "@/pages/Dashboard";
 import type { JobApplication } from "@/lib/types";
@@ -138,6 +138,15 @@ describe("Dashboard", () => {
     fireEvent.click(interviewBar);
 
     expect(navigateMock).toHaveBeenCalledWith("/app/applications?responseStatus=Interview");
+  });
+
+  it("groups recent applications below the monthly chart", () => {
+    render(<Dashboard applications={[application()]} />);
+
+    // The shared desktop column removes the empty area beneath the shorter monthly chart.
+    const activityColumn = screen.getByRole("region", { name: "Application activity" });
+    expect(within(activityColumn).getByRole("heading", { name: "Monthly Applications" })).toBeInTheDocument();
+    expect(within(activityColumn).getByRole("heading", { name: "Recent Applications" })).toBeInTheDocument();
   });
 
   it("uses the signed-in Firebase ID token without rendering a manual token field", async () => {

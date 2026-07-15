@@ -211,7 +211,7 @@ export default function Dashboard({ applications, isDemo = false, user }: { appl
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
         {/* Status breakdown — direct labels and horizontal bars make close category counts easier to compare. */}
         <Card className="border-border/40 shadow-none">
           <CardHeader>
@@ -258,90 +258,93 @@ export default function Dashboard({ applications, isDemo = false, user }: { appl
           </CardContent>
         </Card>
 
-        {/* Monthly trend — minimalist bar chart */}
-        <Card className="border-border/40 shadow-none">
-          <CardHeader><CardTitle className="text-base font-medium">Monthly Applications</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={monthlyData} barSize={18} barCategoryGap="60%">
-                {/* Subtle horizontal grid only */}
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  angle={-35}
-                  textAnchor="end"
-                  height={50}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={30}
-                />
-                {/* Glass tooltip for chart */}
-                <Tooltip
-                  cursor={{ fill: "hsl(var(--muted) / 0.2)" }}
-                  content={({ payload, label }) => {
-                    if (!payload?.length) return null;
-                    return (
-                      <div className="glass rounded-xl px-3 py-1.5 text-xs">
-                        <p className="font-medium">{label}</p>
-                        <p className="text-muted-foreground">{payload[0].value} applications</p>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+        {/* Activity cards share the right column on desktop so recent jobs fill the space below the chart. */}
+        <section className="space-y-6" aria-label="Application activity">
+          {/* Monthly trend — minimalist bar chart */}
+          <Card className="border-border/40 shadow-none">
+            <CardHeader><CardTitle className="text-base font-medium">Monthly Applications</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={monthlyData} barSize={18} barCategoryGap="60%">
+                  {/* Subtle horizontal grid only */}
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    angle={-35}
+                    textAnchor="end"
+                    height={50}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={30}
+                  />
+                  {/* Glass tooltip for chart */}
+                  <Tooltip
+                    cursor={{ fill: "hsl(var(--muted) / 0.2)" }}
+                    content={({ payload, label }) => {
+                      if (!payload?.length) return null;
+                      return (
+                        <div className="glass rounded-xl px-3 py-1.5 text-xs">
+                          <p className="font-medium">{label}</p>
+                          <p className="text-muted-foreground">{payload[0].value} applications</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
-      {/* Recent Applications — compact, minimal, clickable rows */}
-      <Card className="border-border/40 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base font-medium">Recent Applications</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentApplications.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No recent applications yet</p>
-          ) : (
-            <div className="space-y-1">
-              {recentApplications.map((app) => (
-                <button
-                  key={app.id}
-                  onClick={() => navigate(`/app/applications/${app.id}`)}
-                  className="flex w-full flex-col items-start justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{app.companyName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{app.jobTitle}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    {/* Status pill uses the central colour helper so it matches the dashboard bars. */}
-                    <span
-                      className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium"
-                      style={getResponseStatusBadgeStyle(app.responseStatus)}
+          {/* Recent Applications — compact, minimal, clickable rows */}
+          <Card className="border-border/40 shadow-none">
+            <CardHeader>
+              <CardTitle className="text-base font-medium">Recent Applications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentApplications.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent applications yet</p>
+              ) : (
+                <div className="space-y-1">
+                  {recentApplications.map((app) => (
+                    <button
+                      key={app.id}
+                      onClick={() => navigate(`/app/applications/${app.id}`)}
+                      className="flex w-full flex-col items-start justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4"
                     >
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ background: getResponseStatusColor(app.responseStatus) }}
-                      />
-                      {app.responseStatus}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{formatDisplayDate(app.dateApplied)}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{app.companyName}</p>
+                        <p className="truncate text-xs text-muted-foreground">{app.jobTitle}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        {/* Status pill uses the central colour helper so it matches the dashboard bars. */}
+                        <span
+                          className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium"
+                          style={getResponseStatusBadgeStyle(app.responseStatus)}
+                        >
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ background: getResponseStatusColor(app.responseStatus) }}
+                          />
+                          {app.responseStatus}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{formatDisplayDate(app.dateApplied)}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      </div>
 
       {/* Insights & Recommendations — deterministic signals plus hosted Gemini or local Ollama coaching */}
       {(insights.length > 0 || aiInsights || applications.length > 0) && (
