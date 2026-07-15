@@ -151,10 +151,11 @@ describe("JobLocationsMap", () => {
 
     expect(map.options).toMatchObject({
       style: "https://tiles.openfreemap.org/styles/liberty",
-      attributionControl: true,
       dragRotate: false,
       pitchWithRotate: false,
     });
+    // MapLibre v5 enables its standards-compliant attribution by default without a boolean option.
+    expect(map.options).not.toHaveProperty("attributionControl");
     expect(map.addControl).toHaveBeenCalledOnce();
     const halifaxMarker = await screen.findByRole("button", { name: "Halifax, Canada, 1 application" });
     expect(halifaxMarker).toHaveClass("maplibregl-marker", "maplibregl-marker-anchor-center");

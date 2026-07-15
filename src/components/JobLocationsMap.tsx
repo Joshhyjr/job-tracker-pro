@@ -135,7 +135,7 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
           zoom: DEFAULT_MAP_ZOOM,
           minZoom: 1,
           maxZoom: 18,
-          attributionControl: true,
+          // Omitting attributionControl preserves MapLibre's default attribution and its v5 option contract.
           dragRotate: false,
           pitchWithRotate: false,
         });
