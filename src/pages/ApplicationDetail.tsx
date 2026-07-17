@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,9 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
   const [app, setApp] = useState<JobApplication>({ ...application });
   const [editing, setEditing] = useState(false);
   const [followNote, setFollowNote] = useState("");
+  // The ref closes the same-render gap before disabled controls can block a second mutation.
+  const mutationInFlight = useRef(false);
+  const [isMutating, setIsMutating] = useState(false);
   const { toast } = useToast();
   // Imported workbooks can contain custom response stages, so keep the current value selectable while editing.
   const responseStatusOptions = buildResponseStatusOptions(app.responseStatus, RESPONSE_STATUSES);
@@ -32,14 +35,41 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
     setFollowNote("");
   }, [application]);
 
-  // Keep local state, storage, and parent data synchronized after every mutation.
-  async function persistApplication(next: JobApplication) {
-    setApp(next);
-    if (onDelete) await onUpdate(next);
-    else {
-      // The local fallback keeps this reusable page compatible with isolated previews and legacy tests.
-      updateLocalApplication(next);
-      onUpdate(next);
+  async function runExclusiveMutation(mutation: () => void | Promise<void>): Promise<boolean> {
+    // Ignore repeated clicks while the active persistence request is still unresolved.
+    if (mutationInFlight.current) return false;
+    mutationInFlight.current = true;
+    setIsMutating(true);
+    try {
+      await mutation();
+      return true;
+    } finally {
+      mutationInFlight.current = false;
+      setIsMutating(false);
+    }
+  }
+
+  // Keep optimistic detail state honest by restoring the last durable draft when persistence fails.
+  async function persistApplication(next: JobApplication): Promise<boolean> {
+    const previous = app;
+    let localFallbackWritten = false;
+
+    try {
+      return await runExclusiveMutation(async () => {
+        setApp(next);
+        if (onDelete) await onUpdate(next);
+        else {
+          // The local fallback keeps this reusable page compatible with isolated previews and legacy tests.
+          updateLocalApplication(next);
+          localFallbackWritten = true;
+          await onUpdate(next);
+        }
+      });
+    } catch (error) {
+      setApp(previous);
+      // A rejected preview callback must not leave browser storage ahead of the visible detail state.
+      if (localFallbackWritten) updateLocalApplication(previous);
+      throw error;
     }
   }
 
@@ -47,7 +77,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
     // Manual edits must produce the same durable status history as one-click Quick Actions.
     const updated = buildEditedApplicationWithStatusHistory(application, app, generateId(), new Date().toISOString());
     try {
-      await persistApplication(updated);
+      const persisted = await persistApplication(updated);
+      if (!persisted) return;
       setEditing(false);
       toast({ title: "Saved", description: "Application updated." });
     } catch {
@@ -59,7 +90,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
     // Dynamic quick actions save the response-stage label and derive the closest fixed current status.
     const updated = buildResponseStatusChangeApplication(app, responseStatus, generateId(), new Date().toISOString());
     try {
-      await persistApplication(updated);
+      const persisted = await persistApplication(updated);
+      if (!persisted) return;
       toast({ title: "Status Updated", description: `Marked as ${responseStatus}` });
     } catch {
       toast({ title: "Sync failed", description: "The status was not saved. Please retry.", variant: "destructive" });
@@ -71,7 +103,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
     const entry: ActivityLogEntry = { id: generateId(), date: new Date().toISOString(), type: "follow_up", message: followNote };
     const updated = { ...app, followUps: true, activityLog: [entry, ...app.activityLog] };
     try {
-      await persistApplication(updated);
+      const persisted = await persistApplication(updated);
+      if (!persisted) return;
       setFollowNote("");
       toast({ title: "Follow-up Added" });
     } catch {
@@ -82,8 +115,11 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
   async function handleDelete() {
     if (confirm("Are you sure you want to delete this application?")) {
       try {
-        if (onDelete) await onDelete(app.id);
-        else deleteLocalApplication(app.id);
+        const deleted = await runExclusiveMutation(async () => {
+          if (onDelete) await onDelete(app.id);
+          else deleteLocalApplication(app.id);
+        });
+        if (!deleted) return;
         onBack();
         toast({ title: "Deleted", description: "Application removed." });
       } catch {
@@ -117,7 +153,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
   const otherActivityEntries = app.activityLog.filter((entry) => entry.type !== "status_change");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" aria-busy={isMutating}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-4 w-4" /></Button>
@@ -138,11 +174,11 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
             <h2 className="text-base font-medium">Details</h2>
             <div className="flex gap-2">
               {!editing && (
-                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete} disabled={isMutating}>
                   <Trash2 className="h-3.5 w-3.5 mr-1" />Delete
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={() => editing ? save() : setEditing(true)}>
+              <Button variant="ghost" size="sm" onClick={() => editing ? save() : setEditing(true)} disabled={isMutating}>
                 {editing ? <><Save className="h-3.5 w-3.5 mr-1" />Save</> : <><Edit2 className="h-3.5 w-3.5 mr-1" />Edit</>}
               </Button>
             </div>
@@ -153,9 +189,9 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
                 <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
                 {editing ? (
                   <div className="mt-1 space-y-2">
-                    <Input value={app[f.key] ?? ""} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} />
+                    <Input value={app[f.key] ?? ""} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} disabled={isMutating} />
                     {f.key === "jobTitle" && (
-                      <Input value={app.jobLink ?? ""} onChange={(e) => setApp({ ...app, jobLink: e.target.value })} placeholder="Job posting URL" />
+                      <Input value={app.jobLink ?? ""} onChange={(e) => setApp({ ...app, jobLink: e.target.value })} placeholder="Job posting URL" disabled={isMutating} />
                     )}
                   </div>
                 ) : (
@@ -183,6 +219,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
               {editing ? (
                 <Select
                   value={app.currentStatus}
+                  disabled={isMutating}
                   onValueChange={(v) =>
                     setApp((currentApp) => {
                       const nextStatus = v as CurrentStatus;
@@ -205,6 +242,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
               {editing ? (
                 <Select
                   value={app.responseStatus}
+                  disabled={isMutating}
                   onValueChange={(v) => setApp({
                     ...app,
                     // Keep fixed current-status filters aligned when a dynamic response stage is edited manually.
@@ -221,7 +259,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-muted-foreground">Notes</label>
               {editing ? (
-                <Textarea value={app.notes} onChange={(e) => setApp({ ...app, notes: e.target.value })} className="mt-1" />
+                <Textarea value={app.notes} onChange={(e) => setApp({ ...app, notes: e.target.value })} className="mt-1" disabled={isMutating} />
               ) : <p className="mt-1 text-sm whitespace-pre-wrap">{app.notes || "—"}</p>}
             </div>
           </div>
@@ -233,7 +271,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
             <CardHeader><CardTitle className="text-base font-medium">Quick Actions</CardTitle></CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {quickActionStatuses.map((s) => (
-                <Button key={s} variant="outline" size="sm" onClick={() => changeResponseStatus(s)}>{s}</Button>
+                // Sidebar actions stay locked while editing so an unsaved field draft cannot leak into another mutation.
+                <Button key={s} variant="outline" size="sm" onClick={() => changeResponseStatus(s)} disabled={editing || isMutating}>{s}</Button>
               ))}
             </CardContent>
           </Card>
@@ -241,8 +280,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
           <Card className="border-border/40 shadow-none">
             <CardHeader><CardTitle className="text-base font-medium">Add Follow-up</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <Textarea placeholder="Follow-up note..." value={followNote} onChange={(e) => setFollowNote(e.target.value)} rows={3} />
-              <Button size="sm" onClick={addFollowUp} disabled={!followNote.trim()} className="w-full">Add Entry</Button>
+              <Textarea placeholder="Follow-up note..." value={followNote} onChange={(e) => setFollowNote(e.target.value)} rows={3} disabled={editing || isMutating} />
+              <Button size="sm" onClick={addFollowUp} disabled={!followNote.trim() || editing || isMutating} className="w-full">Add Entry</Button>
             </CardContent>
           </Card>
         </div>
