@@ -30,6 +30,20 @@ describe("AppNavbar", () => {
     expect(onSignIn).toHaveBeenCalledOnce();
   });
 
+  it("keeps the full toolbar behind a laptop-safe responsive breakpoint", () => {
+    render(
+      <MemoryRouter initialEntries={["/app"]}>
+        <AppNavbar {...requiredProps} mode="demo" onSignIn={vi.fn()} onResetDemo={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    // Laptop widths use the compact route icons while narrower screens retain the overflow-safe menu.
+    expect(screen.getByRole("link", { name: "Job Tracker" })).toHaveClass("shrink-0");
+    expect(screen.getByText("Dashboard")).toHaveClass("hidden", "2xl:inline");
+    expect(screen.getByRole("button", { name: "Open navigation menu" })).toHaveClass("xl:hidden");
+    expect(document.getElementById("mobile-navigation")).not.toBeInTheDocument();
+  });
+
   it("shows cloud and sign-out controls for the authenticated owner", () => {
     const onSignOut = vi.fn();
     const user = { email: "joshuakivaria@gmail.com" } as User;

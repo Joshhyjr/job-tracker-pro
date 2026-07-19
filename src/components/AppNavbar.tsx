@@ -85,18 +85,19 @@ export default function AppNavbar({
   return (
     /* Glass navbar — translucent + backdrop-blur */
     <nav className="sticky top-0 z-50 glass rounded-none border-x-0 border-t-0">
-      <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <div className="container flex h-14 max-w-none items-center justify-between">
+        {/* Keep the brand at its natural width so a busy toolbar cannot wrap or cover its text. */}
+        <Link to="/" className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <BrandLogo />
         </Link>
 
-        {/* Desktop navigation */}
-        <div className="hidden items-center gap-1 md:flex">
+        {/* Keep laptop navigation compact, then restore labels when the full toolbar has room. */}
+        <div className="hidden items-center gap-1 xl:flex">
           {links.map((l) => (
             <Button key={l.to} variant={location.pathname === l.to ? "secondary" : "ghost"} size="sm" asChild>
-              <Link to={l.to} className="gap-1.5">
+              <Link to={l.to} className="gap-1.5" aria-label={l.label} title={l.label}>
                 <l.icon className="h-4 w-4" />
-                {l.label}
+                <span className="hidden 2xl:inline">{l.label}</span>
               </Link>
             </Button>
           ))}
@@ -132,7 +133,7 @@ export default function AppNavbar({
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden"
+          className="xl:hidden"
           onClick={() => setOpen((current) => !current)}
           aria-expanded={open}
           aria-controls="mobile-navigation"
@@ -144,7 +145,7 @@ export default function AppNavbar({
 
       {/* Mobile menu — also glass */}
       {open && (
-        <div id="mobile-navigation" className="glass-subtle rounded-none border-x-0 border-b p-4 md:hidden">
+        <div id="mobile-navigation" className="glass-subtle rounded-none border-x-0 border-b p-4 xl:hidden">
           <div className="flex flex-col gap-2">
             {links.map((l) => (
               <Button key={l.to} variant={location.pathname === l.to ? "secondary" : "ghost"} asChild className="justify-start" onClick={() => setOpen(false)}>

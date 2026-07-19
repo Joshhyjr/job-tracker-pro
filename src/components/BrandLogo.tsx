@@ -11,7 +11,7 @@ export function BrandLogo({ showText = true, className = "" }: BrandLogoProps) {
       {showText && (
         <span className="leading-none">
           {/* Display the simplified product name beside the shared JK monogram. */}
-          <span className="block text-base font-extrabold tracking-wide text-foreground">JOB TRACKER</span>
+          <span className="block whitespace-nowrap text-base font-extrabold tracking-wide text-foreground">JOB TRACKER</span>
         </span>
       )}
     </span>
