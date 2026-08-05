@@ -70,4 +70,22 @@ describe("useDemoApplications", () => {
     expect(getDemoApplications()[0]).toMatchObject({ jobTitle: "Product Analyst", companyName: "Example Studio" });
     expect(getApplications()).toMatchObject([{ id: "owner-app", companyName: "Private Company" }]);
   });
+
+  it("merges signed-out spreadsheet changes without replacing current demo jobs", async () => {
+    const ibm = application({ id: "ibm-job", companyName: "IBM" });
+    const apple = application({ id: "apple-job", companyName: "Apple", dateApplied: "2026-08-05" });
+    saveDemoApplications([ibm]);
+    markDemoSeeded();
+
+    const { result } = renderHook(() => useDemoApplications());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.mergeApplications([apple]);
+    });
+
+    // The demo merge contract mirrors owner imports: IBM remains and Apple is appended locally.
+    expect(result.current.applications).toMatchObject([{ companyName: "IBM" }, { companyName: "Apple" }]);
+    expect(getDemoApplications()).toMatchObject([{ companyName: "IBM" }, { companyName: "Apple" }]);
+  });
 });

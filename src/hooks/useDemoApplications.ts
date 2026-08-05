@@ -109,8 +109,12 @@ export function useDemoApplications() {
     deleteApplication: (applicationId: string) => runMutation(() => {
       commitApplications(applicationsRef.current.filter((item) => item.id !== applicationId));
     }),
-    replaceApplications: (nextApplications: JobApplication[]) => runMutation(() => {
-      commitApplications(nextApplications.map(normalizeDemoApplication));
+    mergeApplications: (changedApplications: JobApplication[]) => runMutation(() => {
+      // The shared shell never imports into demo mode, but previews retain a compatible additive contract.
+      const changesById = new Map(changedApplications.map((application) => [application.id, normalizeDemoApplication(application)]));
+      const updated = applicationsRef.current.map((application) => changesById.get(application.id) ?? application);
+      const existingIds = new Set(applicationsRef.current.map((application) => application.id));
+      commitApplications([...updated, ...Array.from(changesById.values()).filter((application) => !existingIds.has(application.id))]);
     }),
     resetDemo: () => runMutation(async () => {
       // Reset always returns the public sandbox to the repository's known synthetic dataset.

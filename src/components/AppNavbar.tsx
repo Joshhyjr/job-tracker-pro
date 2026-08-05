@@ -77,6 +77,7 @@ export default function AppNavbar({
   async function handleImportChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // The shared import boundary performs the final format validation for picker and drop flows.
     await onImportXLSX(file);
     e.target.value = "";
     setOpen(false);
@@ -181,12 +182,13 @@ export default function AppNavbar({
           </div>
         </div>
       )}
-      {/* Hidden file input for XLSX import */}
+      {/* Hidden picker is retained for the compact navbar import action. */}
       <input
         ref={importInputRef}
         type="file"
-        accept=".xlsx,.xls"
+        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         className="hidden"
+        aria-label="Choose an XLSX workbook from the navbar"
         onChange={handleImportChange}
       />
     </nav>
