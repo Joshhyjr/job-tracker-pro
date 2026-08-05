@@ -3,7 +3,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useParams, useNavigate, useLocation } from "react-router-dom";
+import { useMemo, useState } from "react";
 import AppNavbar from "@/components/AppNavbar";
+import ExcelDropZone from "@/components/ExcelDropZone";
+import ImportConfirmationDialog from "@/components/ImportConfirmationDialog";
 import Portfolio from "@/pages/Portfolio";
 import Dashboard from "@/pages/Dashboard";
 import ApplicationsList from "@/pages/ApplicationsList";
@@ -15,7 +18,13 @@ import NotFound from "./pages/NotFound";
 import { useApplications } from "@/hooks/useApplications";
 import { useDemoApplications } from "@/hooks/useDemoApplications";
 import { exportCSV, exportXLSX } from "@/lib/export";
-import { importApplicationsFromFile, markSeeded, saveApplications } from "@/lib/storage";
+import { planApplicationImport } from "@/lib/applicationMerge";
+import { applyConfirmedApplicationImport } from "@/lib/applicationImport";
+import { isSupportedExcelWorkbook } from "@/lib/excelFile";
+import {
+  importApplicationsFromFile,
+  type WorkbookImportResult,
+} from "@/lib/storage";
 import type { JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -56,7 +65,7 @@ interface JobTrackerShellProps {
   createApplication: (input: Omit<JobApplication, "id" | "activityLog" | "createdAt" | "updatedAt">) => Promise<JobApplication>;
   updateApplication: (application: JobApplication) => Promise<JobApplication>;
   deleteApplication: (applicationId: string) => Promise<void>;
-  replaceApplications: (applications: JobApplication[]) => Promise<void>;
+  mergeApplications: (applications: JobApplication[]) => Promise<void>;
   mode: "demo" | "owner";
   user?: User;
   authError?: string;
@@ -75,7 +84,7 @@ function JobTrackerShell({
   createApplication,
   updateApplication,
   deleteApplication,
-  replaceApplications,
+  mergeApplications,
   mode,
   user,
   authError,
@@ -84,22 +93,57 @@ function JobTrackerShell({
   onResetDemo,
 }: JobTrackerShellProps) {
   const { toast } = useToast();
+  const [pendingImport, setPendingImport] = useState<{ file: File; result: WorkbookImportResult } | null>(null);
+  const [isApplyingImport, setIsApplyingImport] = useState(false);
+  // Recompute against live owner state so a realtime change while the dialog is open cannot be omitted.
+  const pendingPlan = useMemo(
+    () => pendingImport ? planApplicationImport(applications, pendingImport.result.applications) : null,
+    [applications, pendingImport],
+  );
 
   async function handleImportXLSX(file: File) {
-    // Imports remain owner-only so demo files and workbook metadata cannot enter the private migration store.
-    if (mode === "demo") return;
+    // Validate at the shared boundary before either the private owner or isolated demo flow parses a file.
+    if (!isSupportedExcelWorkbook(file)) {
+      toast({ title: "Import failed", description: "Only .xlsx Excel workbooks are supported.", variant: "destructive" });
+      return;
+    }
     try {
-      const { applications: imported, warnings } = await importApplicationsFromFile(file);
-      await replaceApplications(imported);
-      // Keep a recoverable browser backup only after the cloud replacement succeeds.
-      saveApplications(imported);
-      markSeeded();
-      toast({ title: "Import complete", description: `Loaded ${imported.length} applications from ${file.name}.` });
-      warnings.forEach((warning) => {
-        toast({ title: "Import warning", description: warning });
-      });
+      // Parsing is a side-effect-free preview; import metadata changes only after explicit confirmation.
+      const result = await importApplicationsFromFile(file, { persistMetadata: false });
+      if (result.applications.length === 0) throw new Error("Workbook does not contain any valid application rows.");
+      setPendingImport({ file, result });
     } catch {
       toast({ title: "Import failed", description: "Could not read this file. Please verify the XLSX format.", variant: "destructive" });
+    }
+  }
+
+  async function handleConfirmImport() {
+    if (!pendingImport || !pendingPlan || isApplyingImport) return;
+    setIsApplyingImport(true);
+
+    try {
+      // The import transaction verifies its backup before invoking the additive cloud writer.
+      await applyConfirmedApplicationImport({
+        currentApplications: applications,
+        fileName: pendingImport.file.name,
+        result: pendingImport.result,
+        plan: pendingPlan,
+        persistChanges: mergeApplications,
+        storageScope: mode,
+      });
+      toast({
+        title: "Import merged safely",
+        description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted, and the previous dataset was backed up in this browser.`,
+      });
+      pendingImport.result.warnings.forEach((warning) => {
+        toast({ title: "Import warning", description: warning });
+      });
+      setPendingImport(null);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : "The import merge could not be completed.";
+      toast({ title: "Import not applied", description, variant: "destructive" });
+    } finally {
+      setIsApplyingImport(false);
     }
   }
 
@@ -126,6 +170,8 @@ function JobTrackerShell({
         onImportXLSX={handleImportXLSX}
       />
       <main className="container py-8">
+        {/* Signed-out imports remain local because the demo hook persists only to its isolated browser namespace. */}
+        <ExcelDropZone onImport={handleImportXLSX} />
         {mode === "demo" && (
           <Alert className="mb-6">
             <AlertDescription>This is a public sandbox with synthetic data saved only in this browser. Log in with the approved Google account to open the private workspace.</AlertDescription>
@@ -143,6 +189,16 @@ function JobTrackerShell({
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
+      <ImportConfirmationDialog
+        open={Boolean(pendingImport && pendingPlan)}
+        fileName={pendingImport?.file.name ?? "workbook"}
+        addedCount={pendingPlan?.additions.length ?? 0}
+        updatedCount={pendingPlan?.updates.length ?? 0}
+        skippedCount={pendingPlan?.skipped.length ?? 0}
+        isApplying={isApplyingImport}
+        onCancel={() => setPendingImport(null)}
+        onConfirm={handleConfirmImport}
+      />
     </>
   );
 }

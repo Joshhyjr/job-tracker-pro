@@ -1,5 +1,6 @@
 import type { JobApplication, CurrentStatus } from "./types";
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from "./browserStorage";
+import { isSupportedExcelWorkbook } from "./excelFile";
 import { loadExcelJs } from "./exceljs";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
@@ -11,6 +12,8 @@ const DEMO_SEEDED_KEY = "job-tracker-demo-seeded";
 const RESPONSE_STATUS_ORDER_KEY = "job-tracker-response-status-order";
 const IMPORT_WARNINGS_KEY = "job-tracker-import-warnings";
 const LAST_IMPORT_METADATA_KEY = "job-tracker-last-import";
+const LATEST_IMPORT_BACKUP_KEY = "job-tracker-latest-import-backup";
+const LATEST_DEMO_IMPORT_BACKUP_KEY = "job-tracker-demo-latest-import-backup";
 const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 10_000;
 const MAX_IMPORT_COLUMNS = 100;
@@ -25,6 +28,7 @@ function safeStorageRemoveItem(key: string): void {
 }
 
 type ImportField =
+  | "id"
   | "jobTitle"
   | "companyName"
   | "location"
@@ -69,9 +73,25 @@ export interface LastImportMetadata {
   warningCount: number;
 }
 
+export interface ImportBackup {
+  id: string;
+  createdAt: string;
+  sourceFileName: string;
+  applications: JobApplication[];
+}
+
+export type ImportStorageScope = "owner" | "demo";
+
+export interface WorkbookImportResult {
+  applications: JobApplication[];
+  warnings: string[];
+  preferredResponseStatusOrder: string[];
+}
+
 const REQUIRED_IMPORT_FIELDS: ImportField[] = ["jobTitle", "companyName"];
 
 const FIELD_LABELS: Record<ImportField, string> = {
+  id: "Application ID",
   jobTitle: "Job Title",
   companyName: "Company",
   location: "Location",
@@ -97,6 +117,7 @@ const FIELD_LABELS: Record<ImportField, string> = {
 
 // Header aliases let user-created templates keep their own language while mapping into stable app fields.
 const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
+  id: ["Application ID", "Application Id", "Record ID", "Record Id", "Job Application ID"],
   jobTitle: ["Job Title", "Position", "Position Title", "Role", "Title", "Job Role", "Job Name", "Opening", "Opportunity"],
   companyName: ["Company Name", "Company", "Organization", "Organisation", "Employer", "Company/Employer", "Hiring Company"],
   location: ["Location", "Job Location", "Office Location", "Work Location"],
@@ -164,10 +185,15 @@ function mapStatus(val: unknown): CurrentStatus {
 function sanitizeStoredApplication(record: Partial<JobApplication>): JobApplication {
   const sanitized = sanitizeApplicationInput(record);
   const id = sanitizeSingleLineText(record.id) || generateId();
+  const createdAt = sanitizeSingleLineText(record.createdAt);
+  const updatedAt = sanitizeSingleLineText(record.updatedAt);
 
   return {
     id,
     ...sanitized,
+    // Import backups and browser recovery retain cloud timestamps when they are available.
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
     activityLog: sanitizeActivityLog(record.activityLog),
   };
 }
@@ -487,27 +513,37 @@ export async function loadSeedData({ persistPreferredOrder = true }: { persistPr
   return parsed.applications;
 }
 
-export async function importApplicationsFromFile(file: File): Promise<{ applications: JobApplication[]; warnings: string[] }> {
+export function persistWorkbookImport(fileName: string, result: WorkbookImportResult): void {
+  // Preview parsing remains side-effect free; metadata is committed only after the user confirms the merge.
+  setPreferredResponseStatusOrder(result.preferredResponseStatusOrder);
+  setImportWarnings(result.warnings);
+  saveLastImportMetadata({
+    fileName: sanitizeSingleLineText(fileName, 255) || "Imported workbook",
+    importedAt: new Date().toISOString(),
+    rowCount: result.applications.length,
+    warningCount: result.warnings.length,
+  });
+}
+
+export async function importApplicationsFromFile(
+  file: File,
+  { persistMetadata = true }: { persistMetadata?: boolean } = {},
+): Promise<WorkbookImportResult> {
+  // Keep the parser boundary strict even if a future caller bypasses the current UI controls.
+  if (!isSupportedExcelWorkbook(file)) throw new Error("Only .xlsx Excel workbooks are supported.");
   // Reject unusually large uploads before ExcelJS expands the workbook in browser memory.
   if (file.size > MAX_IMPORT_FILE_BYTES) throw new Error("Workbook exceeds the 10 MB import limit.");
   const buf = await file.arrayBuffer();
   const wb = await loadWorkbook(buf);
   const parsed = parseWorkbook(wb);
 
-  setPreferredResponseStatusOrder(parsed.preferredOrder);
   const warnings = parsed.missingResponseStatusColumn
     ? ["Missing 'Response Status' column in 'Applications' sheet. Defaulting all response statuses to Applied."]
     : [];
   warnings.push(...parsed.warnings);
-  setImportWarnings(warnings);
-  saveLastImportMetadata({
-    fileName: sanitizeSingleLineText(file.name, 255) || "Imported workbook",
-    importedAt: new Date().toISOString(),
-    rowCount: parsed.applications.length,
-    warningCount: warnings.length,
-  });
-
-  return { applications: parsed.applications, warnings };
+  const result = { applications: parsed.applications, warnings, preferredResponseStatusOrder: parsed.preferredOrder };
+  if (persistMetadata) persistWorkbookImport(file.name, result);
+  return result;
 }
 
 export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown>[], headers = getHeadersFromRows(rows)): RowsParseResult {
@@ -544,7 +580,8 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
 
     // Build the stable application shape first, then hydrate optional fields from flexible templates.
     const application: JobApplication = {
-      id: generateId(),
+      // Exported stable IDs enable intentional updates; templates without an ID still receive a durable local ID.
+      id: sanitizeSingleLineText(getMappedCell(row, mapping, "id")) || generateId(),
       jobTitle: sanitizeSingleLineText(getMappedCell(row, mapping, "jobTitle")),
       companyName: sanitizeSingleLineText(getMappedCell(row, mapping, "companyName")),
       location,
@@ -612,6 +649,46 @@ export function getApplications(): JobApplication[] {
 
 export function saveApplications(apps: JobApplication[]) {
   safeStorageSetItem(STORAGE_KEY, JSON.stringify(apps));
+}
+
+export function getLatestImportBackup(scope: ImportStorageScope = "owner"): ImportBackup | null {
+  // Demo snapshots use a separate key so signed-out imports cannot overwrite an owner's recovery point.
+  const backupKey = scope === "demo" ? LATEST_DEMO_IMPORT_BACKUP_KEY : LATEST_IMPORT_BACKUP_KEY;
+  const raw = safeLocalStorageGetItem(backupKey);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<ImportBackup>;
+    if (!parsed.id || !parsed.createdAt || !Array.isArray(parsed.applications)) return null;
+    return {
+      id: sanitizeSingleLineText(parsed.id),
+      createdAt: sanitizeSingleLineText(parsed.createdAt),
+      sourceFileName: sanitizeSingleLineText(parsed.sourceFileName),
+      applications: parsed.applications.map((application) => sanitizeStoredApplication(application)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createImportBackup(
+  applications: JobApplication[],
+  sourceFileName: string,
+  scope: ImportStorageScope = "owner",
+): ImportBackup {
+  const backup: ImportBackup = {
+    id: generateId(),
+    createdAt: new Date().toISOString(),
+    sourceFileName: sanitizeSingleLineText(sourceFileName, 255) || "Imported workbook",
+    applications,
+  };
+
+  // Verify the write because a merge must not start when browser storage blocks or exceeds its quota.
+  const backupKey = scope === "demo" ? LATEST_DEMO_IMPORT_BACKUP_KEY : LATEST_IMPORT_BACKUP_KEY;
+  safeStorageSetItem(backupKey, JSON.stringify(backup));
+  const persisted = getLatestImportBackup(scope);
+  if (persisted?.id !== backup.id) throw new Error("Could not create the automatic import backup in this browser.");
+  return persisted;
 }
 
 export function getDemoApplications(): JobApplication[] {

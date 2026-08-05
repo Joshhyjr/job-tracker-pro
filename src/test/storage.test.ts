@@ -1,6 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
-import { addApplication, getApplications, getLastImportMetadata, importApplicationsFromFile, mapRowsToApplications, mapRowsToApplicationsWithValidation, markSeeded, saveApplications, saveLastImportMetadata } from "@/lib/storage";
+import {
+  addApplication,
+  createImportBackup,
+  getApplications,
+  getLastImportMetadata,
+  getLatestImportBackup,
+  importApplicationsFromFile,
+  mapRowsToApplications,
+  mapRowsToApplicationsWithValidation,
+  markSeeded,
+  saveApplications,
+  saveLastImportMetadata,
+} from "@/lib/storage";
 
 beforeEach(() => {
   localStorage.clear();
@@ -11,6 +23,17 @@ afterEach(() => {
 });
 
 describe("mapRowsToApplications", () => {
+  it("preserves an exported stable application ID", () => {
+    const [application] = mapRowsToApplications([{
+      "Application ID": "stable-application-id",
+      "Job Title": "Platform Engineer",
+      Company: "IBM",
+    }]);
+
+    // Stable IDs make exact-record workbook updates possible without relying on composite matching.
+    expect(application.id).toBe("stable-application-id");
+  });
+
   it("reads Decision Status as the imported response status", () => {
     const applications = mapRowsToApplications([
       {
@@ -271,6 +294,54 @@ describe("mapRowsToApplications", () => {
     });
 
     await expect(importApplicationsFromFile(file)).rejects.toThrow("Workbook exceeds the 10 MB import limit.");
+  });
+
+  it("rejects legacy XLS and unrelated document formats", async () => {
+    const legacyWorkbook = new File(["legacy workbook"], "applications.xls", { type: "application/vnd.ms-excel" });
+    const document = new File(["document"], "applications.pdf", { type: "application/pdf" });
+
+    // Extension validation happens before workbook parsing, producing a consistent actionable error.
+    await expect(importApplicationsFromFile(legacyWorkbook)).rejects.toThrow("Only .xlsx Excel workbooks are supported.");
+    await expect(importApplicationsFromFile(document)).rejects.toThrow("Only .xlsx Excel workbooks are supported.");
+  });
+
+  it("parses an import preview without changing persisted import metadata", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Applications");
+    worksheet.addRow(["Company", "Job Title", "Date Applied"]);
+    worksheet.addRow(["Apple", "Platform Engineer", "2026-08-05"]);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const file = new File([buffer], "preview.xlsx");
+
+    await importApplicationsFromFile(file, { persistMetadata: false });
+
+    // Cancelling the later dialog must not leave a misleading last-import breadcrumb.
+    expect(getLastImportMetadata()).toBeNull();
+  });
+});
+
+describe("import backups", () => {
+  it("creates a restorable snapshot before a merge", () => {
+    const current = mapRowsToApplications([{ "Job Title": "Platform Engineer", Company: "IBM", "Date Applied": "2026-08-01" }]);
+    current[0].createdAt = "2026-08-01T10:00:00.000Z";
+
+    const backup = createImportBackup(current, "new-jobs.xlsx");
+
+    // The latest snapshot retains the full pre-import dataset and source workbook context.
+    expect(getLatestImportBackup()).toEqual(backup);
+    expect(backup).toMatchObject({
+      sourceFileName: "new-jobs.xlsx",
+      applications: [{ companyName: "IBM", createdAt: "2026-08-01T10:00:00.000Z" }],
+    });
+  });
+
+  it("blocks the merge boundary when a browser backup cannot be written", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage quota exceeded");
+    });
+
+    // A swallowed localStorage failure is promoted to an actionable import failure after verification.
+    expect(() => createImportBackup([], "new-jobs.xlsx")).toThrow("Could not create the automatic import backup");
   });
 });
 

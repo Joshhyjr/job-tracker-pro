@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { deserializeApplication, replaceApplications, serializeApplication } from "@/lib/applicationRepository";
+import { deserializeApplication, replaceApplications, serializeApplication, upsertApplications } from "@/lib/applicationRepository";
 import type { JobApplication } from "@/lib/types";
 
 const firestoreMocks = vi.hoisted(() => ({
@@ -120,5 +120,29 @@ describe("replaceApplications", () => {
     // Firestore batches are atomic, so only the first write-only batch can have reached the cloud.
     expect(committedBatches).toHaveLength(1);
     expect(committedBatches.flat().every((operation) => operation.type === "set")).toBe(true);
+  });
+});
+
+describe("upsertApplications", () => {
+  it("writes additions and updates without reading or deleting existing records", async () => {
+    const committedBatches = mockBatchedReplacement(500);
+    const changes = [application({ id: "existing-update" }), application({ id: "new-application" })];
+
+    await upsertApplications("user-1", changes);
+
+    // Incremental import has no stale-record cleanup phase, so unrelated cloud jobs cannot be deleted.
+    expect(firestoreMocks.getDocs).not.toHaveBeenCalled();
+    expect(committedBatches.flat()).toEqual([
+      { type: "set", id: "existing-update" },
+      { type: "set", id: "new-application" },
+    ]);
+    expect(committedBatches.flat().some((operation) => operation.type === "delete")).toBe(false);
+  });
+
+  it("does not open a write batch when every imported row was skipped", async () => {
+    await upsertApplications("user-1", []);
+
+    // A duplicate-only workbook remains a successful no-op after confirmation.
+    expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
   });
 });

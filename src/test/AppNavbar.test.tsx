@@ -57,5 +57,10 @@ describe("AppNavbar", () => {
     expect(screen.getByRole("button", { name: /Import XLSX/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign out joshuakivaria@gmail.com" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Log in with Google" })).not.toBeInTheDocument();
+    // The legacy .xls extension is excluded because the ExcelJS parser only reads modern OOXML workbooks.
+    expect(screen.getByLabelText("Choose an XLSX workbook from the navbar")).toHaveAttribute(
+      "accept",
+      ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
   });
 });

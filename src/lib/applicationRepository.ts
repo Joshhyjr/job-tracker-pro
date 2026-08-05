@@ -126,6 +126,16 @@ export async function replaceApplications(userId: string, applications: JobAppli
   await commitOperations(operations, userId);
 }
 
+export async function upsertApplications(userId: string, applications: JobApplication[]): Promise<void> {
+  if (applications.length === 0) return;
+  const now = new Date().toISOString();
+  // Incremental imports only set additions/explicit-ID updates; they never queue delete operations.
+  await commitOperations(applications.map((application) => ({
+    type: "set" as const,
+    application: { ...application, createdAt: application.createdAt || now, updatedAt: now },
+  })), userId);
+}
+
 export async function mergeLocalApplicationsOnce(userId: string, localApplications: JobApplication[]): Promise<void> {
   const markerRef = doc(getFirestoreDatabase(), "users", userId, "metadata", "localMigration");
   if ((await getDoc(markerRef)).exists()) return;

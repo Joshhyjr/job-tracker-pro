@@ -11,6 +11,8 @@ export function neutralizeSpreadsheetFormula(value: unknown): unknown {
 
 function toRows(apps: JobApplication[]) {
   return apps.map((a) => ({
+    // Stable IDs let re-imports update the exact exported record without relying on fuzzy identity matching.
+    "Application ID": a.id,
     "Job Title": a.jobTitle,
     "Company Name": a.companyName,
     Location: a.location,
@@ -39,6 +41,7 @@ function toRows(apps: JobApplication[]) {
 
 function getExportHeaders(rows: ReturnType<typeof toRows>) {
   const headers = new Set<string>([
+    "Application ID",
     "Job Title",
     "Company Name",
     "Location",
