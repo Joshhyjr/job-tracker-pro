@@ -45,4 +45,21 @@ describeWithEmulator("Firestore Security Rules", () => {
     await assertFails(getDoc(doc(otherEmail, ownerPath)));
     await assertFails(getDoc(doc(approvedWrongUid, ownerPath)));
   });
+
+  it("allows only the verified approved owner to store import recovery snapshots", async () => {
+    const owner = environment.authenticatedContext("owner", {
+      email: "joshuakivaria@gmail.com",
+      email_verified: true,
+    }).firestore();
+    const anonymous = environment.unauthenticatedContext().firestore();
+    const manifestPath = "users/owner/importBackups/backup-1";
+    const rowPath = `${manifestPath}/applications/app-1`;
+
+    // Both the readiness manifest and its per-job rows share the existing owner-only access predicate.
+    await assertSucceeds(setDoc(doc(owner, manifestPath), { status: "writing" }));
+    await assertSucceeds(setDoc(doc(owner, rowPath), { companyName: "IBM" }));
+    await assertSucceeds(getDoc(doc(owner, rowPath)));
+    await assertFails(getDoc(doc(anonymous, manifestPath)));
+    await assertFails(getDoc(doc(anonymous, rowPath)));
+  });
 });

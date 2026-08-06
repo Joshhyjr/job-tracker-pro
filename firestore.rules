@@ -19,6 +19,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /users/{userId}/importBackups/{backupId} {
+      // Import recovery manifests and their rows remain private to the same allowlisted owner.
+      allow read, create, update, delete: if isApprovedOwner(userId);
+
+      match /applications/{applicationId} {
+        allow read, create, update, delete: if isApprovedOwner(userId);
+      }
+    }
+
     // No other Firestore paths are accessible from the browser client.
     match /{document=**} {
       allow read, write: if false;

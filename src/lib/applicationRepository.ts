@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   onSnapshot,
   setDoc,
   writeBatch,
@@ -11,7 +12,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { getFirestoreDatabase } from "./firebase";
-import { generateId } from "./storage";
+import { generateId, type ImportBackup } from "./storage";
 import type { JobApplication } from "./types";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeSingleLineText } from "./security";
 
@@ -19,6 +20,14 @@ const BATCH_OPERATION_LIMIT = 450;
 
 function applicationCollection(userId: string) {
   return collection(getFirestoreDatabase(), "users", userId, "applications");
+}
+
+function importBackupCollection(userId: string) {
+  return collection(getFirestoreDatabase(), "users", userId, "importBackups");
+}
+
+function importBackupApplicationCollection(userId: string, backupId: string) {
+  return collection(getFirestoreDatabase(), "users", userId, "importBackups", backupId, "applications");
 }
 
 // JSON normalization removes undefined optional fields, which Firestore rejects by default.
@@ -43,6 +52,59 @@ export function deserializeApplication(id: string, data: DocumentData): JobAppli
     updatedAt: sanitizeSingleLineText(record.updatedAt),
     activityLog: sanitizeActivityLog(record.activityLog),
   };
+}
+
+export async function createApplicationImportBackup(
+  userId: string,
+  sourceFileName: string,
+  mode: "merge" | "replace",
+): Promise<ImportBackup> {
+  // Read the authoritative server collection so the snapshot cannot silently omit a newer cross-device change.
+  const currentSnapshot = await getDocsFromServer(applicationCollection(userId));
+  const applications = currentSnapshot.docs.map((item) => deserializeApplication(item.id, item.data()));
+  const id = generateId();
+  const createdAt = new Date().toISOString();
+  const backup: ImportBackup = {
+    id,
+    createdAt,
+    sourceFileName: sanitizeSingleLineText(sourceFileName, 255) || "Imported workbook",
+    applications,
+  };
+  const expectedIds = new Set(applications.map((application) => application.id));
+  if (expectedIds.size !== applications.length) {
+    throw new Error("Could not create the Firestore backup because application IDs are not unique.");
+  }
+
+  const manifestRef = doc(importBackupCollection(userId), id);
+  // A writing manifest makes interrupted snapshots visible but never eligible as recovery points.
+  await setDoc(manifestRef, {
+    createdAt,
+    sourceFileName: backup.sourceFileName,
+    applicationCount: applications.length,
+    mode,
+    status: "writing",
+  });
+
+  const backupApplications = importBackupApplicationCollection(userId, id);
+  for (let index = 0; index < applications.length; index += BATCH_OPERATION_LIMIT) {
+    const batch = writeBatch(getFirestoreDatabase());
+    applications.slice(index, index + BATCH_OPERATION_LIMIT).forEach((application) => {
+      batch.set(doc(backupApplications, application.id), serializeApplication(application));
+    });
+    await batch.commit();
+  }
+
+  const persistedSnapshot = await getDocs(backupApplications);
+  const persistedIds = new Set(persistedSnapshot.docs.map((item) => item.id));
+  const backupIsComplete = persistedIds.size === expectedIds.size
+    && Array.from(expectedIds).every((applicationId) => persistedIds.has(applicationId));
+  if (!backupIsComplete) {
+    throw new Error("Could not verify the automatic Firestore backup. The import was not started.");
+  }
+
+  // Only a fully verified snapshot is marked ready, and callers must await this before changing live jobs.
+  await setDoc(manifestRef, { status: "ready", verifiedAt: new Date().toISOString() }, { merge: true });
+  return backup;
 }
 
 export function subscribeApplications(

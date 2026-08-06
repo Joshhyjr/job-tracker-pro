@@ -88,4 +88,24 @@ describe("useDemoApplications", () => {
     expect(result.current.applications).toMatchObject([{ companyName: "IBM" }, { companyName: "Apple" }]);
     expect(getDemoApplications()).toMatchObject([{ companyName: "IBM" }, { companyName: "Apple" }]);
   });
+
+  it("replaces signed-out demo jobs only after the replacement action is selected", async () => {
+    const ibm = application({ id: "ibm-job", companyName: "IBM" });
+    const apple = application({ id: "apple-job", companyName: "Apple", dateApplied: "2026-08-05" });
+    saveApplications([application({ id: "owner-job", companyName: "Private Company" })]);
+    saveDemoApplications([ibm]);
+    markDemoSeeded();
+
+    const { result } = renderHook(() => useDemoApplications());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.replaceApplications([apple]);
+    });
+
+    // Replacement is scoped to the public sandbox; the private owner namespace remains unchanged.
+    expect(result.current.applications).toMatchObject([{ companyName: "Apple" }]);
+    expect(getDemoApplications()).toMatchObject([{ companyName: "Apple" }]);
+    expect(getApplications()).toMatchObject([{ companyName: "Private Company" }]);
+  });
 });

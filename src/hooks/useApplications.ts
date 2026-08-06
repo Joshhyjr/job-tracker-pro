@@ -3,9 +3,11 @@ import type { User } from "firebase/auth";
 import type { JobApplication } from "@/lib/types";
 import { getApplications, loadSeedData, isSeeded, markSeeded, saveApplications } from "@/lib/storage";
 import {
+  createApplicationImportBackup,
   createApplication,
   deleteApplication,
   mergeLocalApplicationsOnce,
+  replaceApplications as replaceCloudApplications,
   subscribeApplications,
   upsertApplications,
   updateApplication,
@@ -115,6 +117,10 @@ export function useApplications(user?: User) {
       runMutation(() => createApplication(user!.uid, input)),
     updateApplication: (application: JobApplication) => runMutation(() => updateApplication(user!.uid, application)),
     deleteApplication: (applicationId: string) => runMutation(() => deleteApplication(user!.uid, applicationId)),
+    backupApplications: (_currentApplications: JobApplication[], fileName: string, mode: "merge" | "replace") =>
+      // Owner imports snapshot authoritative Firestore state rather than trusting a possibly stale browser render.
+      runMutation(() => createApplicationImportBackup(user!.uid, fileName, mode)),
     mergeApplications: (changedApplications: JobApplication[]) => runMutation(() => upsertApplications(user!.uid, changedApplications)),
+    replaceApplications: (nextApplications: JobApplication[]) => runMutation(() => replaceCloudApplications(user!.uid, nextApplications)),
   };
 }
