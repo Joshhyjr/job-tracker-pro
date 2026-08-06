@@ -3,6 +3,7 @@ import type { CurrentStatus, JobApplication } from "@/lib/types";
 
 type OverdueCandidate = Pick<JobApplication, "dateApplied" | "currentStatus"> & {
   followUps?: boolean | string | null;
+  followUpDate?: string | null;
 };
 
 const ELIGIBLE_STATUSES = new Set<CurrentStatus>(["Applied", "No Response"]);
@@ -14,13 +15,20 @@ function hasYesFollowUp(value: OverdueCandidate["followUps"]): boolean {
 }
 
 export function isApplicationOverdue(application: OverdueCandidate, now: Date = new Date()): boolean {
-  const appliedDate = parseISO(application.dateApplied);
-  if (!isValid(appliedDate)) return false;
-
   if (!ELIGIBLE_STATUSES.has(application.currentStatus)) return false;
   if (INELIGIBLE_STATUSES.has(application.currentStatus)) return false;
 
   if ("followUps" in application && !hasYesFollowUp(application.followUps)) return false;
 
+  const scheduledDate = parseISO(application.followUpDate ?? "");
+  if (isValid(scheduledDate)) {
+    // An explicit schedule overrides application age and becomes due at the start of that calendar date.
+    return !isAfter(scheduledDate, now);
+  }
+
+  const appliedDate = parseISO(application.dateApplied);
+  if (!isValid(appliedDate)) return false;
+
+  // Missing or malformed schedules retain the legacy seven-day fallback for imported and older records.
   return isAfter(subDays(now, 7), appliedDate);
 }

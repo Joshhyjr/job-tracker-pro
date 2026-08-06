@@ -6,6 +6,7 @@ type CaseInput = {
   dateApplied: string;
   currentStatus: CurrentStatus;
   followUps?: boolean | string | null;
+  followUpDate?: string | null;
 };
 
 const NOW = new Date("2026-02-17T12:00:00.000Z");
@@ -33,5 +34,32 @@ describe("isApplicationOverdue", () => {
     invalidCases.forEach((input) => {
       expect(isApplicationOverdue(input, NOW)).toBe(false);
     });
+  });
+
+  it("uses a valid follow-up date instead of the seven-day fallback", () => {
+    // A scheduled date is the user's explicit plan, so it must take precedence over application age.
+    expect(isApplicationOverdue({
+      dateApplied: "2026-02-01",
+      currentStatus: "Applied",
+      followUps: true,
+      followUpDate: "2026-02-20",
+    }, NOW)).toBe(false);
+
+    expect(isApplicationOverdue({
+      dateApplied: "2026-02-15",
+      currentStatus: "No Response",
+      followUps: true,
+      followUpDate: "2026-02-17",
+    }, NOW)).toBe(true);
+  });
+
+  it("falls back to application age when the follow-up date is invalid", () => {
+    // Legacy and malformed rows should retain the existing seven-day behavior instead of disappearing.
+    expect(isApplicationOverdue({
+      dateApplied: "2026-02-01",
+      currentStatus: "Applied",
+      followUps: true,
+      followUpDate: "not-a-date",
+    }, NOW)).toBe(true);
   });
 });
