@@ -9,7 +9,7 @@ type OverdueCandidate = Pick<JobApplication, "dateApplied" | "currentStatus"> & 
 const ELIGIBLE_STATUSES = new Set<CurrentStatus>(["Applied", "No Response"]);
 const INELIGIBLE_STATUSES = new Set<CurrentStatus>(["Rejected", "Withdrawn", "Offer", "Pre-screen call", "Interview"]);
 
-function hasYesFollowUp(value: OverdueCandidate["followUps"]): boolean {
+function hasCompletedFollowUp(value: OverdueCandidate["followUps"]): boolean {
   if (typeof value === "string") return value.trim().toLowerCase() === "yes";
   return value === true;
 }
@@ -18,13 +18,14 @@ export function isApplicationOverdue(application: OverdueCandidate, now: Date = 
   if (!ELIGIBLE_STATUSES.has(application.currentStatus)) return false;
   if (INELIGIBLE_STATUSES.has(application.currentStatus)) return false;
 
-  if ("followUps" in application && !hasYesFollowUp(application.followUps)) return false;
-
   const scheduledDate = parseISO(application.followUpDate ?? "");
   if (isValid(scheduledDate)) {
-    // An explicit schedule overrides application age and becomes due at the start of that calendar date.
+    // An explicit next date stays authoritative even when an earlier follow-up was already completed.
     return !isAfter(scheduledDate, now);
   }
+
+  // Without a schedule, completed follow-ups leave the queue while untouched applications use the age fallback.
+  if ("followUps" in application && hasCompletedFollowUp(application.followUps)) return false;
 
   const appliedDate = parseISO(application.dateApplied);
   if (!isValid(appliedDate)) return false;

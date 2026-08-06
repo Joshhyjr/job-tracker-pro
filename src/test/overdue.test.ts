@@ -14,9 +14,9 @@ const NOW = new Date("2026-02-17T12:00:00.000Z");
 describe("isApplicationOverdue", () => {
   it("returns true for 3 valid overdue cases", () => {
     const validCases: CaseInput[] = [
-      { dateApplied: "2026-02-01", currentStatus: "Applied", followUps: true },
-      { dateApplied: "2026-02-05", currentStatus: "No Response", followUps: "Yes" },
-      { dateApplied: "2026-02-02", currentStatus: "Applied", followUps: " yes " },
+      { dateApplied: "2026-02-01", currentStatus: "Applied", followUps: false },
+      { dateApplied: "2026-02-05", currentStatus: "No Response", followUps: "No" },
+      { dateApplied: "2026-02-02", currentStatus: "Applied", followUps: null },
     ];
 
     validCases.forEach((input) => {
@@ -26,9 +26,9 @@ describe("isApplicationOverdue", () => {
 
   it("returns false for 3 invalid/non-overdue cases", () => {
     const invalidCases: CaseInput[] = [
-      { dateApplied: "", currentStatus: "Applied", followUps: "Yes" }, // missing date
-      { dateApplied: "not-a-date", currentStatus: "No Response", followUps: "Yes" }, // invalid date
-      { dateApplied: "2026-02-01", currentStatus: "Applied", followUps: "No" }, // follow-up must be "Yes" if present
+      { dateApplied: "", currentStatus: "Applied", followUps: false }, // missing date
+      { dateApplied: "not-a-date", currentStatus: "No Response", followUps: "No" }, // invalid date
+      { dateApplied: "2026-02-01", currentStatus: "Applied", followUps: " yes " }, // already followed up
     ];
 
     invalidCases.forEach((input) => {
@@ -41,13 +41,14 @@ describe("isApplicationOverdue", () => {
     expect(isApplicationOverdue({
       dateApplied: "2026-02-01",
       currentStatus: "Applied",
-      followUps: true,
+      followUps: false,
       followUpDate: "2026-02-20",
     }, NOW)).toBe(false);
 
     expect(isApplicationOverdue({
       dateApplied: "2026-02-15",
       currentStatus: "No Response",
+      // A completed earlier follow-up does not suppress a newly scheduled one.
       followUps: true,
       followUpDate: "2026-02-17",
     }, NOW)).toBe(true);
@@ -58,7 +59,7 @@ describe("isApplicationOverdue", () => {
     expect(isApplicationOverdue({
       dateApplied: "2026-02-01",
       currentStatus: "Applied",
-      followUps: true,
+      followUps: false,
       followUpDate: "not-a-date",
     }, NOW)).toBe(true);
   });
