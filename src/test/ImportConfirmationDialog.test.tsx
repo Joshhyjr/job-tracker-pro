@@ -10,6 +10,7 @@ const summaryProps = {
   skippedCount: 2,
   currentCount: 8,
   importedCount: 4,
+  backupDestination: "firestore" as const,
   mode: "merge" as const,
   isApplying: false,
   onModeChange: vi.fn(),
@@ -23,7 +24,7 @@ describe("ImportConfirmationDialog", () => {
 
     // The safety promise and all three counts must be visible before the user can approve the import.
     expect(screen.getByText("Your current jobs will not be deleted.")).toBeInTheDocument();
-    expect(screen.getByText("A browser backup of the current dataset will be created before this merge starts.")).toBeInTheDocument();
+    expect(screen.getByText("A verified owner-only Firestore backup will be created before this merge starts.")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
@@ -63,5 +64,19 @@ describe("ImportConfirmationDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back up and replace" }));
 
     expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it("explains that signed-out demo recovery remains browser-local", () => {
+    render(
+      <ImportConfirmationDialog
+        {...summaryProps}
+        backupDestination="browser"
+        onCancel={vi.fn()}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    // Demo imports cannot write into the allowlisted owner's Firestore account.
+    expect(screen.getByText("A browser backup of the demo dataset will be created before this merge starts.")).toBeInTheDocument();
   });
 });

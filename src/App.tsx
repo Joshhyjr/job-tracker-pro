@@ -23,6 +23,7 @@ import { applyConfirmedApplicationImport, type ApplicationImportMode } from "@/l
 import { isSupportedExcelWorkbook } from "@/lib/excelFile";
 import {
   importApplicationsFromFile,
+  type ImportBackup,
   type WorkbookImportResult,
 } from "@/lib/storage";
 import type { JobApplication } from "@/lib/types";
@@ -65,6 +66,7 @@ interface JobTrackerShellProps {
   createApplication: (input: Omit<JobApplication, "id" | "activityLog" | "createdAt" | "updatedAt">) => Promise<JobApplication>;
   updateApplication: (application: JobApplication) => Promise<JobApplication>;
   deleteApplication: (applicationId: string) => Promise<void>;
+  backupApplications: (applications: JobApplication[], fileName: string, mode: ApplicationImportMode) => Promise<ImportBackup>;
   mergeApplications: (applications: JobApplication[]) => Promise<void>;
   replaceApplications: (applications: JobApplication[]) => Promise<void>;
   mode: "demo" | "owner";
@@ -85,6 +87,7 @@ function JobTrackerShell({
   createApplication,
   updateApplication,
   deleteApplication,
+  backupApplications,
   mergeApplications,
   replaceApplications,
   mode,
@@ -134,19 +137,23 @@ function JobTrackerShell({
         result: pendingImport.result,
         plan: pendingPlan,
         mode: importMode,
+        persistBackup: backupApplications,
         persistMerge: mergeApplications,
         persistReplacement: replaceApplications,
         storageScope: mode,
       });
       if (importMode === "replace") {
+        // Owner snapshots are durable across browsers; demo snapshots remain intentionally device-local.
+        const backupLocation = mode === "owner" ? "Firestore" : "this browser";
         toast({
           title: "Dataset replaced safely",
-          description: `Replaced the active dataset with ${pendingImport.result.applications.length} jobs from the workbook. The previous dataset was backed up in this browser first.`,
+          description: `Replaced the active dataset with ${pendingImport.result.applications.length} jobs from the workbook. The previous dataset was backed up in ${backupLocation} first.`,
         });
       } else {
+        const backupLocation = mode === "owner" ? "Firestore" : "this browser";
         toast({
           title: "Import merged safely",
-          description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted, and the previous dataset was backed up in this browser.`,
+          description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted, and the previous dataset was backed up in ${backupLocation}.`,
         });
       }
       pendingImport.result.warnings.forEach((warning) => {
@@ -211,6 +218,7 @@ function JobTrackerShell({
         skippedCount={pendingPlan?.skipped.length ?? 0}
         currentCount={applications.length}
         importedCount={pendingImport?.result.applications.length ?? 0}
+        backupDestination={mode === "owner" ? "firestore" : "browser"}
         mode={importMode}
         isApplying={isApplyingImport}
         onCancel={() => setPendingImport(null)}

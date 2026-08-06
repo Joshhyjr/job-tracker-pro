@@ -21,6 +21,7 @@ interface ImportConfirmationDialogProps {
   skippedCount: number;
   currentCount: number;
   importedCount: number;
+  backupDestination: "firestore" | "browser";
   mode: ApplicationImportMode;
   isApplying: boolean;
   onCancel: () => void;
@@ -36,6 +37,7 @@ export default function ImportConfirmationDialog({
   skippedCount,
   currentCount,
   importedCount,
+  backupDestination,
   mode,
   isApplying,
   onCancel,
@@ -108,13 +110,23 @@ export default function ImportConfirmationDialog({
             </dl>
             <div className="rounded-md bg-muted p-3 text-sm">
               <p className="font-medium">Your current jobs will not be deleted.</p>
-              <p className="mt-1 text-muted-foreground">A browser backup of the current dataset will be created before this merge starts.</p>
+              <p className="mt-1 text-muted-foreground">
+                {/* Owner recovery points are cross-device; demo recovery points cannot enter private Firestore. */}
+                {backupDestination === "firestore"
+                  ? "A verified owner-only Firestore backup will be created before this merge starts."
+                  : "A browser backup of the demo dataset will be created before this merge starts."}
+              </p>
             </div>
           </>
         ) : (
           <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
             <p className="font-medium text-destructive">This will replace all {currentCount} current jobs with {importedCount} jobs from the workbook.</p>
-            <p className="mt-1 text-muted-foreground">Current jobs that are not in the workbook will be removed from the active dataset. A browser backup will be verified before replacement starts.</p>
+            <p className="mt-1 text-muted-foreground">
+              Current jobs that are not in the workbook will be removed from the active dataset.{" "}
+              {backupDestination === "firestore"
+                ? "An owner-only Firestore backup will be verified before replacement starts."
+                : "A browser backup of the demo dataset will be verified before replacement starts."}
+            </p>
           </div>
         )}
 

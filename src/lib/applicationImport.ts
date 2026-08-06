@@ -1,6 +1,5 @@
 import type { ApplicationImportPlan } from "./applicationMerge";
 import {
-  createImportBackup,
   markDemoSeeded,
   markSeeded,
   persistWorkbookImport,
@@ -20,6 +19,11 @@ interface ApplyConfirmedImportOptions {
   result: WorkbookImportResult;
   plan: ApplicationImportPlan;
   mode?: ApplicationImportMode;
+  persistBackup: (
+    applications: JobApplication[],
+    fileName: string,
+    mode: ApplicationImportMode,
+  ) => Promise<ImportBackup>;
   persistMerge: (applications: JobApplication[]) => Promise<void>;
   persistReplacement: (applications: JobApplication[]) => Promise<void>;
   storageScope?: ImportStorageScope;
@@ -31,12 +35,13 @@ export async function applyConfirmedApplicationImport({
   result,
   plan,
   mode = "merge",
+  persistBackup,
   persistMerge,
   persistReplacement,
   storageScope = "owner",
 }: ApplyConfirmedImportOptions): Promise<ImportBackup> {
-  // Ordering is deliberate: a verified backup must exist before owner-cloud or demo-browser records can change.
-  const backup = createImportBackup(currentApplications, fileName, storageScope);
+  // Ordering is deliberate: a verified owner-cloud or demo-browser backup must exist before records can change.
+  const backup = await persistBackup(currentApplications, fileName, mode);
   const nextApplications = mode === "replace" ? result.applications : plan.mergedApplications;
   const persistencePayload = mode === "replace" ? result.applications : [...plan.updates, ...plan.additions];
   // Select persistence inside the transaction so the displayed mode and write semantics cannot drift apart.

@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { deserializeApplication, replaceApplications, serializeApplication, upsertApplications } from "@/lib/applicationRepository";
+import {
+  createApplicationImportBackup,
+  deserializeApplication,
+  replaceApplications,
+  serializeApplication,
+  upsertApplications,
+} from "@/lib/applicationRepository";
 import type { JobApplication } from "@/lib/types";
 
 const firestoreMocks = vi.hoisted(() => ({
   getDocs: vi.fn(),
+  getDocsFromServer: vi.fn(),
+  setDoc: vi.fn(),
   writeBatch: vi.fn(),
 }));
 
@@ -12,13 +20,28 @@ vi.mock("@/lib/firebase", () => ({
 }));
 
 vi.mock("firebase/firestore", () => ({
-  collection: vi.fn(() => ({ path: "applications" })),
+  collection: vi.fn((...segments: unknown[]) => ({
+    // Preserve enough path information to distinguish live applications from immutable backup rows.
+    path: segments.flatMap((segment) => {
+      if (typeof segment === "string") return [segment];
+      if (segment && typeof segment === "object" && "path" in segment) return [String(segment.path)];
+      return [];
+    }).join("/"),
+  })),
   deleteDoc: vi.fn(),
-  doc: vi.fn((...segments: unknown[]) => ({ id: String(segments[segments.length - 1]) })),
+  doc: vi.fn((...segments: unknown[]) => ({
+    id: String(segments[segments.length - 1]),
+    path: segments.flatMap((segment) => {
+      if (typeof segment === "string") return [segment];
+      if (segment && typeof segment === "object" && "path" in segment) return [String(segment.path)];
+      return [];
+    }).join("/"),
+  })),
   getDoc: vi.fn(),
   getDocs: firestoreMocks.getDocs,
+  getDocsFromServer: firestoreMocks.getDocsFromServer,
   onSnapshot: vi.fn(),
-  setDoc: vi.fn(),
+  setDoc: firestoreMocks.setDoc,
   writeBatch: firestoreMocks.writeBatch,
 }));
 
@@ -67,6 +90,8 @@ function mockBatchedReplacement(existingCount: number, failAtBatch?: number) {
 
 beforeEach(() => {
   firestoreMocks.getDocs.mockReset();
+  firestoreMocks.getDocsFromServer.mockReset();
+  firestoreMocks.setDoc.mockReset();
   firestoreMocks.writeBatch.mockReset();
 });
 
@@ -84,6 +109,62 @@ describe("application repository serialization", () => {
 
     // Document paths are the stable identity used by migration, updates, and deletes.
     expect(restored.id).toBe("document-id");
+  });
+});
+
+describe("createApplicationImportBackup", () => {
+  it("marks a versioned Firestore snapshot ready only after every row is written and verified", async () => {
+    const current = Array.from({ length: 451 }, (_, index) => application({ id: `current-${index}` }));
+    const committedBatches = mockBatchedReplacement(0);
+    firestoreMocks.getDocsFromServer.mockResolvedValue({
+      docs: current.map((item) => ({ id: item.id, data: () => serializeApplication(item) })),
+    });
+    firestoreMocks.getDocs.mockResolvedValue({ docs: current.map((item) => ({ id: item.id })) });
+
+    const backup = await createApplicationImportBackup("user-1", "replacement.xlsx", "replace");
+
+    // Large snapshots use the same conservative batch size as live writes and become recoverable only afterward.
+    expect(committedBatches.map((batch) => batch.length)).toEqual([450, 1]);
+    expect(firestoreMocks.setDoc).toHaveBeenCalledTimes(2);
+    expect(firestoreMocks.setDoc.mock.calls[0][1]).toMatchObject({
+      applicationCount: 451,
+      mode: "replace",
+      sourceFileName: "replacement.xlsx",
+      status: "writing",
+    });
+    expect(firestoreMocks.setDoc.mock.calls[1][1]).toMatchObject({ status: "ready" });
+    expect(firestoreMocks.setDoc.mock.calls[1][2]).toEqual({ merge: true });
+    expect(backup).toMatchObject({ sourceFileName: "replacement.xlsx", applications: current });
+  });
+
+  it("rejects an incomplete cloud snapshot without marking it ready", async () => {
+    const current = [application({ id: "ibm" }), application({ id: "apple" })];
+    mockBatchedReplacement(0);
+    firestoreMocks.getDocsFromServer.mockResolvedValue({
+      docs: current.map((item) => ({ id: item.id, data: () => serializeApplication(item) })),
+    });
+    firestoreMocks.getDocs.mockResolvedValue({ docs: [{ id: "ibm" }] });
+
+    await expect(createApplicationImportBackup("user-1", "merge.xlsx", "merge"))
+      .rejects.toThrow("Could not verify");
+
+    // The writing manifest can be diagnosed later, but it cannot be mistaken for a valid recovery point.
+    expect(firestoreMocks.setDoc).toHaveBeenCalledOnce();
+    expect(firestoreMocks.setDoc.mock.calls[0][1]).toMatchObject({ status: "writing" });
+  });
+
+  it("rejects duplicate application IDs before creating a manifest", async () => {
+    const current = [application({ id: "duplicate" }), application({ id: "duplicate", companyName: "Apple" })];
+    firestoreMocks.getDocsFromServer.mockResolvedValue({
+      docs: current.map((item) => ({ id: item.id, data: () => serializeApplication(item) })),
+    });
+
+    await expect(createApplicationImportBackup("user-1", "merge.xlsx", "merge"))
+      .rejects.toThrow("application IDs are not unique");
+
+    // One Firestore document per job requires unique stable IDs for a complete, verifiable snapshot.
+    expect(firestoreMocks.setDoc).not.toHaveBeenCalled();
+    expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
   });
 });
 

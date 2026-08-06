@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  createImportBackup,
   generateId,
   getDemoApplications,
   isDemoSeeded,
@@ -108,6 +109,10 @@ export function useDemoApplications() {
     }),
     deleteApplication: (applicationId: string) => runMutation(() => {
       commitApplications(applicationsRef.current.filter((item) => item.id !== applicationId));
+    }),
+    backupApplications: (currentApplications: JobApplication[], fileName: string) => runMutation(() => {
+      // Signed-out users have no owner Firestore access, so their recovery point stays in the demo namespace.
+      return createImportBackup(currentApplications, fileName, "demo");
     }),
     mergeApplications: (changedApplications: JobApplication[]) => runMutation(() => {
       // Signed-out merge imports preserve existing demo jobs and apply only additions or stable-ID updates.

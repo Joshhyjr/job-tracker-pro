@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyConfirmedApplicationImport } from "@/lib/applicationImport";
 import { planApplicationImport } from "@/lib/applicationMerge";
 import {
+  createImportBackup,
   getApplications,
   getDemoApplications,
   getLastImportMetadata,
@@ -31,6 +32,11 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+function persistBrowserBackup(scope: "owner" | "demo" = "owner") {
+  // The import coordinator accepts either the owner Firestore writer or the isolated demo browser writer.
+  return vi.fn(async (applications: JobApplication[], fileName: string) => createImportBackup(applications, fileName, scope));
+}
+
 describe("applyConfirmedApplicationImport", () => {
   it("creates the backup before writing and keeps existing jobs in the merged dataset", async () => {
     const current = [application()];
@@ -41,17 +47,20 @@ describe("applyConfirmedApplicationImport", () => {
       expect(getLatestImportBackup()?.applications).toMatchObject([{ companyName: "IBM" }]);
     });
     const persistReplacement = vi.fn();
+    const persistBackup = persistBrowserBackup();
 
     await applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "new-jobs.xlsx",
       result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
       plan,
+      persistBackup,
       persistMerge,
       persistReplacement,
     });
 
     expect(persistMerge).toHaveBeenCalledWith(imported);
+    expect(persistBackup).toHaveBeenCalledWith(current, "new-jobs.xlsx", "merge");
     expect(persistReplacement).not.toHaveBeenCalled();
     expect(getApplications()).toMatchObject([{ companyName: "IBM" }, { companyName: "Apple" }]);
     expect(getLastImportMetadata()).toMatchObject({ fileName: "new-jobs.xlsx", rowCount: 1 });
@@ -68,6 +77,7 @@ describe("applyConfirmedApplicationImport", () => {
       fileName: "new-jobs.xlsx",
       result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
       plan,
+      persistBackup: persistBrowserBackup(),
       persistMerge: async () => {
         throw new Error("cloud unavailable");
       },
@@ -91,6 +101,7 @@ describe("applyConfirmedApplicationImport", () => {
       expect(replacement).toEqual(imported);
     });
     const persistMerge = vi.fn();
+    const persistBackup = persistBrowserBackup();
 
     await applyConfirmedApplicationImport({
       currentApplications: current,
@@ -98,11 +109,13 @@ describe("applyConfirmedApplicationImport", () => {
       result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
       plan,
       mode: "replace",
+      persistBackup,
       persistMerge,
       persistReplacement,
     });
 
     expect(persistReplacement).toHaveBeenCalledWith(imported);
+    expect(persistBackup).toHaveBeenCalledWith(current, "replacement.xlsx", "replace");
     expect(persistMerge).not.toHaveBeenCalled();
     expect(getApplications()).toEqual(imported);
     expect(getLatestImportBackup()?.applications).toEqual(current);
@@ -121,6 +134,7 @@ describe("applyConfirmedApplicationImport", () => {
       result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
       plan,
       mode: "replace",
+      persistBackup: persistBrowserBackup(),
       persistMerge: vi.fn(),
       persistReplacement: async () => {
         throw new Error("cloud unavailable");
@@ -145,6 +159,7 @@ describe("applyConfirmedApplicationImport", () => {
       fileName: "demo-jobs.xlsx",
       result: { applications: imported, warnings: [], preferredResponseStatusOrder: ["Interview"] },
       plan,
+      persistBackup: persistBrowserBackup("demo"),
       persistMerge: vi.fn().mockResolvedValue(undefined),
       persistReplacement: vi.fn(),
       storageScope: "demo",
@@ -171,6 +186,7 @@ describe("applyConfirmedApplicationImport", () => {
       result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
       plan,
       mode: "replace",
+      persistBackup: persistBrowserBackup("demo"),
       persistMerge: vi.fn(),
       persistReplacement: vi.fn().mockResolvedValue(undefined),
       storageScope: "demo",
@@ -181,5 +197,28 @@ describe("applyConfirmedApplicationImport", () => {
     expect(getApplications()).toEqual(owner);
     expect(getLatestImportBackup("demo")?.applications).toEqual(demoCurrent);
     expect(getLastImportMetadata()).toBeNull();
+  });
+
+  it("does not start merge or replacement when the required cloud backup fails", async () => {
+    const current = [application()];
+    const imported = [application({ id: "apple-application", companyName: "Apple" })];
+    const plan = planApplicationImport(current, imported);
+    const persistMerge = vi.fn();
+    const persistReplacement = vi.fn();
+
+    await expect(applyConfirmedApplicationImport({
+      currentApplications: current,
+      fileName: "new-jobs.xlsx",
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      plan,
+      mode: "replace",
+      persistBackup: vi.fn().mockRejectedValue(new Error("Firestore backup unavailable")),
+      persistMerge,
+      persistReplacement,
+    })).rejects.toThrow("Firestore backup unavailable");
+
+    // Backup readiness is the hard transaction boundary for both safe import modes.
+    expect(persistMerge).not.toHaveBeenCalled();
+    expect(persistReplacement).not.toHaveBeenCalled();
   });
 });
