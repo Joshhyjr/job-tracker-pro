@@ -43,14 +43,16 @@ function ApplicationDetailRoute({ applications, onUpdate, onDelete, isDemo }: { 
 }
 
 // Keep application selection in the URL so details remain shareable and refresh-safe.
-function ApplicationsListRoute({ applications, onUpdate, isDemo }: { applications: JobApplication[]; onUpdate: (application: JobApplication) => Promise<JobApplication>; isDemo: boolean }) {
+function ApplicationsListRoute({ applications, onUpdate, onDelete, isDemo }: { applications: JobApplication[]; onUpdate: (application: JobApplication) => Promise<JobApplication>; onDelete: (id: string) => Promise<void>; isDemo: boolean }) {
   const navigate = useNavigate();
 
+  // The list owns selection and confirmation while the shared hook remains the persistence boundary.
   return (
     <ApplicationsList
       applications={applications}
       onSelect={(application) => navigate(`/app/applications/${application.id}`)}
       onUpdate={onUpdate}
+      onDelete={onDelete}
       isDemo={isDemo}
     />
   );
@@ -181,7 +183,7 @@ function JobTrackerShell({
         {syncError && <Alert variant="destructive" className="mb-6"><AlertDescription>{syncError}</AlertDescription></Alert>}
         <Routes>
           <Route index element={<Dashboard applications={applications} isDemo={mode === "demo"} user={user} />} />
-          <Route path="applications" element={<ApplicationsListRoute applications={applications} onUpdate={updateApplication} isDemo={mode === "demo"} />} />
+          <Route path="applications" element={<ApplicationsListRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
           <Route path="locations" element={<Locations applications={applications} />} />
           <Route path="applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
           <Route path="follow-ups" element={<FollowUps applications={applications} />} />

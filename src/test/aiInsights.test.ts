@@ -97,6 +97,7 @@ describe("buildAiInsightSummary", () => {
     expect(summary.interviewCount).toBe(2);
     expect(summary.interviewRate).toBe(67);
     expect(summary.offerCount).toBe(1);
+    // The explicit June 1 schedule is due; the already-completed unscheduled follow-up stays out of the queue.
     expect(summary.overdueFollowUpCount).toBe(1);
     expect(summary.topCompanies[0]).toEqual({ name: "Beta", count: 2 });
     expect(summary.statusBreakdown).toEqual(expect.arrayContaining([{ status: "Offer", count: 1 }]));
