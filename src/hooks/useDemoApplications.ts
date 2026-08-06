@@ -110,11 +110,16 @@ export function useDemoApplications() {
       commitApplications(applicationsRef.current.filter((item) => item.id !== applicationId));
     }),
     mergeApplications: (changedApplications: JobApplication[]) => runMutation(() => {
-      // The shared shell never imports into demo mode, but previews retain a compatible additive contract.
+      // Signed-out merge imports preserve existing demo jobs and apply only additions or stable-ID updates.
       const changesById = new Map(changedApplications.map((application) => [application.id, normalizeDemoApplication(application)]));
       const updated = applicationsRef.current.map((application) => changesById.get(application.id) ?? application);
       const existingIds = new Set(applicationsRef.current.map((application) => application.id));
       commitApplications([...updated, ...Array.from(changesById.values()).filter((application) => !existingIds.has(application.id))]);
+    }),
+    replaceApplications: (nextApplications: JobApplication[]) => runMutation(() => {
+      // Replacement is explicit and cannot turn an invalid empty workbook into a silent demo wipe.
+      if (nextApplications.length === 0) throw new Error("Cannot replace applications with an empty dataset.");
+      commitApplications(nextApplications.map(normalizeDemoApplication));
     }),
     resetDemo: () => runMutation(async () => {
       // Reset always returns the public sandbox to the repository's known synthetic dataset.

@@ -514,7 +514,7 @@ export async function loadSeedData({ persistPreferredOrder = true }: { persistPr
 }
 
 export function persistWorkbookImport(fileName: string, result: WorkbookImportResult): void {
-  // Preview parsing remains side-effect free; metadata is committed only after the user confirms the merge.
+  // Preview parsing remains side-effect free; metadata is committed only after the selected import transaction succeeds.
   setPreferredResponseStatusOrder(result.preferredResponseStatusOrder);
   setImportWarnings(result.warnings);
   saveLastImportMetadata({

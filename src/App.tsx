@@ -19,7 +19,7 @@ import { useApplications } from "@/hooks/useApplications";
 import { useDemoApplications } from "@/hooks/useDemoApplications";
 import { exportCSV, exportXLSX } from "@/lib/export";
 import { planApplicationImport } from "@/lib/applicationMerge";
-import { applyConfirmedApplicationImport } from "@/lib/applicationImport";
+import { applyConfirmedApplicationImport, type ApplicationImportMode } from "@/lib/applicationImport";
 import { isSupportedExcelWorkbook } from "@/lib/excelFile";
 import {
   importApplicationsFromFile,
@@ -66,6 +66,7 @@ interface JobTrackerShellProps {
   updateApplication: (application: JobApplication) => Promise<JobApplication>;
   deleteApplication: (applicationId: string) => Promise<void>;
   mergeApplications: (applications: JobApplication[]) => Promise<void>;
+  replaceApplications: (applications: JobApplication[]) => Promise<void>;
   mode: "demo" | "owner";
   user?: User;
   authError?: string;
@@ -85,6 +86,7 @@ function JobTrackerShell({
   updateApplication,
   deleteApplication,
   mergeApplications,
+  replaceApplications,
   mode,
   user,
   authError,
@@ -94,6 +96,7 @@ function JobTrackerShell({
 }: JobTrackerShellProps) {
   const { toast } = useToast();
   const [pendingImport, setPendingImport] = useState<{ file: File; result: WorkbookImportResult } | null>(null);
+  const [importMode, setImportMode] = useState<ApplicationImportMode>("merge");
   const [isApplyingImport, setIsApplyingImport] = useState(false);
   // Recompute against live owner state so a realtime change while the dialog is open cannot be omitted.
   const pendingPlan = useMemo(
@@ -111,6 +114,8 @@ function JobTrackerShell({
       // Parsing is a side-effect-free preview; import metadata changes only after explicit confirmation.
       const result = await importApplicationsFromFile(file, { persistMetadata: false });
       if (result.applications.length === 0) throw new Error("Workbook does not contain any valid application rows.");
+      // Each newly selected workbook starts in the safest non-destructive mode.
+      setImportMode("merge");
       setPendingImport({ file, result });
     } catch {
       toast({ title: "Import failed", description: "Could not read this file. Please verify the XLSX format.", variant: "destructive" });
@@ -128,13 +133,22 @@ function JobTrackerShell({
         fileName: pendingImport.file.name,
         result: pendingImport.result,
         plan: pendingPlan,
-        persistChanges: mergeApplications,
+        mode: importMode,
+        persistMerge: mergeApplications,
+        persistReplacement: replaceApplications,
         storageScope: mode,
       });
-      toast({
-        title: "Import merged safely",
-        description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted, and the previous dataset was backed up in this browser.`,
-      });
+      if (importMode === "replace") {
+        toast({
+          title: "Dataset replaced safely",
+          description: `Replaced the active dataset with ${pendingImport.result.applications.length} jobs from the workbook. The previous dataset was backed up in this browser first.`,
+        });
+      } else {
+        toast({
+          title: "Import merged safely",
+          description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted, and the previous dataset was backed up in this browser.`,
+        });
+      }
       pendingImport.result.warnings.forEach((warning) => {
         toast({ title: "Import warning", description: warning });
       });
@@ -195,8 +209,12 @@ function JobTrackerShell({
         addedCount={pendingPlan?.additions.length ?? 0}
         updatedCount={pendingPlan?.updates.length ?? 0}
         skippedCount={pendingPlan?.skipped.length ?? 0}
+        currentCount={applications.length}
+        importedCount={pendingImport?.result.applications.length ?? 0}
+        mode={importMode}
         isApplying={isApplyingImport}
         onCancel={() => setPendingImport(null)}
+        onModeChange={setImportMode}
         onConfirm={handleConfirmImport}
       />
     </>

@@ -6,6 +6,7 @@ import {
   createApplication,
   deleteApplication,
   mergeLocalApplicationsOnce,
+  replaceApplications as replaceCloudApplications,
   subscribeApplications,
   upsertApplications,
   updateApplication,
@@ -116,5 +117,6 @@ export function useApplications(user?: User) {
     updateApplication: (application: JobApplication) => runMutation(() => updateApplication(user!.uid, application)),
     deleteApplication: (applicationId: string) => runMutation(() => deleteApplication(user!.uid, applicationId)),
     mergeApplications: (changedApplications: JobApplication[]) => runMutation(() => upsertApplications(user!.uid, changedApplications)),
+    replaceApplications: (nextApplications: JobApplication[]) => runMutation(() => replaceCloudApplications(user!.uid, nextApplications)),
   };
 }

@@ -12,12 +12,16 @@ import {
 } from "./storage";
 import type { JobApplication } from "./types";
 
+export type ApplicationImportMode = "merge" | "replace";
+
 interface ApplyConfirmedImportOptions {
   currentApplications: JobApplication[];
   fileName: string;
   result: WorkbookImportResult;
   plan: ApplicationImportPlan;
-  persistChanges: (applications: JobApplication[]) => Promise<void>;
+  mode?: ApplicationImportMode;
+  persistMerge: (applications: JobApplication[]) => Promise<void>;
+  persistReplacement: (applications: JobApplication[]) => Promise<void>;
   storageScope?: ImportStorageScope;
 }
 
@@ -26,19 +30,24 @@ export async function applyConfirmedApplicationImport({
   fileName,
   result,
   plan,
-  persistChanges,
+  mode = "merge",
+  persistMerge,
+  persistReplacement,
   storageScope = "owner",
 }: ApplyConfirmedImportOptions): Promise<ImportBackup> {
   // Ordering is deliberate: a verified backup must exist before owner-cloud or demo-browser records can change.
   const backup = createImportBackup(currentApplications, fileName, storageScope);
-  await persistChanges([...plan.updates, ...plan.additions]);
-  // Browser state and import breadcrumbs advance only after all additive cloud writes succeed.
+  const nextApplications = mode === "replace" ? result.applications : plan.mergedApplications;
+  const persistencePayload = mode === "replace" ? result.applications : [...plan.updates, ...plan.additions];
+  // Select persistence inside the transaction so the displayed mode and write semantics cannot drift apart.
+  await (mode === "replace" ? persistReplacement : persistMerge)(persistencePayload);
+  // Browser state and import breadcrumbs advance only after the selected cloud or demo write succeeds.
   if (storageScope === "demo") {
     // Signed-out imports stay inside the public browser sandbox and never alter owner workbook metadata.
-    saveDemoApplications(plan.mergedApplications);
+    saveDemoApplications(nextApplications);
     markDemoSeeded();
   } else {
-    saveApplications(plan.mergedApplications);
+    saveApplications(nextApplications);
     markSeeded();
     persistWorkbookImport(fileName, result);
   }
