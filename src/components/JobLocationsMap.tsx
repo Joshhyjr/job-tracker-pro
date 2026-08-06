@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Building2, LocateFixed, MapPin, MinusCircle, Move } from "lucide-react";
+import { AlertTriangle, Building2, LocateFixed, MapPin, MinusCircle, Move, Search } from "lucide-react";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { JobApplication } from "@/lib/types";
 import { buildJobLocationGroups, buildJobLocationGroupsAsync, getApplicationLocationLabel, type JobLocationGroup, type JobLocationGroupsResult } from "@/lib/locations";
@@ -87,7 +88,14 @@ function LocationDetails({ group }: { group: JobLocationGroup }) {
 export function JobLocationsMap({ applications }: { applications: JobApplication[] }) {
   const initialLocationResult = useMemo(() => buildJobLocationGroups(applications), [applications]);
   const [locationResult, setLocationResult] = useState<JobLocationGroupsResult>(initialLocationResult);
-  const { groups, unresolved, ignored } = locationResult;
+  const { groups: allGroups, unresolved, ignored } = locationResult;
+  const [countryFilter, setCountryFilter] = useState("");
+  // Filter the resolved groups once so map markers, counts, fitting, and details always describe the same country results.
+  const groups = useMemo(() => {
+    const query = countryFilter.trim().toLocaleLowerCase();
+    if (!query) return allGroups;
+    return allGroups.filter((group) => group.country.toLocaleLowerCase().includes(query));
+  }, [allGroups, countryFilter]);
   const mappedApplicationCount = groups.reduce((total, group) => total + group.applications.length, 0);
   const [activeKey, setActiveKey] = useState<string | null>(groups[0]?.key ?? null);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
@@ -272,65 +280,85 @@ export function JobLocationsMap({ applications }: { applications: JobApplication
   }, [selectedKey]);
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="space-y-3">
-        <div className="job-locations-map relative aspect-[2/1] overflow-hidden rounded-lg border border-border/50 bg-muted/30">
-          <div
-            ref={mapContainerRef}
-            data-testid="job-locations-map-canvas"
-            role="region"
-            aria-label="Interactive job locations map"
-            className="absolute inset-0"
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <label className="relative block w-full sm:w-72">
+          <span className="sr-only">Filter map by country</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={countryFilter}
+            onChange={(event) => setCountryFilter(event.target.value)}
+            placeholder="Search country..."
+            aria-label="Filter map by country"
+            className="pl-9"
           />
-          {!mapReady && !mapError && groups.length > 0 && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 text-sm text-muted-foreground backdrop-blur-[1px]">
-              Loading detailed map…
-            </div>
-          )}
-          {mapError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90 p-8 text-center">
-              <AlertTriangle className="h-8 w-8 text-muted-foreground" />
-              <p className="max-w-sm text-sm text-muted-foreground">The detailed map could not be loaded. Your saved job locations are unchanged.</p>
-            </div>
-          )}
-          {groups.length === 0 && !mapError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 p-8 text-center">
-              <MapPin className="h-8 w-8 text-muted-foreground" />
-              <p className="max-w-sm text-sm text-muted-foreground">No applications have enough city, country, or coordinate data to place on the map yet.</p>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1"><LocateFixed className="h-3.5 w-3.5" /> {groups.length} location{groups.length === 1 ? "" : "s"}</span>
-          <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {mappedApplicationCount} pinned job{mappedApplicationCount === 1 ? "" : "s"}</span>
-          {groups.length > 0 && (
-            <span className="inline-flex items-center gap-1"><Move className="h-3.5 w-3.5" /> Drag or scroll to explore</span>
-          )}
-          {ignored.length > 0 && (
-            <span className="inline-flex items-center gap-1"><MinusCircle className="h-3.5 w-3.5" /> {ignored.length} remote/blank ignored</span>
-          )}
-          {unresolved.length > 0 && (
-            <span className="inline-flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> {unresolved.length} unresolved</span>
-          )}
-        </div>
+        </label>
       </div>
-      <aside className="space-y-4">
-        {activeGroup ? <LocationDetails group={activeGroup} /> : null}
-        {unresolved.length > 0 && (
-          <div className="rounded-lg border border-border/50 p-4">
-            <p className="text-sm font-semibold">Needs location cleanup</p>
-            <p className="mt-1 text-xs text-muted-foreground">These rows could not be resolved against the local city database. Add city/country, correct typos, or provide valid coordinates.</p>
-            <div className="mt-3 space-y-2">
-              {unresolved.slice(0, 5).map((application) => (
-                <div key={application.id} className="rounded-md bg-muted/40 px-3 py-2">
-                  <p className="truncate text-sm font-medium">{application.companyName}</p>
-                  <p className="truncate text-xs text-muted-foreground">{getApplicationLocationLabel(application)}</p>
-                </div>
-              ))}
-            </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-3">
+          <div className="job-locations-map relative aspect-[2/1] overflow-hidden rounded-lg border border-border/50 bg-muted/30">
+            <div
+              ref={mapContainerRef}
+              data-testid="job-locations-map-canvas"
+              role="region"
+              aria-label="Interactive job locations map"
+              className="absolute inset-0"
+            />
+            {!mapReady && !mapError && groups.length > 0 && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 text-sm text-muted-foreground backdrop-blur-[1px]">
+                Loading detailed map…
+              </div>
+            )}
+            {mapError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90 p-8 text-center">
+                <AlertTriangle className="h-8 w-8 text-muted-foreground" />
+                <p className="max-w-sm text-sm text-muted-foreground">The detailed map could not be loaded. Your saved job locations are unchanged.</p>
+              </div>
+            )}
+            {groups.length === 0 && !mapError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 p-8 text-center">
+                <MapPin className="h-8 w-8 text-muted-foreground" />
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  {countryFilter.trim()
+                    ? `No mapped job locations match “${countryFilter.trim()}”.`
+                    : "No applications have enough city, country, or coordinate data to place on the map yet."}
+                </p>
+              </div>
+            )}
           </div>
-        )}
-      </aside>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1"><LocateFixed className="h-3.5 w-3.5" /> {groups.length} location{groups.length === 1 ? "" : "s"}</span>
+            <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {mappedApplicationCount} pinned job{mappedApplicationCount === 1 ? "" : "s"}</span>
+            {groups.length > 0 && (
+              <span className="inline-flex items-center gap-1"><Move className="h-3.5 w-3.5" /> Drag or scroll to explore</span>
+            )}
+            {ignored.length > 0 && (
+              <span className="inline-flex items-center gap-1"><MinusCircle className="h-3.5 w-3.5" /> {ignored.length} remote/blank ignored</span>
+            )}
+            {unresolved.length > 0 && (
+              <span className="inline-flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> {unresolved.length} unresolved</span>
+            )}
+          </div>
+        </div>
+        <aside className="space-y-4">
+          {activeGroup ? <LocationDetails group={activeGroup} /> : null}
+          {unresolved.length > 0 && (
+            <div className="rounded-lg border border-border/50 p-4">
+              <p className="text-sm font-semibold">Needs location cleanup</p>
+              <p className="mt-1 text-xs text-muted-foreground">These rows could not be resolved against the local city database. Add city/country, correct typos, or provide valid coordinates.</p>
+              <div className="mt-3 space-y-2">
+                {unresolved.slice(0, 5).map((application) => (
+                  <div key={application.id} className="rounded-md bg-muted/40 px-3 py-2">
+                    <p className="truncate text-sm font-medium">{application.companyName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{getApplicationLocationLabel(application)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

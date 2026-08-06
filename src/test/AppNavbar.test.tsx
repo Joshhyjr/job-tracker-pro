@@ -44,6 +44,29 @@ describe("AppNavbar", () => {
     expect(document.getElementById("mobile-navigation")).not.toBeInTheDocument();
   });
 
+  it("combines CSV and XLSX exports under one Download menu", async () => {
+    const onExportCSV = vi.fn();
+    const onExportXLSX = vi.fn();
+    render(
+      <MemoryRouter initialEntries={["/app/applications"]}>
+        <AppNavbar {...requiredProps} onExportCSV={onExportCSV} onExportXLSX={onExportXLSX} mode="demo" onSignIn={vi.fn()} onResetDemo={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "CSV" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "XLSX" })).not.toBeInTheDocument();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Download" }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Download CSV" }));
+    expect(onExportCSV).toHaveBeenCalledOnce();
+
+    // The menu closes after each download, so XLSX is verified through a fresh open.
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Download" }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Download XLSX" }));
+    expect(onExportXLSX).toHaveBeenCalledOnce();
+  });
+
   it("shows cloud and sign-out controls for the authenticated owner", () => {
     const onSignOut = vi.fn();
     const user = { email: "joshuakivaria@gmail.com" } as User;

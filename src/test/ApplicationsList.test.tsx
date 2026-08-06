@@ -77,9 +77,9 @@ describe("ApplicationsList", () => {
   it("filters calendar dates by exact date, month, and year", () => {
     renderList();
     const mode = screen.getByLabelText("Date filter");
-    const value = screen.getByLabelText("Date value");
 
     fireEvent.change(mode, { target: { value: "month" } });
+    const value = screen.getByLabelText("Date value");
     fireEvent.change(value, { target: { value: "2026-08" } });
     expect(screen.getByText("Frontend Engineer")).toBeInTheDocument();
     expect(screen.queryByText("Product Designer")).not.toBeInTheDocument();
@@ -98,7 +98,8 @@ describe("ApplicationsList", () => {
 
   it("filters an inclusive date range with optional boundaries", () => {
     renderList();
-    fireEvent.change(screen.getByLabelText("Date filter"), { target: { value: "range" } });
+    // Date range is the default so both boundaries are immediately available.
+    expect(screen.getByLabelText("Date filter")).toHaveValue("range");
 
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-07-15" } });
     fireEvent.change(screen.getByLabelText("To date"), { target: { value: "2026-08-05" } });
@@ -122,7 +123,7 @@ describe("ApplicationsList", () => {
     renderList({ onDelete });
 
     fireEvent.change(screen.getByLabelText("Company name"), { target: { value: "acme" } });
-    fireEvent.click(screen.getByLabelText("Select all filtered applications"));
+    fireEvent.click(screen.getByRole("button", { name: "Select all (2)" }));
 
     expect(screen.getByText("2 of 2 filtered applications selected")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
@@ -144,7 +145,7 @@ describe("ApplicationsList", () => {
       .mockResolvedValueOnce(undefined);
     renderList({ onDelete });
 
-    fireEvent.click(screen.getByLabelText("Select all filtered applications"));
+    fireEvent.click(screen.getByRole("button", { name: "Select all (3)" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
 
@@ -161,7 +162,23 @@ describe("ApplicationsList", () => {
     renderList({ readOnly: true });
 
     // OneDrive-owned workbooks remain the editing authority while they are connected.
-    expect(screen.queryByLabelText("Select all filtered applications")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Select all/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete selected" })).not.toBeInTheDocument();
+  });
+
+  it("keeps bulk selection out of the table header", () => {
+    renderList();
+
+    // The header remains aligned with row checkboxes without presenting an unexplained control.
+    expect(screen.queryByLabelText("Select all filtered applications")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select all (3)" })).toBeInTheDocument();
+  });
+
+  it("renders one concise status toolbar without response-status duplicates", () => {
+    renderList();
+
+    // Current-status counts remain available while the redundant second badge row stays removed.
+    expect(screen.getAllByRole("button", { name: "Applied (2)" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Interview (1)" })).toHaveLength(1);
   });
 });
