@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown, Building2, BarChart3, Timer, Lightbulb, Sparkles, Loader2 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
 import type { User } from "firebase/auth";
 import type { AiInsights } from "@/lib/aiInsights";
@@ -72,7 +72,7 @@ export default function Dashboard({ applications, isDemo = false, user }: { appl
     }));
   const maxStatusCount = Math.max(1, ...statusChartData.map((item) => item.value));
 
-  // Group applications by month for the bar chart
+  // Group applications by month for the dashboard trend line.
   const monthlyData = useMemo(() => {
     const map = new Map<string, { sortKey: string; label: string; count: number }>();
     applications.forEach((a) => {
@@ -260,46 +260,55 @@ export default function Dashboard({ applications, isDemo = false, user }: { appl
 
         {/* Activity cards share the right column on desktop so recent jobs fill the space below the chart. */}
         <section className="space-y-6" aria-label="Application activity">
-          {/* Monthly trend — minimalist bar chart */}
+          {/* Monthly trend — a line graph makes changes between periods easier to follow. */}
           <Card className="border-border/40 shadow-none">
             <CardHeader><CardTitle className="text-base font-medium">Monthly Applications</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={monthlyData} barSize={18} barCategoryGap="60%">
-                  {/* Subtle horizontal grid only */}
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                    angle={-35}
-                    textAnchor="end"
-                    height={50}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={30}
-                  />
-                  {/* Glass tooltip for chart */}
-                  <Tooltip
-                    cursor={{ fill: "hsl(var(--muted) / 0.2)" }}
-                    content={({ payload, label }) => {
-                      if (!payload?.length) return null;
-                      return (
-                        <div className="glass rounded-xl px-3 py-1.5 text-xs">
-                          <p className="font-medium">{label}</p>
-                          <p className="text-muted-foreground">{payload[0].value} applications</p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div role="img" aria-label="Monthly applications line graph">
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={monthlyData}>
+                    {/* Subtle horizontal grid only */}
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      angle={-35}
+                      textAnchor="end"
+                      height={50}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={30}
+                    />
+                    {/* Glass tooltip for chart */}
+                    <Tooltip
+                      cursor={{ stroke: "hsl(var(--muted-foreground))", strokeDasharray: "3 3", strokeOpacity: 0.45 }}
+                      content={({ payload, label }) => {
+                        if (!payload?.length) return null;
+                        return (
+                          <div className="glass rounded-xl px-3 py-1.5 text-xs">
+                            <p className="font-medium">{label}</p>
+                            <p className="text-muted-foreground">{payload[0].value} applications</p>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="count"
+                      stroke="hsl(var(--chart-1))"
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: "hsl(var(--background))", strokeWidth: 2 }}
+                      activeDot={{ r: 6, strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
 

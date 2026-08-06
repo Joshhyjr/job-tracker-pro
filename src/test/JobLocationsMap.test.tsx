@@ -184,6 +184,30 @@ describe("JobLocationsMap", () => {
     expect(londonMarker).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("filters map pins and details by country search", async () => {
+    render(
+      <MemoryRouter>
+        <JobLocationsMap applications={[mappedApplication, londonApplication]} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("button", { name: "London, United Kingdom, 1 application" });
+    const countrySearch = screen.getByRole("searchbox", { name: "Filter map by country" });
+
+    // Country filtering updates the visible marker set and selected details together.
+    fireEvent.change(countrySearch, { target: { value: "Canada" } });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "London, United Kingdom, 1 application" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Halifax, Canada, 1 application" })).toBeInTheDocument();
+    expect(screen.getByText("Halifax, Canada")).toBeInTheDocument();
+    expect(screen.queryByText("London Company")).not.toBeInTheDocument();
+
+    fireEvent.change(countrySearch, { target: { value: "Japan" } });
+    expect(screen.getByText("No mapped job locations match “Japan”.")).toBeInTheDocument();
+  });
+
   it("replaces the loading overlay when MapLibre reports an initial error", async () => {
     mapLibreMocks.autoLoad = false;
     render(

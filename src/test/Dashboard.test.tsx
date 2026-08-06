@@ -23,8 +23,8 @@ vi.mock("react-router-dom", () => ({
 }));
 
 vi.mock("recharts", () => ({
-  BarChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Bar: () => null,
+  LineChart: ({ children }: { children: React.ReactNode }) => <div data-testid="monthly-line-chart">{children}</div>,
+  Line: () => <div data-testid="monthly-line" />,
   XAxis: () => null,
   YAxis: () => null,
   Tooltip: () => null,
@@ -147,6 +147,15 @@ describe("Dashboard", () => {
     const activityColumn = screen.getByRole("region", { name: "Application activity" });
     expect(within(activityColumn).getByRole("heading", { name: "Monthly Applications" })).toBeInTheDocument();
     expect(within(activityColumn).getByRole("heading", { name: "Recent Applications" })).toBeInTheDocument();
+  });
+
+  it("renders monthly applications as a line graph", () => {
+    render(<Dashboard applications={[application()]} />);
+
+    // The trend remains accessible even though Recharts renders the visual as SVG.
+    const lineGraph = screen.getByRole("img", { name: "Monthly applications line graph" });
+    expect(within(lineGraph).getByTestId("monthly-line-chart")).toBeInTheDocument();
+    expect(within(lineGraph).getByTestId("monthly-line")).toBeInTheDocument();
   });
 
   it("uses the signed-in Firebase ID token without rendering a manual token field", async () => {

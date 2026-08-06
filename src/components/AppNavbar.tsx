@@ -3,6 +3,7 @@ import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download, Upload, Glo
 import { Button } from "@/components/ui/button";
 import { ChangeEvent, useRef, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
 import { BrandLogo } from "@/components/BrandLogo";
 import type { User } from "firebase/auth";
@@ -58,6 +59,23 @@ export default function AppNavbar({
     setOpen(false);
   }
 
+  function renderDownloadMenu(triggerClassName?: string) {
+    // One labeled action reduces navbar width while keeping both export formats discoverable.
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className={triggerClassName}>
+            <Download className="mr-1 h-3.5 w-3.5" />Download
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={handleExportCSV}>Download CSV</DropdownMenuItem>
+          <DropdownMenuItem onClick={handleExportXLSX}>Download XLSX</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   // Keep theme selection markup in one place so desktop and mobile stay aligned.
   function renderThemeSelect(triggerClassName: string) {
     return (
@@ -105,8 +123,7 @@ export default function AppNavbar({
           <div className="ml-2 flex gap-1">
             {renderThemeSelect("h-9 w-[132px]")}
             {mode === "owner" && <Button variant="outline" size="sm" onClick={handleImportClick}><Upload className="h-3.5 w-3.5 mr-1" />Import XLSX</Button>}
-            <Button variant="outline" size="sm" onClick={handleExportCSV}><Download className="h-3.5 w-3.5 mr-1" />CSV</Button>
-            <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-3.5 w-3.5 mr-1" />XLSX</Button>
+            {renderDownloadMenu()}
             {mode === "owner" ? (
               <>
                 <div className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title={user?.email || "Signed in"}>
@@ -159,8 +176,7 @@ export default function AppNavbar({
             <div className="flex gap-2 pt-2 border-t border-border/40">
               {renderThemeSelect("h-9 flex-1")}
               {mode === "owner" && <Button variant="outline" size="sm" className="flex-1" onClick={handleImportClick}>Import</Button>}
-              <Button variant="outline" size="sm" className="flex-1" onClick={handleExportCSV}>CSV</Button>
-              <Button variant="outline" size="sm" className="flex-1" onClick={handleExportXLSX}>XLSX</Button>
+              {renderDownloadMenu("flex-1")}
             </div>
             {mode === "owner" ? (
               /* Mobile account controls expose both identity and cloud status without crowding the primary links. */

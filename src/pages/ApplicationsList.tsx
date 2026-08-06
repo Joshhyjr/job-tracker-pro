@@ -8,12 +8,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Search, ArrowUpDown, MoreHorizontal, Trash2 } from "lucide-react";
 import type { JobApplication, CurrentStatus } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
-import { badgeVariants } from "@/components/ui/badge";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { getPreferredResponseStatusOrder, generateId } from "@/lib/storage";
+import { generateId } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { buildStatusChangeApplication, computeStatusBreakdown, getEffectiveCurrentStatus, getResponseStatusBadgeClass, normalizeResponseStatus } from "@/lib/responseStatus";
+import { buildStatusChangeApplication, getEffectiveCurrentStatus, normalizeResponseStatus } from "@/lib/responseStatus";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,11 +35,11 @@ interface ApplicationsListProps {
   readOnly?: boolean;
 }
 
-export default function ApplicationsList({ applications, onSelect, onUpdate, onDelete, isDemo = false, readOnly = false }: ApplicationsListProps) {
+export default function ApplicationsList({ applications, onSelect, onUpdate, onDelete, readOnly = false }: ApplicationsListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [companyFilter, setCompanyFilter] = useState("");
-  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>("any");
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>("range");
   const [dateFilterValue, setDateFilterValue] = useState("");
   const [dateFilterEnd, setDateFilterEnd] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
@@ -58,13 +57,6 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
     if (next.responseStatus) nextParams.set("responseStatus", next.responseStatus);
     setSearchParams(nextParams);
   }
-
-  // Dynamic response-status breakdown from current dataset
-  const responseBreakdown = useMemo(
-    // Demo pages must not read the owner's browser-only workbook preferences after sign-out.
-    () => computeStatusBreakdown(applications, isDemo ? [] : getPreferredResponseStatusOrder()),
-    [applications, isDemo]
-  );
 
   // Filter + sort the applications list
   const filtered = useMemo(() => {
@@ -115,8 +107,8 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
     [filteredIds, selectedIds],
   );
   const allFilteredSelected = filteredIds.length > 0 && selectedFilteredIds.length === filteredIds.length;
-  const someFilteredSelected = selectedFilteredIds.length > 0 && !allFilteredSelected;
-  const hasActiveFilters = Boolean(search || companyFilter.trim() || dateFilterMode !== "any" || activeStatus || activeResponseStatus);
+  // The default empty date range is neutral until either boundary contains a value.
+  const hasActiveFilters = Boolean(search || companyFilter.trim() || dateFilterValue || dateFilterEnd || activeStatus || activeResponseStatus);
 
   function setDateMode(mode: DateFilterMode) {
     // Reset incompatible input values when switching between date filter controls.
@@ -128,7 +120,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   function clearFilters() {
     setSearch("");
     setCompanyFilter("");
-    setDateFilterMode("any");
+    setDateFilterMode("range");
     setDateFilterValue("");
     setDateFilterEnd("");
     setFilters({});
@@ -236,9 +228,8 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
             value={dateFilterMode}
             onChange={(event) => setDateMode(event.target.value as DateFilterMode)}
           >
-            <option value="any">Any date</option>
-            <option value="date">Exact date</option>
             <option value="range">Date range</option>
+            <option value="date">Exact date</option>
             <option value="month">Month</option>
             <option value="year">Year</option>
           </select>
@@ -295,22 +286,6 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
             );
           })}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {responseBreakdown.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={cn(
-                badgeVariants({ variant: "outline" }),
-                "rounded-full px-3 py-1",
-                getResponseStatusBadgeClass(item.key, activeResponseStatus === item.key)
-              )}
-              onClick={() => setFilters({ ...(activeStatus ? { status: activeStatus } : {}), responseStatus: item.key })}
-            >
-              {item.label} ({item.count})
-            </button>
-          ))}
-        </div>
       </div>
 
       {!readOnly && selectedFilteredIds.length > 0 && (
@@ -323,6 +298,15 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
         </div>
       )}
 
+      {!readOnly && filtered.length > 0 && (
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={() => toggleSelectAll(!allFilteredSelected)}>
+            {/* Keep bulk selection discoverable without placing an unexplained checkbox in the table header. */}
+            {allFilteredSelected ? "Clear selection" : `Select all (${filtered.length})`}
+          </Button>
+        </div>
+      )}
+
       {/* Table — minimal borders */}
       <div className="rounded-2xl border border-border/40 overflow-hidden">
         <Table>
@@ -330,11 +314,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
             <TableRow className="border-border/40">
               {!readOnly && (
                 <TableHead className="w-12">
-                  <Checkbox
-                    aria-label="Select all filtered applications"
-                    checked={allFilteredSelected ? true : someFilteredSelected ? "indeterminate" : false}
-                    onCheckedChange={(checked) => toggleSelectAll(checked === true)}
-                  />
+                  <span className="sr-only">Select applications</span>
                 </TableHead>
               )}
               <TableHead>Job Title</TableHead>
