@@ -96,6 +96,27 @@ describe("ApplicationsList", () => {
     expect(screen.queryByText("Data Analyst")).not.toBeInTheDocument();
   });
 
+  it("filters an inclusive date range with optional boundaries", () => {
+    renderList();
+    fireEvent.change(screen.getByLabelText("Date filter"), { target: { value: "range" } });
+
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-07-15" } });
+    fireEvent.change(screen.getByLabelText("To date"), { target: { value: "2026-08-05" } });
+
+    // Both boundary dates stay included while applications outside the interval are removed.
+    expect(screen.getByText("Frontend Engineer")).toBeInTheDocument();
+    expect(screen.getByText("Product Designer")).toBeInTheDocument();
+    expect(screen.queryByText("Data Analyst")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("To date"), { target: { value: "2026-07-15" } });
+
+    // Leaving From blank creates an open-ended upper-bound filter.
+    expect(screen.queryByText("Frontend Engineer")).not.toBeInTheDocument();
+    expect(screen.getByText("Product Designer")).toBeInTheDocument();
+    expect(screen.getByText("Data Analyst")).toBeInTheDocument();
+  });
+
   it("selects and deletes only the currently filtered applications after confirmation", async () => {
     const onDelete = vi.fn().mockResolvedValue(undefined);
     renderList({ onDelete });

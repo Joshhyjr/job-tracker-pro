@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type DateFilterMode = "any" | "date" | "month" | "year";
+type DateFilterMode = "any" | "date" | "range" | "month" | "year";
 
 interface ApplicationsListProps {
   applications: JobApplication[];
@@ -42,6 +42,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const [companyFilter, setCompanyFilter] = useState("");
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>("any");
   const [dateFilterValue, setDateFilterValue] = useState("");
+  const [dateFilterEnd, setDateFilterEnd] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -83,7 +84,16 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
       // Company filtering is deliberately partial and case-insensitive for long or inconsistent workbook names.
       list = list.filter((application) => application.companyName.toLowerCase().includes(companyQuery));
     }
-    if (dateFilterMode !== "any" && dateFilterValue) {
+    if (dateFilterMode === "range" && (dateFilterValue || dateFilterEnd)) {
+      // ISO calendar strings can be compared directly, keeping both entered boundaries inclusive.
+      list = list.filter((application) => {
+        const appliedDate = application.dateApplied;
+        if (!appliedDate) return false;
+        if (dateFilterValue && appliedDate < dateFilterValue) return false;
+        if (dateFilterEnd && appliedDate > dateFilterEnd) return false;
+        return true;
+      });
+    } else if (dateFilterMode !== "any" && dateFilterValue) {
       // Persisted application dates are YYYY-MM-DD strings, so prefix matching avoids timezone shifts.
       list = list.filter((application) => {
         if (dateFilterMode === "year") return application.dateApplied.startsWith(dateFilterValue);
@@ -96,7 +106,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
       return sortAsc ? da.localeCompare(db) : db.localeCompare(da);
     });
     return list;
-  }, [applications, activeResponseStatus, activeStatus, companyFilter, dateFilterMode, dateFilterValue, search, sortAsc]);
+  }, [applications, activeResponseStatus, activeStatus, companyFilter, dateFilterEnd, dateFilterMode, dateFilterValue, search, sortAsc]);
 
   const filteredIds = useMemo(() => filtered.map((application) => application.id), [filtered]);
   const selectedFilteredIds = useMemo(
@@ -109,9 +119,10 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const hasActiveFilters = Boolean(search || companyFilter.trim() || dateFilterMode !== "any" || activeStatus || activeResponseStatus);
 
   function setDateMode(mode: DateFilterMode) {
-    // Reset incompatible input values when switching between exact date, month, and year controls.
+    // Reset incompatible input values when switching between date filter controls.
     setDateFilterMode(mode);
     setDateFilterValue("");
+    setDateFilterEnd("");
   }
 
   function clearFilters() {
@@ -119,6 +130,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
     setCompanyFilter("");
     setDateFilterMode("any");
     setDateFilterValue("");
+    setDateFilterEnd("");
     setFilters({});
   }
 
@@ -199,7 +211,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
       </div>
 
       {/* Dedicated fields make company and calendar filters discoverable beyond the broad search box. */}
-      <div className="glass-subtle grid gap-3 rounded-2xl px-4 py-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Application filters">
+      <div className={cn("glass-subtle grid gap-3 rounded-2xl px-4 py-4 sm:grid-cols-2", dateFilterMode === "range" ? "lg:grid-cols-5" : "lg:grid-cols-4")} aria-label="Application filters">
         <label className="space-y-1.5 text-sm font-medium">
           <span>Company name</span>
           <Input aria-label="Company name" placeholder="Any company" value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)} />
@@ -226,16 +238,17 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
           >
             <option value="any">Any date</option>
             <option value="date">Exact date</option>
+            <option value="range">Date range</option>
             <option value="month">Month</option>
             <option value="year">Year</option>
           </select>
         </label>
         <label className="space-y-1.5 text-sm font-medium">
-          <span>{dateFilterMode === "date" ? "Date" : dateFilterMode === "month" ? "Month" : dateFilterMode === "year" ? "Year" : "Date value"}</span>
+          <span>{dateFilterMode === "range" ? "From date" : dateFilterMode === "date" ? "Date" : dateFilterMode === "month" ? "Month" : dateFilterMode === "year" ? "Year" : "Date value"}</span>
           <Input
-            aria-label="Date value"
+            aria-label={dateFilterMode === "range" ? "From date" : "Date value"}
             disabled={dateFilterMode === "any"}
-            type={dateFilterMode === "date" ? "date" : dateFilterMode === "month" ? "month" : dateFilterMode === "year" ? "number" : "text"}
+            type={dateFilterMode === "date" || dateFilterMode === "range" ? "date" : dateFilterMode === "month" ? "month" : dateFilterMode === "year" ? "number" : "text"}
             min={dateFilterMode === "year" ? "1900" : undefined}
             max={dateFilterMode === "year" ? "2100" : undefined}
             placeholder={dateFilterMode === "year" ? "YYYY" : "Choose a filter first"}
@@ -243,8 +256,19 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
             onChange={(event) => setDateFilterValue(event.target.value)}
           />
         </label>
+        {dateFilterMode === "range" && (
+          <label className="space-y-1.5 text-sm font-medium">
+            <span>To date</span>
+            <Input
+              aria-label="To date"
+              type="date"
+              value={dateFilterEnd}
+              onChange={(event) => setDateFilterEnd(event.target.value)}
+            />
+          </label>
+        )}
         {hasActiveFilters && (
-          <div className="sm:col-span-2 lg:col-span-4">
+          <div className={cn("sm:col-span-2", dateFilterMode === "range" ? "lg:col-span-5" : "lg:col-span-4")}>
             <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear all filters</Button>
           </div>
         )}
