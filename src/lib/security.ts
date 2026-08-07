@@ -130,6 +130,8 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   if (region) sanitized.region = region;
   if (country) sanitized.country = country;
   if (jobLink) sanitized.jobLink = jobLink;
+  if (companyDomain) sanitized.companyDomain = companyDomain;
+  if (companyLogoUrl) sanitized.companyLogoUrl = companyLogoUrl;
   if (salary) sanitized.salary = salary;
   if (recruiterContactName) sanitized.recruiterContactName = recruiterContactName;
   if (tags) sanitized.tags = tags;
