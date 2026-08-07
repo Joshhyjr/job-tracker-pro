@@ -1,5 +1,17 @@
 import { CURRENT_STATUSES, type ActivityLogEntry, type CurrentStatus, type JobApplication } from "./types";
 import { normalizeResponseStatus } from "./responseStatus";
+import { normalizeCompanyDomain } from "./companyLogos";
+
+function sanitizeHttpUrl(value: string): string {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    // Only http(s) images are persisted so imported data cannot smuggle javascript:/data: sources.
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
 
 const MAX_SHORT_TEXT_LENGTH = 200;
 const MAX_NOTES_LENGTH = 2000;
@@ -102,6 +114,9 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   const region = sanitizeSingleLineText(input.region);
   const country = sanitizeSingleLineText(input.country);
   const jobLink = sanitizeSingleLineText(input.jobLink, MAX_URL_LENGTH);
+  // Company branding overrides are normalized/validated by the logo service before being stored.
+  const companyDomain = normalizeCompanyDomain(sanitizeSingleLineText(input.companyDomain, MAX_URL_LENGTH)) ?? "";
+  const companyLogoUrl = sanitizeHttpUrl(sanitizeSingleLineText(input.companyLogoUrl, MAX_URL_LENGTH));
   const salary = sanitizeSingleLineText(input.salary);
   const recruiterContactName = sanitizeSingleLineText(input.recruiterContactName);
   const tags = sanitizeSingleLineText(input.tags);
@@ -115,6 +130,8 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   if (region) sanitized.region = region;
   if (country) sanitized.country = country;
   if (jobLink) sanitized.jobLink = jobLink;
+  if (companyDomain) sanitized.companyDomain = companyDomain;
+  if (companyLogoUrl) sanitized.companyLogoUrl = companyLogoUrl;
   if (salary) sanitized.salary = salary;
   if (recruiterContactName) sanitized.recruiterContactName = recruiterContactName;
   if (tags) sanitized.tags = tags;

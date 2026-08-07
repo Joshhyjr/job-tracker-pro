@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import type { JobApplication } from "@/lib/types";
 import { getApplications, loadSeedData, isSeeded, markSeeded, saveApplications } from "@/lib/storage";
+import { learnCompanyDomains } from "@/lib/companyLogos";
 import {
   createApplicationImportBackup,
   createApplication,
@@ -87,6 +88,11 @@ export function useApplications(user?: User) {
       window.removeEventListener("offline", handleOffline);
     };
   }, [user]);
+
+  useEffect(() => {
+    // Cache verified employer domains so a company keeps the same logo on rows without a direct link.
+    learnCompanyDomains(applications);
+  }, [applications]);
 
   const runMutation = useCallback(async <T,>(mutation: () => Promise<T>): Promise<T> => {
     setSyncing(true);

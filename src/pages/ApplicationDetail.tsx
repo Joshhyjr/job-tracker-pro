@@ -12,6 +12,7 @@ import { deleteApplication as deleteLocalApplication, generateId, getPreferredRe
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn, formatDisplayDate } from "@/lib/utils";
+import { CompanyLogo } from "@/components/CompanyLogo";
 import { buildEditedApplicationWithStatusHistory, buildQuickActionResponseStatuses, buildResponseStatusChangeApplication, buildResponseStatusOptions, getResponseStatusBadgeClass, mapResponseStatusToCurrentStatus, syncEditedResponseStatus } from "@/lib/responseStatus";
 
 export default function ApplicationDetail({ application, onBack, onUpdate, onDelete, isDemo = false }: { application: JobApplication; onBack: () => void; onUpdate: (application?: JobApplication) => void | Promise<JobApplication>; onDelete?: (id: string) => Promise<void>; isDemo?: boolean }) {
@@ -157,6 +158,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-4 w-4" /></Button>
+        {/* Large logo variant from the shared company logo service. */}
+        <CompanyLogo companyName={app.companyName} jobLink={app.jobLink} companyDomain={app.companyDomain} companyLogoUrl={app.companyLogoUrl} size="lg" />
         <div className="flex-1">
           <h1 className="text-2xl font-semibold">{app.jobTitle}</h1>
           <p className="text-muted-foreground">{app.companyName} · {app.location}</p>
@@ -192,6 +195,13 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
                     <Input value={app[f.key] ?? ""} onChange={(e) => setApp({ ...app, [f.key]: e.target.value })} disabled={isMutating} />
                     {f.key === "jobTitle" && (
                       <Input value={app.jobLink ?? ""} onChange={(e) => setApp({ ...app, jobLink: e.target.value })} placeholder="Job posting URL" disabled={isMutating} />
+                    )}
+                    {/* Manual company branding overrides feed the shared logo service everywhere in the app. */}
+                    {f.key === "companyName" && (
+                      <>
+                        <Input value={app.companyDomain ?? ""} onChange={(e) => setApp({ ...app, companyDomain: e.target.value })} placeholder="Company website domain (e.g. shopify.com)" disabled={isMutating} />
+                        <Input value={app.companyLogoUrl ?? ""} onChange={(e) => setApp({ ...app, companyLogoUrl: e.target.value })} placeholder="Custom logo image URL (optional)" disabled={isMutating} />
+                      </>
                     )}
                   </div>
                 ) : (
