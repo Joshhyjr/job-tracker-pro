@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import PageHeader from "@/components/PageHeader";
 import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { addApplication as addLocalApplication, generateId, updateApplication as updateLocalApplication } from "@/lib/storage";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
@@ -19,6 +20,13 @@ const schema = z.object({
   jobTitle: z.string().trim().min(1, "Required").max(200),
   companyName: z.string().trim().min(1, "Required").max(200),
   location: z.string().trim().max(200),
+  country: z.string().trim().max(100).optional(),
+  workArrangement: z.string().trim().max(50).optional(),
+  salary: z.string().trim().max(100).optional(),
+  resumeUsed: z.string().trim().max(200).optional(),
+  coverLetterUsed: z.string().trim().max(200).optional(),
+  tags: z.string().trim().max(500).optional(),
+  recruiterContactName: z.string().trim().max(200).optional(),
   jobLink: z.union([z.string().trim().url("Enter a valid URL").max(2048), z.literal("")]),
   currentStatus: z.enum(CURRENT_STATUSES as [CurrentStatus, ...CurrentStatus[]]),
   responseStatus: z.string().trim().min(1, "Required").max(200),
@@ -37,6 +45,13 @@ function getDefaultValues(existing?: JobApplication): FormData {
       jobTitle: existing.jobTitle,
       companyName: existing.companyName,
       location: existing.location,
+      country: existing.country ?? "",
+      workArrangement: existing.customFields?.["Work Arrangement"] ?? "",
+      salary: existing.salary ?? "",
+      resumeUsed: existing.customFields?.["Resume Used"] ?? "",
+      coverLetterUsed: existing.customFields?.["Cover Letter Used"] ?? "",
+      tags: existing.tags ?? "",
+      recruiterContactName: existing.recruiterContactName ?? "",
       jobLink: existing.jobLink ?? "",
       currentStatus: existing.currentStatus,
       responseStatus: existing.responseStatus,
@@ -51,6 +66,13 @@ function getDefaultValues(existing?: JobApplication): FormData {
     jobTitle: "",
     companyName: "",
     location: "",
+    country: "",
+    workArrangement: "",
+    salary: "",
+    resumeUsed: "",
+    coverLetterUsed: "",
+    tags: "",
+    recruiterContactName: "",
     jobLink: "",
     currentStatus: "Applied",
     // New applications start in the same canonical status bucket used across filters and analytics.
@@ -96,6 +118,17 @@ export default function ApplicationForm({
       jobTitle: data.jobTitle,
       companyName: data.companyName,
       location: data.location,
+      country: data.country,
+      salary: data.salary,
+      tags: data.tags,
+      recruiterContactName: data.recruiterContactName,
+      // Document names and work arrangement remain compatible with imported custom workbook columns.
+      customFields: {
+        ...(existing?.customFields || {}),
+        "Work Arrangement": data.workArrangement ?? "",
+        "Resume Used": data.resumeUsed ?? "",
+        "Cover Letter Used": data.coverLetterUsed ?? "",
+      },
       // Keep the optional posting URL with manually created applications, matching imported records.
       jobLink: data.jobLink,
       currentStatus: data.currentStatus,
@@ -140,9 +173,9 @@ export default function ApplicationForm({
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">{existing ? "Edit" : "Add"} Application</h1>
-      <Card>
+    <div className="mx-auto max-w-4xl space-y-5">
+      <PageHeader title={`${existing ? "Edit" : "Add"} Application`} description={existing ? "Update the application record and its next steps." : "Capture a new opportunity and plan the next follow-up."} />
+      <Card className="app-panel shadow-none">
         <CardContent className="pt-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" aria-busy={isSaving}>
@@ -155,6 +188,15 @@ export default function ApplicationForm({
                 )} />
                 <FormField control={form.control} name="location" render={({ field }) => (
                   <FormItem><FormLabel>Location</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="country" render={({ field }) => (
+                  <FormItem><FormLabel>Country</FormLabel><FormControl><Input placeholder="Canada" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="workArrangement" render={({ field }) => (
+                  <FormItem><FormLabel>Work Arrangement</FormLabel><FormControl><Input placeholder="Remote, hybrid, or on-site" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="salary" render={({ field }) => (
+                  <FormItem><FormLabel>Salary</FormLabel><FormControl><Input placeholder="$70,000–$85,000" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="jobLink" render={({ field }) => (
                   <FormItem><FormLabel>Job Link</FormLabel><FormControl><Input type="url" placeholder="https://example.com/jobs/role" {...field} /></FormControl><FormMessage /></FormItem>
@@ -198,6 +240,18 @@ export default function ApplicationForm({
                 )} />
                 <FormField control={form.control} name="followUpDate" render={({ field }) => (
                   <FormItem><FormLabel>Follow-Up Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="resumeUsed" render={({ field }) => (
+                  <FormItem><FormLabel>Resume Used</FormLabel><FormControl><Input placeholder="Data Analyst Resume.pdf" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="coverLetterUsed" render={({ field }) => (
+                  <FormItem><FormLabel>Cover Letter Used</FormLabel><FormControl><Input placeholder="Company Cover Letter.pdf" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="tags" render={({ field }) => (
+                  <FormItem><FormLabel>Tags</FormLabel><FormControl><Input placeholder="SQL, analytics, remote" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="recruiterContactName" render={({ field }) => (
+                  <FormItem><FormLabel>Recruiter</FormLabel><FormControl><Input placeholder="Name or email" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
               <FormField control={form.control} name="notes" render={({ field }) => (

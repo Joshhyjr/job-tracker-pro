@@ -1,0 +1,66 @@
+import { ChangeEvent, useMemo, useRef, useState } from "react";
+import { Download, Eye, FileText, Link2, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
+import PageHeader from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import type { JobApplication } from "@/lib/types";
+import { useToast } from "@/hooks/use-toast";
+
+type DocumentCategory = "Resumes" | "Cover letters" | "Job descriptions" | "Certificates" | "Other files";
+type StoredDocument = { id: string; name: string; category: DocumentCategory; size: number; updatedAt: string; dataUrl: string };
+const STORAGE_KEY = "job-tracker-documents-v1";
+
+function loadDocuments(): StoredDocument[] {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as StoredDocument[]; } catch { return []; }
+}
+
+export default function Documents({ applications }: { applications: JobApplication[] }) {
+  const [documents, setDocuments] = useState<StoredDocument[]>(loadDocuments);
+  const [category, setCategory] = useState<DocumentCategory>("Resumes");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+  const categories: DocumentCategory[] = ["Resumes", "Cover letters", "Job descriptions", "Certificates", "Other files"];
+  const visible = useMemo(() => documents.filter((document) => document.category === category), [category, documents]);
+
+  function persist(next: StoredDocument[]) {
+    // Document content is intentionally device-local until a dedicated private cloud document store is configured.
+    setDocuments(next);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }
+
+  function upload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2_000_000) {
+      toast({ title: "File too large", description: "Local document previews are limited to 2 MB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      persist([{ id: crypto.randomUUID(), name: file.name, category, size: file.size, updatedAt: new Date().toISOString(), dataUrl: String(reader.result) }, ...documents]);
+      toast({ title: "Document uploaded", description: `${file.name} is available on this device.` });
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  }
+
+  return (
+    <div className="space-y-5">
+      <PageHeader title="Documents" description="Keep job-search files organized and ready to attach." actions={<Button size="sm" onClick={() => inputRef.current?.click()}><Upload />Upload file</Button>} />
+      <input ref={inputRef} className="hidden" type="file" aria-label="Upload document" onChange={upload} />
+      <div className="flex gap-1 overflow-x-auto border-b" role="tablist" aria-label="Document categories">
+        {categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-semibold ${category === item ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCategory(item)}>{item} <span className="ml-1 text-[10px]">({documents.filter((document) => document.category === item).length})</span></button>)}
+      </div>
+      <section className="app-panel overflow-hidden">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b bg-muted/30 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"><span>Name</span><span>Used by</span><span className="w-10" /></div>
+        {visible.length === 0 ? (
+          <div className="flex flex-col items-center py-14 text-center"><span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><FileText /></span><p className="text-sm font-semibold">No {category.toLowerCase()} yet</p><p className="mt-1 max-w-xs text-xs text-muted-foreground">Upload a file to preview, download, rename, or connect it to an application.</p><Button variant="outline" size="sm" className="mt-4" onClick={() => inputRef.current?.click()}><Upload />Upload</Button></div>
+        ) : visible.map((document) => {
+          const usedBy = applications.filter((application) => Object.values(application.customFields || {}).some((value) => value === document.name)).length;
+          return <div key={document.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b px-4 py-3 last:border-b-0"><div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><FileText className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-xs font-semibold">{document.name}</span><span className="text-[10px] text-muted-foreground">{Math.max(1, Math.round(document.size / 1024))} KB · {new Date(document.updatedAt).toLocaleDateString()}</span></span></div><span className="whitespace-nowrap text-[11px] text-muted-foreground">{usedBy ? `${usedBy} applications` : "Not attached"}</span><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${document.name}`}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem asChild><a href={document.dataUrl} target="_blank" rel="noreferrer"><Eye className="mr-2 h-4 w-4" />Preview</a></DropdownMenuItem><DropdownMenuItem asChild><a href={document.dataUrl} download={document.name}><Download className="mr-2 h-4 w-4" />Download</a></DropdownMenuItem><DropdownMenuItem onClick={() => { const name = window.prompt("Rename document", document.name)?.trim(); if (name) persist(documents.map((item) => item.id === document.id ? { ...item, name, updatedAt: new Date().toISOString() } : item)); }}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem><DropdownMenuItem onClick={() => toast({ title: "Attach from an application", description: "Open an application and select this file in its document fields." })}><Link2 className="mr-2 h-4 w-4" />Attach to application</DropdownMenuItem><DropdownMenuItem className="text-destructive" onClick={() => persist(documents.filter((item) => item.id !== document.id))}><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>;
+        })}
+      </section>
+      <p className="text-[10px] text-muted-foreground">Files in this document library are stored only in this browser. Existing application records and cloud sync are not changed.</p>
+    </div>
+  );
+}

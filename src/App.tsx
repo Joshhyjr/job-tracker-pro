@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useParams, useNavigate, useLocation } from "react-router-dom";
 import { useMemo, useState } from "react";
 import AppNavbar from "@/components/AppNavbar";
-import ExcelDropZone from "@/components/ExcelDropZone";
+import JobTrackerSidebar from "@/components/JobTrackerSidebar";
 import ImportConfirmationDialog from "@/components/ImportConfirmationDialog";
 import Portfolio from "@/pages/Portfolio";
 import Dashboard from "@/pages/Dashboard";
@@ -14,6 +14,9 @@ import ApplicationDetail from "@/pages/ApplicationDetail";
 import ApplicationForm from "@/pages/ApplicationForm";
 import FollowUps from "@/pages/FollowUps";
 import Locations from "@/pages/Locations";
+import Analytics from "@/pages/Analytics";
+import Documents from "@/pages/Documents";
+import Settings from "@/pages/Settings";
 import NotFound from "./pages/NotFound";
 import { useApplications } from "@/hooks/useApplications";
 import { useDemoApplications } from "@/hooks/useDemoApplications";
@@ -179,7 +182,7 @@ function JobTrackerShell({
   }
 
   return (
-    <>
+    <div className="job-tracker min-h-screen bg-background text-foreground">
       <AppNavbar
         user={user}
         syncing={syncing}
@@ -192,26 +195,35 @@ function JobTrackerShell({
         onExportXLSX={() => exportXLSX(applications)}
         onImportXLSX={handleImportXLSX}
       />
-      <main className="container py-8">
-        {/* Signed-out imports remain local because the demo hook persists only to its isolated browser namespace. */}
-        <ExcelDropZone onImport={handleImportXLSX} />
-        {mode === "demo" && (
-          <Alert className="mb-6">
-            <AlertDescription>This is a public sandbox with synthetic data saved only in this browser. Log in with the approved Google account to open the private workspace.</AlertDescription>
-          </Alert>
-        )}
-        {authError && <Alert variant="destructive" className="mb-6"><AlertDescription>{authError}</AlertDescription></Alert>}
-        {syncError && <Alert variant="destructive" className="mb-6"><AlertDescription>{syncError}</AlertDescription></Alert>}
-        <Routes>
-          <Route index element={<Dashboard applications={applications} isDemo={mode === "demo"} user={user} />} />
-          <Route path="applications" element={<ApplicationsListRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
-          <Route path="locations" element={<Locations applications={applications} />} />
-          <Route path="applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
-          <Route path="follow-ups" element={<FollowUps applications={applications} />} />
-          <Route path="add" element={<ApplicationForm onCreate={createApplication} onUpdate={updateApplication} />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </main>
+      <div className="flex min-h-[calc(100vh-3.5rem)]">
+        <JobTrackerSidebar
+          onExportCSV={() => exportCSV(applications)}
+          onExportXLSX={() => exportXLSX(applications)}
+          onImportXLSX={handleImportXLSX}
+        />
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-7">
+          {/* Signed-out imports remain local because the demo hook persists only to its isolated browser namespace. */}
+          {mode === "demo" && (
+            <Alert className="mb-5 border-primary/20 bg-primary/5 py-2.5">
+              <AlertDescription className="text-xs">Public demo: synthetic data is saved only in this browser. Log in with the approved Google account to open the private workspace.</AlertDescription>
+            </Alert>
+          )}
+          {authError && <Alert variant="destructive" className="mb-5"><AlertDescription>{authError}</AlertDescription></Alert>}
+          {syncError && <Alert variant="destructive" className="mb-5"><AlertDescription>{syncError}</AlertDescription></Alert>}
+          <Routes>
+            <Route index element={<Dashboard applications={applications} isDemo={mode === "demo"} onImportXLSX={handleImportXLSX} />} />
+            <Route path="applications" element={<ApplicationsListRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
+            <Route path="locations" element={<Locations applications={applications} />} />
+            <Route path="applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
+            <Route path="follow-ups" element={<FollowUps applications={applications} onUpdate={updateApplication} />} />
+            <Route path="analytics" element={<Analytics applications={applications} isDemo={mode === "demo"} user={user} />} />
+            <Route path="documents" element={<Documents applications={applications} />} />
+            <Route path="settings" element={<Settings mode={mode} user={user} syncing={syncing} offline={offline} />} />
+            <Route path="add" element={<ApplicationForm onCreate={createApplication} onUpdate={updateApplication} />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+      </div>
       <ImportConfirmationDialog
         open={Boolean(pendingImport && pendingPlan)}
         fileName={pendingImport?.file.name ?? "workbook"}
@@ -227,7 +239,7 @@ function JobTrackerShell({
         onModeChange={setImportMode}
         onConfirm={handleConfirmImport}
       />
-    </>
+    </div>
   );
 }
 
@@ -269,7 +281,8 @@ function AppContent() {
 }
 
 const App = () => (
-  <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+  // The reference app is light by default; users can still opt into dark mode from the app utility bar.
+  <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />

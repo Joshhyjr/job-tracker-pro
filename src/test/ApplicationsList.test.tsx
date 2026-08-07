@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationsList from "@/pages/ApplicationsList";
@@ -123,7 +123,7 @@ describe("ApplicationsList", () => {
     renderList({ onDelete });
 
     fireEvent.change(screen.getByLabelText("Company name"), { target: { value: "acme" } });
-    fireEvent.click(screen.getByRole("button", { name: "Select all (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
 
     expect(screen.getByText("2 of 2 filtered applications selected")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
@@ -145,7 +145,7 @@ describe("ApplicationsList", () => {
       .mockResolvedValueOnce(undefined);
     renderList({ onDelete });
 
-    fireEvent.click(screen.getByRole("button", { name: "Select all (3)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
 
@@ -171,14 +171,73 @@ describe("ApplicationsList", () => {
 
     // The header remains aligned with row checkboxes without presenting an unexplained control.
     expect(screen.queryByLabelText("Select all filtered applications")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Select all (3)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select all" })).toBeInTheDocument();
   });
 
-  it("renders one concise status toolbar without response-status duplicates", () => {
+  it("shows a resolved company logo in the company column", () => {
+    renderList({ applications: [application({ companyName: "Publicis Groupe" })] });
+
+    // Known employer domains use a normalized favicon while preserving the company name as table text.
+    const logo = screen.getByRole("img", { name: "Publicis Groupe logo" });
+    expect(logo).toHaveAttribute("src", expect.stringContaining("domain=publicisgroupe.com"));
+    expect(screen.getByText("Publicis Groupe")).toBeInTheDocument();
+  });
+
+  it("renders exact local employer logos with the correct presentation", () => {
+    renderList({
+      applications: [
+        application({ id: "alberta", companyName: "Gov't of Alberta" }),
+        application({ id: "mariner", companyName: "Mariner Innovations" }),
+      ],
+    });
+
+    // Wide government branding remains legible while Mariner keeps its compact square mark.
+    expect(screen.getByRole("img", { name: "Gov't of Alberta logo" })).toHaveAttribute("src", "/company-logos/alberta-government.png");
+    expect(screen.getByRole("img", { name: "Mariner Innovations logo" })).toHaveAttribute("src", "/company-logos/mariner-innovations.png");
+    const logoFrames = screen.getAllByTestId("company-logo");
+    expect(logoFrames[0]).toHaveAttribute("data-logo-presentation", "wordmark");
+    expect(logoFrames[1]).toHaveAttribute("data-logo-presentation", "square");
+  });
+
+  it("uses the status dropdown as the only status-filter surface", () => {
     renderList();
 
-    // Current-status counts remain available while the redundant second badge row stays removed.
-    expect(screen.getAllByRole("button", { name: "Applied (2)" })).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Interview (1)" })).toHaveLength(1);
+    // Removing the shortcut row avoids duplicating the complete status choices already available in the select.
+    expect(screen.queryByRole("button", { name: "Applied (2)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Interview (1)" })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("Status")).getByRole("option", { name: "Applied" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Status")).getByRole("option", { name: "Interview" })).toBeInTheDocument();
+  });
+
+  it("moves a board card optimistically and persists the response status", async () => {
+    const onUpdate = vi.fn().mockImplementation(async (item: JobApplication) => item);
+    renderList({ onUpdate });
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+
+    const card = screen.getByRole("article", { name: "Frontend Engineer application card" });
+    const target = screen.getByRole("group", { name: "Interview column" });
+    fireEvent.dragStart(card);
+    fireEvent.dragOver(target);
+    fireEvent.drop(target);
+
+    // The board moves immediately while the shared repository confirms the durable write.
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ responseStatus: "Interview" })));
+    expect(within(target).getByRole("article", { name: "Frontend Engineer application card" })).toBeInTheDocument();
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Acme Labs moved to Interview." }));
+  });
+
+  it("restores a board card when persistence fails", async () => {
+    renderList({ onUpdate: vi.fn().mockRejectedValue(new Error("offline")) });
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+
+    const card = screen.getByRole("article", { name: "Frontend Engineer application card" });
+    const target = screen.getByRole("group", { name: "Interview column" });
+    fireEvent.dragStart(card);
+    fireEvent.dragOver(target);
+    fireEvent.drop(target);
+
+    // A rejected cloud write removes the optimistic override and exposes a retryable error.
+    await waitFor(() => expect(within(screen.getByRole("group", { name: "Applied column" })).getByRole("article", { name: "Frontend Engineer application card" })).toBeInTheDocument());
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Move not saved", variant: "destructive" }));
   });
 });

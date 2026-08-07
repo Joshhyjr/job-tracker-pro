@@ -4,86 +4,49 @@ import { describe, expect, it, vi } from "vitest";
 import type { User } from "firebase/auth";
 import AppNavbar from "@/components/AppNavbar";
 
-const requiredProps = {
-  onExportCSV: vi.fn(),
-  onExportXLSX: vi.fn(),
-  onImportXLSX: vi.fn(),
-  syncing: false,
-  offline: false,
-};
+const requiredProps = { onExportCSV: vi.fn(), onExportXLSX: vi.fn(), onImportXLSX: vi.fn(), syncing: false, offline: false };
 
 describe("AppNavbar", () => {
-  it("shows public demo controls without private import or account controls", () => {
+  it("keeps demo account actions grouped in the user menu", async () => {
     const onSignIn = vi.fn();
-    render(
-      <MemoryRouter initialEntries={["/app"]}>
-        <AppNavbar {...requiredProps} mode="demo" onSignIn={onSignIn} onResetDemo={vi.fn()} />
-      </MemoryRouter>,
-    );
+    render(<MemoryRouter initialEntries={["/app"]}><AppNavbar {...requiredProps} mode="demo" onSignIn={onSignIn} onResetDemo={vi.fn()} /></MemoryRouter>);
 
-    // The public route stays useful while clearly offering the allowlisted Google login path.
-    expect(screen.getByText("Demo mode")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Log in with Google" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Import XLSX/i })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Log in with Google" }));
+    // A compact utility bar keeps account details out of the primary application navigation.
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Demo mode/i }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Log in with Google" }));
     expect(onSignIn).toHaveBeenCalledOnce();
   });
 
-  it("keeps the full toolbar behind a laptop-safe responsive breakpoint", () => {
-    render(
-      <MemoryRouter initialEntries={["/app"]}>
-        <AppNavbar {...requiredProps} mode="demo" onSignIn={vi.fn()} onResetDemo={vi.fn()} />
-      </MemoryRouter>,
-    );
+  it("keeps the mobile navigation closed until requested", () => {
+    render(<MemoryRouter initialEntries={["/app"]}><AppNavbar {...requiredProps} mode="demo" onSignIn={vi.fn()} onResetDemo={vi.fn()} /></MemoryRouter>);
 
-    // Laptop widths use the compact route icons while narrower screens retain the overflow-safe menu.
     expect(screen.getByRole("link", { name: "Job Tracker" })).toHaveClass("shrink-0");
-    expect(screen.getByText("Dashboard")).toHaveClass("hidden", "2xl:inline");
-    expect(screen.getByRole("button", { name: "Open navigation menu" })).toHaveClass("xl:hidden");
+    expect(screen.getByRole("button", { name: "Open navigation menu" })).toHaveClass("md:hidden");
     expect(document.getElementById("mobile-navigation")).not.toBeInTheDocument();
   });
 
-  it("combines CSV and XLSX exports under one Download menu", async () => {
+  it("keeps both export formats in the account menu", async () => {
     const onExportCSV = vi.fn();
     const onExportXLSX = vi.fn();
-    render(
-      <MemoryRouter initialEntries={["/app/applications"]}>
-        <AppNavbar {...requiredProps} onExportCSV={onExportCSV} onExportXLSX={onExportXLSX} mode="demo" onSignIn={vi.fn()} onResetDemo={vi.fn()} />
-      </MemoryRouter>,
-    );
+    render(<MemoryRouter initialEntries={["/app/applications"]}><AppNavbar {...requiredProps} onExportCSV={onExportCSV} onExportXLSX={onExportXLSX} mode="demo" onSignIn={vi.fn()} onResetDemo={vi.fn()} /></MemoryRouter>);
 
-    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "CSV" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "XLSX" })).not.toBeInTheDocument();
-
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Download" }), { button: 0, ctrlKey: false });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Download CSV" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Demo mode/i }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Export CSV" }));
     expect(onExportCSV).toHaveBeenCalledOnce();
-
-    // The menu closes after each download, so XLSX is verified through a fresh open.
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Download" }), { button: 0, ctrlKey: false });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Download XLSX" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Demo mode/i }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Export XLSX" }));
     expect(onExportXLSX).toHaveBeenCalledOnce();
   });
 
-  it("shows cloud and sign-out controls for the authenticated owner", () => {
+  it("shows owner import and sign-out actions without exposing the demo login", async () => {
     const onSignOut = vi.fn();
     const user = { email: "joshuakivaria@gmail.com" } as User;
-    render(
-      <MemoryRouter initialEntries={["/app"]}>
-        <AppNavbar {...requiredProps} mode="owner" user={user} onSignOut={onSignOut} />
-      </MemoryRouter>,
-    );
+    render(<MemoryRouter initialEntries={["/app"]}><AppNavbar {...requiredProps} mode="owner" user={user} onSignOut={onSignOut} /></MemoryRouter>);
 
-    // Owner mode restores cloud-only tools and removes the public login call to action.
-    expect(screen.getByRole("button", { name: /Import XLSX/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign out joshuakivaria@gmail.com" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Log in with Google" })).not.toBeInTheDocument();
-    // The legacy .xls extension is excluded because the ExcelJS parser only reads modern OOXML workbooks.
-    expect(screen.getByLabelText("Choose an XLSX workbook from the navbar")).toHaveAttribute(
-      "accept",
-      ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Joshua/i }), { button: 0, ctrlKey: false });
+    expect(await screen.findByRole("menuitem", { name: "Import XLSX" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Log in with Google" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Choose an XLSX workbook from the navbar")).toHaveAttribute("accept", ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   });
 });

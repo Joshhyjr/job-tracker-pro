@@ -1,185 +1,84 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import Dashboard from "@/pages/Dashboard";
 import type { JobApplication } from "@/lib/types";
-import type { User } from "firebase/auth";
 
-const {
-  buildAiInsightSummaryMock,
-  generateAiInsightsWithFallbackMock,
-  getLastImportMetadataMock,
-  getPreferredResponseStatusOrderMock,
-  navigateMock,
-} = vi.hoisted(() => ({
-  buildAiInsightSummaryMock: vi.fn(),
-  generateAiInsightsWithFallbackMock: vi.fn(),
-  getLastImportMetadataMock: vi.fn(),
-  getPreferredResponseStatusOrderMock: vi.fn(),
-  navigateMock: vi.fn(),
-}));
-
-vi.mock("react-router-dom", () => ({
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
+vi.mock("react-router-dom", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router-dom")>()),
+  // Dashboard links are not under test here, so a plain anchor keeps the unit isolated from router context.
+  Link: ({ to, children, ...props }: { to: string; children: React.ReactNode }) => <a href={to} {...props}>{children}</a>,
   useNavigate: () => navigateMock,
 }));
-
 vi.mock("recharts", () => ({
-  LineChart: ({ children }: { children: React.ReactNode }) => <div data-testid="monthly-line-chart">{children}</div>,
+  LineChart: ({ children, data }: { children: React.ReactNode; data: unknown[] }) => <div data-testid="monthly-line-chart" data-points={data.length}>{children}</div>,
   Line: () => <div data-testid="monthly-line" />,
-  XAxis: () => null,
-  YAxis: () => null,
-  Tooltip: () => null,
-  CartesianGrid: () => null,
+  PieChart: ({ children }: { children: React.ReactNode }) => <div data-testid="status-pie-chart">{children}</div>,
+  Pie: ({ children }: { children: React.ReactNode }) => <div data-testid="status-pie">{children}</div>,
+  Cell: () => null,
+  XAxis: () => null, YAxis: () => null, Tooltip: () => null, CartesianGrid: () => null,
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
-
-vi.mock("@/lib/aiInsights", () => ({
-  buildAiInsightSummary: buildAiInsightSummaryMock,
-  generateAiInsightsWithFallback: generateAiInsightsWithFallbackMock,
-  getConfiguredOllamaModel: vi.fn(() => "llama3"),
-}));
-
-vi.mock("@/lib/storage", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/storage")>("@/lib/storage");
-  return {
-    ...actual,
-    getLastImportMetadata: getLastImportMetadataMock,
-    getPreferredResponseStatusOrder: getPreferredResponseStatusOrderMock,
-  };
-});
+vi.mock("@/lib/storage", async () => ({ ...(await vi.importActual<typeof import("@/lib/storage")>("@/lib/storage")), getPreferredResponseStatusOrder: () => [] }));
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
-  return {
-    id: overrides.id ?? "app-1",
-    jobTitle: overrides.jobTitle ?? "Frontend Engineer",
-    companyName: overrides.companyName ?? "Acme",
-    location: overrides.location ?? "Remote",
-    currentStatus: overrides.currentStatus ?? "Applied",
-    responseStatus: overrides.responseStatus ?? "Applied",
-    followUps: overrides.followUps ?? false,
-    dateApplied: overrides.dateApplied ?? "2026-07-01",
-    notes: overrides.notes ?? "",
-    followUpDate: overrides.followUpDate ?? "",
-    activityLog: overrides.activityLog ?? [],
-  };
+  return { id: overrides.id ?? "app-1", jobTitle: overrides.jobTitle ?? "Data Analyst", companyName: overrides.companyName ?? "Acme", location: overrides.location ?? "Halifax, Canada", currentStatus: overrides.currentStatus ?? "Applied", responseStatus: overrides.responseStatus ?? "Applied", followUps: overrides.followUps ?? false, dateApplied: overrides.dateApplied ?? new Date().toISOString().slice(0, 10), notes: overrides.notes ?? "", followUpDate: overrides.followUpDate ?? "", activityLog: overrides.activityLog ?? [] };
 }
 
 describe("Dashboard", () => {
-  beforeEach(() => {
-    buildAiInsightSummaryMock.mockReset();
-    generateAiInsightsWithFallbackMock.mockReset();
-    getPreferredResponseStatusOrderMock.mockReturnValue([]);
-    getLastImportMetadataMock.mockReset();
+  it("shows the six monitoring metrics without dashboard AI recommendations", () => {
+    render(<Dashboard applications={[application({ responseStatus: "Pre-screen call" }), application({ id: "app-2", responseStatus: "Rejected" })]} />);
+
+    // AI coaching belongs exclusively to the analytics route after the redesign.
+    expect(screen.getByText("Total Applications")).toBeInTheDocument();
+    expect(screen.getByText("Interviews")).toBeInTheDocument();
+    expect(screen.getByText("Rejections")).toBeInTheDocument();
+    expect(screen.queryByText("Insights & Recommendations")).not.toBeInTheDocument();
+  });
+
+  it("renders a donut chart and preserves click-to-filter navigation from its legend", () => {
     navigateMock.mockReset();
-  });
-
-  it("refreshes import metadata when the applications change without changing row count", () => {
-    let importMetadata = {
-      fileName: "week-1.xlsx",
-      importedAt: "2026-07-01T12:00:00.000Z",
-      rowCount: 1,
-      warningCount: 0,
-    };
-    getLastImportMetadataMock.mockImplementation(() => importMetadata);
-
-    const { rerender } = render(
-      <Dashboard applications={[application({ id: "app-1", companyName: "Acme" })]} />,
-    );
-
-    expect(screen.getByText("Using XLSX import: week-1.xlsx")).toBeInTheDocument();
-
-    importMetadata = {
-      fileName: "week-2.xlsx",
-      importedAt: "2026-07-02T12:00:00.000Z",
-      rowCount: 1,
-      warningCount: 0,
-    };
-
-    rerender(
-      <Dashboard applications={[application({ id: "app-2", companyName: "Beacon" })]} />,
-    );
-
-    // Imports can replace the dataset without changing the total row count, so the dashboard must re-read the workbook metadata on any dataset refresh.
-    expect(screen.getByText("Using XLSX import: week-2.xlsx")).toBeInTheDocument();
-  });
-
-  it("counts pre-screen calls toward the interview-rate insight", () => {
-    render(
-      <Dashboard
-        applications={[
-          application({ id: "app-1", responseStatus: "Pre-screen call" }),
-          application({ id: "app-2", responseStatus: "Interview" }),
-          application({ id: "app-3", responseStatus: "Applied" }),
-        ]}
-      />,
-    );
-
-    // Early positive signals should count the same way in the dashboard as they do in AI summaries.
-    expect(screen.getByText("Your interview rate: 67%")).toBeInTheDocument();
-  });
-
-  it("shows status counts as horizontal bars and preserves click-to-filter navigation", () => {
-    render(
-      <Dashboard
-        applications={[
-          application({ id: "app-1", responseStatus: "Interview" }),
-          application({ id: "app-2", responseStatus: "Interview" }),
-          application({ id: "app-3", responseStatus: "No Response" }),
-          application({ id: "app-4", responseStatus: "Offer" }),
-        ]}
-      />,
-    );
-
-    // Direct labels expose the exact count and share without relying on color or a hover tooltip.
-    const interviewBar = screen.getByRole("button", { name: "View Interview applications: 2, 50%" });
-    expect(screen.getByRole("button", { name: "View No Response applications: 1, 25%" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View Offer applications: 1, 25%" })).toBeInTheDocument();
-    expect(screen.getByText("Share of 4 applications · Select a bar to filter")).toBeInTheDocument();
-
-    fireEvent.click(interviewBar);
-
+    render(<Dashboard applications={[application({ responseStatus: "Interview" }), application({ id: "app-2", responseStatus: "Interview" }), application({ id: "app-3", responseStatus: "No Response" })]} />);
+    const graph = screen.getByRole("img", { name: "Application status donut chart, 3 total applications" });
+    expect(within(graph).getByTestId("status-pie-chart")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View Interview applications: 2, 67%" }));
     expect(navigateMock).toHaveBeenCalledWith("/app/applications?responseStatus=Interview");
   });
 
-  it("groups recent applications below the monthly chart", () => {
-    render(<Dashboard applications={[application()]} />);
-
-    // The shared desktop column removes the empty area beneath the shorter monthly chart.
-    const activityColumn = screen.getByRole("region", { name: "Application activity" });
-    expect(within(activityColumn).getByRole("heading", { name: "Monthly Applications" })).toBeInTheDocument();
-    expect(within(activityColumn).getByRole("heading", { name: "Recent Applications" })).toBeInTheDocument();
+  it("groups recent activity, follow-ups, and quick actions in the activity region", () => {
+    render(<Dashboard applications={[application({ followUpDate: "2026-08-08" })]} />);
+    const region = screen.getByRole("region", { name: "Application activity" });
+    expect(within(region).getByText("Recent Activity")).toBeInTheDocument();
+    expect(within(region).getByText("Upcoming Follow-ups")).toBeInTheDocument();
+    expect(within(region).getByText("Quick Actions")).toBeInTheDocument();
   });
 
   it("renders monthly applications as a line graph", () => {
     render(<Dashboard applications={[application()]} />);
-
-    // The trend remains accessible even though Recharts renders the visual as SVG.
-    const lineGraph = screen.getByRole("img", { name: "Monthly applications line graph" });
-    expect(within(lineGraph).getByTestId("monthly-line-chart")).toBeInTheDocument();
-    expect(within(lineGraph).getByTestId("monthly-line")).toBeInTheDocument();
+    const graph = screen.getByRole("img", { name: "Monthly applications line graph" });
+    expect(within(graph).getByTestId("monthly-line-chart")).toBeInTheDocument();
+    expect(within(graph).getByTestId("monthly-line")).toBeInTheDocument();
   });
 
-  it("uses the signed-in Firebase ID token without rendering a manual token field", async () => {
-    const summary = { totalApplications: 1 };
-    const getIdToken = vi.fn().mockResolvedValue("firebase-id-token");
-    buildAiInsightSummaryMock.mockReturnValue(summary);
-    generateAiInsightsWithFallbackMock.mockResolvedValue({
-      summary: "Authenticated insight",
-      strengths: [],
-      improvementAreas: [],
-      recommendedNextActions: [],
-    });
-    const user = { email: "joshuakivaria@gmail.com", getIdToken } as unknown as User;
+  it("changes the visible chart history from the range control", () => {
+    render(<Dashboard applications={[
+      application({ id: "may", dateApplied: "2026-05-01" }),
+      application({ id: "jun", dateApplied: "2026-06-01" }),
+      application({ id: "jul", dateApplied: "2026-07-01" }),
+      application({ id: "aug", dateApplied: "2026-08-01" }),
+    ]} />);
 
-    render(<Dashboard applications={[application()]} user={user} />);
+    const chart = screen.getByTestId("monthly-line-chart");
+    expect(chart).toHaveAttribute("data-points", "4");
+    // Selecting a shorter range immediately updates the data passed to the chart.
+    fireEvent.change(screen.getByRole("combobox", { name: "Applications chart range" }), { target: { value: "3" } });
+    expect(chart).toHaveAttribute("data-points", "3");
+  });
 
-    // Google authentication replaces the old operator-entered bearer secret in the owner dashboard.
-    expect(screen.queryByLabelText("Hosted AI access token")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Generate AI insights" }));
-
-    await waitFor(() => {
-      expect(generateAiInsightsWithFallbackMock).toHaveBeenCalledWith(summary, "firebase-id-token");
-    });
-    expect(getIdToken).toHaveBeenCalledOnce();
-    expect(screen.getByText("Authenticated insight")).toBeInTheDocument();
+  it("reveals the drag-and-drop import area from the page header", () => {
+    render(<Dashboard applications={[]} onImportXLSX={vi.fn()} />);
+    expect(screen.queryByTestId("excel-drop-zone")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Import Applications" }));
+    expect(screen.getByTestId("excel-drop-zone")).toBeInTheDocument();
   });
 });

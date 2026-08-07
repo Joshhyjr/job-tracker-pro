@@ -1,21 +1,40 @@
-import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, List, Bell, PlusCircle, Menu, X, Download, Upload, Globe2, LogOut, Cloud, CloudOff, HardDrive, LogIn, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ChangeEvent, useRef, useState } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Link, useLocation } from "react-router-dom";
+import {
+  Bell,
+  ChevronDown,
+  Cloud,
+  CloudOff,
+  Download,
+  ExternalLink,
+  LogIn,
+  LogOut,
+  Menu,
+  Moon,
+  RotateCcw,
+  Search,
+  Sun,
+  Upload,
+  X,
+} from "lucide-react";
+import type { User } from "firebase/auth";
 import { useTheme } from "next-themes";
 import { BrandLogo } from "@/components/BrandLogo";
-import type { User } from "firebase/auth";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-// Navigation link definitions — Job Tracker lives under /app/* now (portfolio is at /).
-const links = [
-  { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/app/applications", label: "Applications", icon: List },
-  { to: "/app/locations", label: "Locations", icon: Globe2 },
-  { to: "/app/follow-ups", label: "Follow-ups", icon: Bell },
-  { to: "/app/add", label: "Add New", icon: PlusCircle },
-];
+export interface AppNavbarProps {
+  onExportCSV: () => void;
+  onExportXLSX: () => void;
+  onImportXLSX: (file: File) => Promise<void>;
+  user?: User;
+  syncing: boolean;
+  offline: boolean;
+  onSignOut?: () => Promise<void>;
+  mode: "demo" | "owner";
+  onSignIn?: () => Promise<void>;
+  onResetDemo?: () => Promise<void>;
+}
 
 export default function AppNavbar({
   onExportCSV,
@@ -28,185 +47,130 @@ export default function AppNavbar({
   mode,
   onSignIn,
   onResetDemo,
-}: {
-  onExportCSV: () => void;
-  onExportXLSX: () => void;
-  onImportXLSX: (file: File) => Promise<void>;
-  user?: User;
-  syncing: boolean;
-  offline: boolean;
-  onSignOut?: () => Promise<void>;
-  mode: "demo" | "owner";
-  onSignIn?: () => Promise<void>;
-  onResetDemo?: () => Promise<void>;
-}) {
+}: AppNavbarProps) {
   const location = useLocation();
-  const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const { theme = "system", setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
 
-  function handleImportClick() {
-    importInputRef.current?.click();
-  }
-
-  function handleExportCSV() {
-    onExportCSV();
-    setOpen(false);
-  }
-
-  function handleExportXLSX() {
-    onExportXLSX();
-    setOpen(false);
-  }
-
-  function renderDownloadMenu(triggerClassName?: string) {
-    // One labeled action reduces navbar width while keeping both export formats discoverable.
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className={triggerClassName}>
-            <Download className="mr-1 h-3.5 w-3.5" />Download
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleExportCSV}>Download CSV</DropdownMenuItem>
-          <DropdownMenuItem onClick={handleExportXLSX}>Download XLSX</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
-
-  // Keep theme selection markup in one place so desktop and mobile stay aligned.
-  function renderThemeSelect(triggerClassName: string) {
-    return (
-      <Select value={theme} onValueChange={setTheme}>
-        <SelectTrigger className={triggerClassName}>
-          <SelectValue placeholder="Theme" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="system">System</SelectItem>
-          <SelectItem value="light">Light</SelectItem>
-          <SelectItem value="dark">Dark</SelectItem>
-        </SelectContent>
-      </Select>
-    );
-  }
-
-  async function handleImportChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleImportChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
     if (!file) return;
-    // The shared import boundary performs the final format validation for picker and drop flows.
+    // The shared shell remains the only parser and persistence boundary for workbook imports.
     await onImportXLSX(file);
-    e.target.value = "";
-    setOpen(false);
+    event.target.value = "";
   }
+
+  const themeLabel = resolvedTheme === "dark" ? "Use light theme" : "Use dark theme";
 
   return (
-    /* Glass navbar — translucent + backdrop-blur */
-    <nav className="sticky top-0 z-50 glass rounded-none border-x-0 border-t-0">
-      <div className="container flex h-14 max-w-none items-center justify-between">
-        {/* Keep the brand at its natural width so a busy toolbar cannot wrap or cover its text. */}
-        <Link to="/" className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <BrandLogo />
+    <header className="job-topbar sticky top-0 z-40 border-b border-white/15 text-primary-foreground shadow-sm">
+      <div className="flex h-14 items-center gap-3 px-4 lg:px-6">
+        <Link to="/app" className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="Job Tracker">
+          <BrandLogo className="job-brand" />
         </Link>
 
-        {/* Keep laptop navigation compact, then restore labels when the full toolbar has room. */}
-        <div className="hidden items-center gap-1 xl:flex">
-          {links.map((l) => (
-            <Button key={l.to} variant={location.pathname === l.to ? "secondary" : "ghost"} size="sm" asChild>
-              <Link to={l.to} className="gap-1.5" aria-label={l.label} title={l.label}>
-                <l.icon className="h-4 w-4" />
-                <span className="hidden 2xl:inline">{l.label}</span>
-              </Link>
-            </Button>
-          ))}
-          <div className="ml-2 flex gap-1">
-            {renderThemeSelect("h-9 w-[132px]")}
-            {mode === "owner" && <Button variant="outline" size="sm" onClick={handleImportClick}><Upload className="h-3.5 w-3.5 mr-1" />Import XLSX</Button>}
-            {renderDownloadMenu()}
-            {mode === "owner" ? (
-              <>
-                <div className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title={user?.email || "Signed in"}>
-                  {offline ? <CloudOff className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />}
-                  {syncing ? "Syncing" : offline ? "Offline" : "Synced"}
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => void onSignOut?.()} aria-label={`Sign out ${user?.email || "account"}`}>
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </>
-            ) : (
-              <>
-                {/* Demo controls make the public/local boundary explicit without hiding the working product. */}
-                <div className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title="Sample data saved only in this browser">
-                  <HardDrive className="h-3.5 w-3.5" />Demo mode
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => void onResetDemo?.()}><RotateCcw className="mr-1 h-3.5 w-3.5" />Reset</Button>
-                <Button size="sm" onClick={() => void onSignIn?.()}><LogIn className="mr-1 h-3.5 w-3.5" />Log in with Google</Button>
-              </>
-            )}
-          </div>
-        </div>
+        {/* Desktop search mirrors the compact social-network utility bar in the reference. */}
+        <label className="relative ml-2 hidden w-full max-w-sm lg:block">
+          <span className="sr-only">Search applications</span>
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+          <input
+            type="search"
+            placeholder="Search your job tracker"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && event.currentTarget.value.trim()) {
+                window.location.assign(`/app/applications?q=${encodeURIComponent(event.currentTarget.value.trim())}`);
+              }
+            }}
+            className="h-8 w-full rounded-md border-0 bg-white/95 pl-9 pr-3 text-xs text-slate-900 outline-none ring-offset-primary placeholder:text-slate-500 focus:ring-2 focus:ring-white"
+          />
+        </label>
 
-        {/* Mobile toggle */}
+        <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Job Tracker utilities">
+          <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 hover:text-white" asChild>
+            <Link to="/" className="gap-1.5"><ExternalLink className="h-3.5 w-3.5" />JK.space</Link>
+          </Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9 text-white hover:bg-white/10 hover:text-white" aria-label="Notifications">
+            <Bell className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-white hover:bg-white/10 hover:text-white"
+            aria-label={themeLabel}
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          >
+            {resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2 text-white hover:bg-white/10 hover:text-white">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[11px] font-bold">JK</span>
+                <span className="hidden xl:inline">{mode === "owner" ? "Joshua" : "Demo mode"}</span>
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">{mode === "owner" ? user?.email : "Public demo workspace"}</p>
+                <p className="mt-1 flex items-center gap-1.5">
+                  {mode === "owner" ? (offline ? <CloudOff className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />) : null}
+                  {mode === "owner" ? (syncing ? "Syncing" : offline ? "Offline" : "Synced") : "Saved in this browser"}
+                </p>
+              </div>
+              <DropdownMenuSeparator />
+              {mode === "owner" && <DropdownMenuItem onClick={() => importInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" />Import XLSX</DropdownMenuItem>}
+              <DropdownMenuItem onClick={onExportCSV}><Download className="mr-2 h-4 w-4" />Export CSV</DropdownMenuItem>
+              <DropdownMenuItem onClick={onExportXLSX}><Download className="mr-2 h-4 w-4" />Export XLSX</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {mode === "owner" ? (
+                <DropdownMenuItem onClick={() => void onSignOut?.()}><LogOut className="mr-2 h-4 w-4" />Sign out</DropdownMenuItem>
+              ) : (
+                <>
+                  <DropdownMenuItem onClick={() => void onResetDemo?.()}><RotateCcw className="mr-2 h-4 w-4" />Reset demo</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void onSignIn?.()}><LogIn className="mr-2 h-4 w-4" />Log in with Google</DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </nav>
+
         <Button
           variant="ghost"
           size="icon"
-          className="xl:hidden"
-          onClick={() => setOpen((current) => !current)}
-          aria-expanded={open}
-          aria-controls="mobile-navigation"
-          aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+          className="ml-auto text-white hover:bg-white/10 hover:text-white md:hidden"
+          aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={mobileOpen}
+          onClick={() => setMobileOpen((current) => !current)}
         >
-          {open ? <X /> : <Menu />}
+          {mobileOpen ? <X /> : <Menu />}
         </Button>
       </div>
 
-      {/* Mobile menu — also glass */}
-      {open && (
-        <div id="mobile-navigation" className="glass-subtle rounded-none border-x-0 border-b p-4 xl:hidden">
-          <div className="flex flex-col gap-2">
-            {links.map((l) => (
-              <Button key={l.to} variant={location.pathname === l.to ? "secondary" : "ghost"} asChild className="justify-start" onClick={() => setOpen(false)}>
-                <Link to={l.to} className="gap-2">
-                  <l.icon className="h-4 w-4" />
-                  {l.label}
-                </Link>
-              </Button>
-            ))}
-            <div className="flex gap-2 pt-2 border-t border-border/40">
-              {renderThemeSelect("h-9 flex-1")}
-              {mode === "owner" && <Button variant="outline" size="sm" className="flex-1" onClick={handleImportClick}>Import</Button>}
-              {renderDownloadMenu("flex-1")}
-            </div>
-            {mode === "owner" ? (
-              /* Mobile account controls expose both identity and cloud status without crowding the primary links. */
-              <div className="flex items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
-                <span className="truncate">{user?.email}</span>
-                <span>{syncing ? "Syncing" : offline ? "Offline" : "Synced"}</span>
-                <Button variant="ghost" size="sm" onClick={() => void onSignOut?.()}><LogOut className="mr-1 h-3.5 w-3.5" />Sign out</Button>
-              </div>
-            ) : (
-              <div className="space-y-2 border-t border-border/40 pt-3">
-                {/* Public visitors stay in the local sandbox unless the allowlisted owner signs in. */}
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><HardDrive className="h-3.5 w-3.5" />Demo data stays in this browser</p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => void onResetDemo?.()}><RotateCcw className="mr-1 h-3.5 w-3.5" />Reset demo</Button>
-                  <Button size="sm" className="flex-1" onClick={() => void onSignIn?.()}><LogIn className="mr-1 h-3.5 w-3.5" />Log in</Button>
-                </div>
-              </div>
-            )}
+      {mobileOpen && (
+        <div id="mobile-navigation" className="border-t border-white/15 bg-primary px-4 py-3 md:hidden">
+          <div className="grid gap-1 text-sm">
+            <Link to="/" onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">Back to JK.space</Link>
+            <Link to="/app/applications" onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">Applications</Link>
+            <Link to="/app/follow-ups" onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">Follow-ups</Link>
+            <Link to="/app/analytics" onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">AI &amp; Analytics</Link>
+            <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-white/10" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>{themeLabel}</button>
           </div>
         </div>
       )}
-      {/* Hidden picker is retained for the compact navbar import action. */}
+
       <input
         ref={importInputRef}
+        id="job-tracker-import-input"
         type="file"
         accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         className="hidden"
         aria-label="Choose an XLSX workbook from the navbar"
         onChange={handleImportChange}
       />
-    </nav>
+      {/* Route data helps visual tests confirm the top bar remains scoped to the app. */}
+      <span className="sr-only" aria-live="polite">Current Job Tracker route: {location.pathname}</span>
+    </header>
   );
 }

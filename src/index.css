@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep country hover labels legible without bringing back a full basemap UI. */
+.job-country-popup .maplibregl-popup-content {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+  padding: 0.5rem 0.625rem;
+  box-shadow: 0 8px 20px hsl(var(--foreground) / 0.12);
+}
+
+.job-country-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover));
+}
+
 /* ── Design System ──
    Cockpit aesthetic (dark, minimal, instrument-cluster).
    All colors MUST be HSL.
@@ -216,6 +233,75 @@
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.55; transform: scale(0.92); }
   }
+}
+
+/* Job Tracker uses an app-only social-product theme; portfolio tokens remain untouched. */
+.job-tracker {
+  --background: 220 24% 97%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 221 83% 43%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 222 30% 95%;
+  --secondary-foreground: 222 47% 18%;
+  --muted: 220 25% 95%;
+  --muted-foreground: 215 16% 43%;
+  --accent: 225 35% 93%;
+  --accent-foreground: 221 83% 36%;
+  --border: 216 24% 88%;
+  --input: 216 24% 84%;
+  --ring: 221 83% 53%;
+  --radius: 0.45rem;
+  --retro-navy: 220 70% 22%;
+  --retro-navy-deep: 220 75% 16%;
+  background-color: hsl(var(--background));
+}
+
+.dark .job-tracker,
+.job-tracker.dark {
+  --background: 224 28% 9%;
+  --foreground: 220 25% 94%;
+  --card: 224 24% 12%;
+  --card-foreground: 220 25% 94%;
+  --popover: 224 24% 12%;
+  --popover-foreground: 220 25% 94%;
+  --primary: 221 83% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 224 20% 17%;
+  --secondary-foreground: 220 25% 94%;
+  --muted: 224 19% 16%;
+  --muted-foreground: 218 14% 68%;
+  --accent: 224 24% 19%;
+  --accent-foreground: 220 25% 94%;
+  --border: 224 17% 23%;
+  --input: 224 17% 27%;
+  --ring: 221 83% 64%;
+}
+
+.job-tracker .job-topbar .job-brand {
+  color: white;
+}
+
+/* The app header shares the deeper navy treatment from the selected social-profile reference. */
+.job-tracker .job-topbar {
+  background: linear-gradient(to bottom, hsl(var(--retro-navy)), hsl(var(--retro-navy-deep)));
+}
+
+.job-tracker .app-panel {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  box-shadow: 0 1px 2px hsl(222 47% 11% / 0.04);
+}
+
+.job-tracker .app-panel-title {
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.8rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 /* ── Retro Social Profile theme ──

@@ -1,453 +1,270 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { compareDesc, format, isBefore, isValid, parseISO, startOfMonth, startOfWeek } from "date-fns";
+import {
+  BarChart3,
+  BellRing,
+  BriefcaseBusiness,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Download,
+  FileDown,
+  FileSpreadsheet,
+  MessageCircle,
+  PhoneCall,
+  Plus,
+  Upload,
+  XCircle,
+} from "lucide-react";
+import { CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import ExcelDropZone from "@/components/ExcelDropZone";
+import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Briefcase, CalendarDays, Clock, AlertTriangle, TrendingUp, TrendingDown, Building2, BarChart3, Timer, Lightbulb, Sparkles, Loader2 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import type { JobApplication } from "@/lib/types";
-import type { User } from "firebase/auth";
-import type { AiInsights } from "@/lib/aiInsights";
-import { buildAiInsightSummary, generateAiInsightsWithFallback, getConfiguredOllamaModel } from "@/lib/aiInsights";
-import { isBefore, startOfWeek, startOfMonth, parseISO, format, isValid, compareDesc, subDays, differenceInDays } from "date-fns";
+import { exportCSV, exportXLSX } from "@/lib/export";
 import { isApplicationOverdue } from "@/lib/overdue";
-import { computeStatusBreakdown, getResponseStatusColor, getResponseStatusBadgeStyle, isInterviewPipelineResponseStatus } from "@/lib/responseStatus";
-import { getLastImportMetadata, getPreferredResponseStatusOrder } from "@/lib/storage";
+import {
+  computeStatusBreakdown,
+  getResponseStatusColor,
+  isInterviewPipelineResponseStatus,
+  normalizeResponseStatus,
+} from "@/lib/responseStatus";
+import { getPreferredResponseStatusOrder } from "@/lib/storage";
 import { formatDisplayDate } from "@/lib/utils";
 
-/** Safely parse an ISO date string, returning null for blank/invalid values */
-function safeParseDate(d: string) {
-  if (!d) return null;
-  const p = parseISO(d);
-  return isValid(p) ? p : null;
+function safeDate(value: string): Date | null {
+  const parsed = parseISO(value || "");
+  return isValid(parsed) ? parsed : null;
 }
 
-export default function Dashboard({ applications, isDemo = false, user }: { applications: JobApplication[]; isDemo?: boolean; user?: User }) {
+export default function Dashboard({
+  applications,
+  isDemo = false,
+  onImportXLSX,
+}: {
+  applications: JobApplication[];
+  isDemo?: boolean;
+  onImportXLSX?: (file: File) => Promise<void>;
+}) {
   const navigate = useNavigate();
-  const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [chartRange, setChartRange] = useState<"3" | "6" | "12" | "all">("6");
   const now = useMemo(() => new Date(), []);
   const weekStart = useMemo(() => startOfWeek(now, { weekStartsOn: 1 }), [now]);
   const monthStart = useMemo(() => startOfMonth(now), [now]);
-  const [importMetadata, setImportMetadata] = useState(() => isDemo ? null : getLastImportMetadata());
 
-  useEffect(() => {
-    // Imports can swap in a same-sized dataset, so re-read the workbook metadata after every visible application refresh.
-    setImportMetadata(isDemo ? null : getLastImportMetadata());
-  }, [applications, isDemo]);
-
-  // Compute summary stats from the applications dataset
-  const stats = useMemo(() => {
-    let thisWeek = 0, thisMonth = 0, overdue = 0;
-
-    applications.forEach((a) => {
-      const d = safeParseDate(a.dateApplied);
-      if (d) {
-        if (!isBefore(d, weekStart)) thisWeek++;
-        if (!isBefore(d, monthStart)) thisMonth++;
-      }
-      if (isApplicationOverdue(a, now)) overdue++;
-    });
-
-    return { total: applications.length, thisWeek, thisMonth, overdue };
-  }, [applications, monthStart, now, weekStart]);
-
-  // Dynamic status breakdown based on responseStatus field
-  const statusBreakdown = useMemo(
-    // Demo analytics must not reveal or depend on the owner's workbook-derived status configuration.
-    () => computeStatusBreakdown(applications, isDemo ? [] : getPreferredResponseStatusOrder()),
-    [applications, isDemo]
-  );
-
-  const statusTotal = statusBreakdown.reduce((total, item) => total + item.count, 0);
-  const statusChartData = [...statusBreakdown]
-    // Largest categories come first so the horizontal bars are easy to compare at a glance.
-    .sort((a, b) => b.count - a.count)
-    .map((item) => ({
-      name: item.label,
-      value: item.count,
-      color: getResponseStatusColor(item.key),
-      key: item.key,
-      percentage: statusTotal === 0 ? 0 : Math.round((item.count / statusTotal) * 100),
-    }));
-  const maxStatusCount = Math.max(1, ...statusChartData.map((item) => item.value));
-
-  // Group applications by month for the dashboard trend line.
-  const monthlyData = useMemo(() => {
-    const map = new Map<string, { sortKey: string; label: string; count: number }>();
-    applications.forEach((a) => {
-      const d = safeParseDate(a.dateApplied);
-      if (d) {
-        const sortKey = format(d, "yyyy-MM");
-        const label = format(d, "MMM yyyy");
-        const entry = map.get(sortKey);
-        if (entry) entry.count++;
-        else map.set(sortKey, { sortKey, label, count: 1 });
-      }
-    });
-    return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  }, [applications]);
-
-  // 5 most recently applied jobs sorted by date descending
-  const recentApplications = useMemo(() => {
-    const withDate = applications
-      .map((a) => ({ app: a, date: safeParseDate(a.dateApplied) }))
-      .filter((item): item is { app: JobApplication; date: Date } => item.date !== null);
-    withDate.sort((a, b) => compareDesc(a.date, b.date));
-    return withDate.slice(0, 5).map((item) => item.app);
-  }, [applications]);
-
-  // Lightweight insights derived from existing application data only
-  const insights = useMemo(() => {
-    const items: { icon: typeof Briefcase; label: string; tone: "neutral" | "positive" | "warning" }[] = [];
-    if (applications.length === 0) return items;
-
-    // Most applied-to company
-    const companyCounts = new Map<string, number>();
-    applications.forEach((a) => {
-      const c = (a.companyName || "").trim();
-      if (c) companyCounts.set(c, (companyCounts.get(c) || 0) + 1);
-    });
-    const topCompany = [...companyCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-    if (topCompany && topCompany[1] > 1) {
-      items.push({ icon: Building2, label: `Most applications sent to: ${topCompany[0]} (${topCompany[1]})`, tone: "neutral" });
-    }
-
-    // Most common response status
-    if (statusBreakdown.length) {
-      const top = [...statusBreakdown].sort((a, b) => b.count - a.count)[0];
-      if (top && top.count > 0) {
-        const isWarn = /no response|rejected/i.test(top.label);
-        items.push({ icon: BarChart3, label: `Most common status: ${top.label} (${top.count})`, tone: isWarn ? "warning" : "neutral" });
-      }
-    }
-
-    // Interview rate
-    const interviewCount = applications.filter((a) => isInterviewPipelineResponseStatus(a.responseStatus)).length;
-    if (applications.length >= 3) {
-      const rate = Math.round((interviewCount / applications.length) * 100);
-      items.push({
-        icon: rate >= 15 ? TrendingUp : TrendingDown,
-        label: `Your interview rate: ${rate}%`,
-        tone: rate >= 15 ? "positive" : "warning",
-      });
-    }
-
-    // No response after 14+ days
-    const stale = applications.filter((a) => {
-      const d = safeParseDate(a.dateApplied);
-      if (!d) return false;
-      return /no response/i.test(a.responseStatus || "") && differenceInDays(now, d) >= 14;
+  const metrics = useMemo(() => {
+    const thisWeek = applications.filter((application) => {
+      const date = safeDate(application.dateApplied);
+      return date ? !isBefore(date, weekStart) : false;
     }).length;
-    if (stale > 0) {
-      items.push({ icon: Timer, label: `No response after 14+ days: ${stale}`, tone: "warning" });
-    }
+    const thisMonth = applications.filter((application) => {
+      const date = safeDate(application.dateApplied);
+      return date ? !isBefore(date, monthStart) : false;
+    }).length;
+    const followedUp = applications.filter((application) => application.followUps).length;
+    const interviews = applications.filter((application) => isInterviewPipelineResponseStatus(application.responseStatus)).length;
+    const rejections = applications.filter((application) => normalizeResponseStatus(application.responseStatus) === "Rejected").length;
+    return [
+      { label: "Total Applications", value: applications.length, icon: BriefcaseBusiness, tone: "text-blue-600 bg-blue-50 dark:bg-blue-950/50" },
+      { label: "This Week", value: thisWeek, icon: CalendarDays, tone: "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/50" },
+      { label: "This Month", value: thisMonth, icon: Clock3, tone: "text-violet-600 bg-violet-50 dark:bg-violet-950/50" },
+      { label: "Followed Up", value: followedUp, icon: CheckCircle2, tone: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50" },
+      { label: "Interviews", value: interviews, icon: PhoneCall, tone: "text-amber-600 bg-amber-50 dark:bg-amber-950/50" },
+      { label: "Rejections", value: rejections, icon: XCircle, tone: "text-red-600 bg-red-50 dark:bg-red-950/50" },
+    ];
+  }, [applications, monthStart, weekStart]);
 
-    // This week vs last week
-    const lastWeekStart = subDays(weekStart, 7);
-    let thisWeekCount = 0, lastWeekCount = 0;
-    applications.forEach((a) => {
-      const d = safeParseDate(a.dateApplied);
-      if (!d) return;
-      if (!isBefore(d, weekStart)) thisWeekCount++;
-      else if (!isBefore(d, lastWeekStart)) lastWeekCount++;
+  const statusData = useMemo(() => {
+    const items = computeStatusBreakdown(applications, isDemo ? [] : getPreferredResponseStatusOrder());
+    const total = items.reduce((sum, item) => sum + item.count, 0);
+    return items
+      .map((item) => ({ ...item, percentage: total ? Math.round((item.count / total) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count);
+  }, [applications, isDemo]);
+  const monthlyData = useMemo(() => {
+    const grouped = new Map<string, { sortKey: string; label: string; count: number }>();
+    applications.forEach((application) => {
+      const date = safeDate(application.dateApplied);
+      if (!date) return;
+      const sortKey = format(date, "yyyy-MM");
+      const current = grouped.get(sortKey);
+      if (current) current.count += 1;
+      else grouped.set(sortKey, { sortKey, label: format(date, "MMM yyyy"), count: 1 });
     });
-    if (thisWeekCount || lastWeekCount) {
-      const diff = thisWeekCount - lastWeekCount;
-      const tone: "positive" | "warning" | "neutral" = diff > 0 ? "positive" : diff < 0 ? "warning" : "neutral";
-      const verb = diff > 0 ? "more" : diff < 0 ? "fewer" : "same as";
-      const label =
-        diff === 0
-          ? `You applied to ${thisWeekCount} jobs this week (same as last week)`
-          : `You applied to ${thisWeekCount} this week — ${Math.abs(diff)} ${verb} than last week`;
-      items.push({ icon: diff >= 0 ? TrendingUp : TrendingDown, label, tone });
-    }
+    const orderedMonths = Array.from(grouped.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    // The chart range controls how much history is visible without changing source application data.
+    return chartRange === "all" ? orderedMonths : orderedMonths.slice(-Number(chartRange));
+  }, [applications, chartRange]);
 
-    return items.slice(0, 4);
-  }, [applications, statusBreakdown, weekStart, now]);
+  const recentActivity = useMemo(() => {
+    const rows = applications.flatMap((application) => {
+      if (application.activityLog?.length) {
+        return application.activityLog.map((entry) => ({ application, date: safeDate(entry.date), message: entry.message }));
+      }
+      return [{ application, date: safeDate(application.dateApplied), message: `Applied to ${application.jobTitle} at ${application.companyName}` }];
+    });
+    return rows
+      .filter((row): row is typeof row & { date: Date } => row.date !== null)
+      .sort((a, b) => compareDesc(a.date, b.date))
+      .slice(0, 5);
+  }, [applications]);
 
-  const metrics = [
-    { label: "Total", value: stats.total, icon: Briefcase, color: "text-[hsl(var(--status-applied))]" },
-    { label: "This Week", value: stats.thisWeek, icon: CalendarDays, color: "text-[hsl(var(--status-interview))]" },
-    { label: "This Month", value: stats.thisMonth, icon: Clock, color: "text-[hsl(var(--status-offer))]" },
-    { label: "Jobs Followed Up To", value: stats.overdue, icon: AlertTriangle, color: "text-[hsl(var(--status-rejected))]" },
-  ];
-
-  async function handleGenerateAiInsights() {
-    if (isDemo || !user) return;
-    setAiLoading(true);
-    setAiError("");
-
-    try {
-      // Only summary fields are sent to Gemini or Ollama; notes, links, recruiters, and custom field values stay out of the prompt.
-      const idToken = await user.getIdToken();
-      const summary = buildAiInsightSummary(applications, now, importMetadata);
-      const generated = await generateAiInsightsWithFallback(summary, idToken);
-      setAiInsights(generated);
-    } catch (error) {
-      setAiInsights(null);
-      setAiError(error instanceof Error ? error.message : `Start Ollama and pull the configured model (${getConfiguredOllamaModel()}).`);
-    } finally {
-      setAiLoading(false);
-    }
-  }
+  const upcomingFollowUps = useMemo(() => applications
+    .filter((application) => Boolean(application.followUpDate) || isApplicationOverdue(application, now))
+    .sort((a, b) => (a.followUpDate || "9999").localeCompare(b.followUpDate || "9999"))
+    .slice(0, 5), [applications, now]);
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+    <div className="space-y-5">
+      <PageHeader
+        title="Dashboard"
+        description="Overview of your job search progress."
+        actions={(
+          <>
+            <Button variant="outline" size="sm" onClick={() => setShowImport((current) => !current)}><Upload className="h-4 w-4" />Import Applications</Button>
+            <Button size="sm" asChild><Link to="/app/add"><Plus className="h-4 w-4" />Add Application</Link></Button>
+          </>
+        )}
+      />
 
-      {/* Metric cards — minimal, no heavy borders */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {metrics.map((m) => (
-          <Card key={m.label} className="border-border/40 shadow-none">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{m.label}</CardTitle>
-              <m.icon className={`h-4 w-4 ${m.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold">{m.value}</div>
-            </CardContent>
-          </Card>
+      {showImport && onImportXLSX && (
+        <section aria-label="Import applications" className="animate-in fade-in slide-in-from-top-1">
+          <ExcelDropZone onImport={onImportXLSX} />
+        </section>
+      )}
+
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6" aria-label="Job search summary">
+        {metrics.map((metric) => (
+          <div key={metric.label} className="app-panel flex min-h-24 items-center gap-3 p-4">
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${metric.tone}`}><metric.icon className="h-5 w-5" /></span>
+            <div className="min-w-0">
+              <p className="text-2xl font-bold tabular-nums">{metric.value}</p>
+              <p className="truncate text-[11px] font-medium text-muted-foreground">{metric.label}</p>
+            </div>
+          </div>
         ))}
-      </div>
+      </section>
 
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-        {/* Status breakdown — direct labels and horizontal bars make close category counts easier to compare. */}
-        <Card className="border-border/40 shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base font-medium">Status Breakdown</CardTitle>
-            <CardDescription>
-              Share of {statusTotal} {statusTotal === 1 ? "application" : "applications"} · Select a bar to filter
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {statusChartData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No application status data yet</p>
-            ) : (
-              <div className="space-y-2" role="list" aria-label="Application status breakdown">
-                {statusChartData.map((item) => (
-                  <div key={item.key} role="listitem">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-auto w-full flex-col items-stretch gap-2 whitespace-normal px-2 py-2 text-left"
-                      onClick={() => navigate(`/app/applications?responseStatus=${encodeURIComponent(item.key)}`)}
-                      aria-label={`View ${item.name} applications: ${item.value}, ${item.percentage}%`}
-                    >
-                      <span className="flex w-full items-center justify-between gap-3 text-xs">
-                        <span className="min-w-0 truncate" title={item.name}>{item.name}</span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {item.value} ({item.percentage}%)
-                        </span>
-                      </span>
-                      <span className="h-2.5 w-full overflow-hidden rounded-full bg-muted/60" aria-hidden="true">
-                        {/* Bar length is scaled to the largest category; the label reports share of all applications. */}
-                        <span
-                          className="block h-full rounded-full transition-[width] duration-300"
-                          style={{
-                            width: `${(item.value / maxStatusCount) * 100}%`,
-                            backgroundColor: item.color,
-                          }}
-                        />
-                      </span>
-                    </Button>
-                  </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <section className="app-panel overflow-hidden" aria-labelledby="monthly-heading">
+          <div className="app-panel-title flex items-center justify-between gap-3">
+            <h2 id="monthly-heading">Applications Over Time</h2>
+            <select
+              aria-label="Applications chart range"
+              value={chartRange}
+              onChange={(event) => setChartRange(event.target.value as "3" | "6" | "12" | "all")}
+              className="h-8 rounded-md border bg-background px-2 text-[10px] font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="3">Last 3 months</option>
+              <option value="6">Last 6 months</option>
+              <option value="12">Last 12 months</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
+          <div className="p-4" role="img" aria-label="Monthly applications line graph">
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={monthlyData} margin={{ top: 10, right: 16, left: -18, bottom: 4 }}>
+                <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip contentStyle={{ borderRadius: 6, borderColor: "hsl(var(--border))", fontSize: 12 }} />
+                <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        <section className="app-panel overflow-hidden" aria-labelledby="status-heading">
+          <div className="app-panel-title"><h2 id="status-heading">Applications by Status</h2></div>
+          {statusData.length === 0 ? (
+            <p className="p-12 text-center text-sm text-muted-foreground">No status data yet.</p>
+          ) : (
+            <div className="grid items-center gap-3 p-4 sm:grid-cols-[minmax(210px,0.9fr)_minmax(220px,1.1fr)]">
+              {/* The centered total mirrors the reference while the accessible label carries the full chart meaning. */}
+              <div className="relative mx-auto h-[260px] w-full max-w-[280px]" role="img" aria-label={`Application status donut chart, ${applications.length} total applications`}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={statusData} dataKey="count" nameKey="label" cx="50%" cy="50%" innerRadius={67} outerRadius={102} paddingAngle={1.5} stroke="hsl(var(--card))" strokeWidth={2}>
+                      {statusData.map((item) => <Cell key={item.key} fill={getResponseStatusColor(item.key)} />)}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => [value, "Applications"]} contentStyle={{ borderRadius: 6, borderColor: "hsl(var(--border))", fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-bold tabular-nums">{applications.length}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">Total</span>
+                </div>
+              </div>
+              <div className="space-y-1" role="list" aria-label="Application status breakdown">
+                {statusData.map((item) => (
+                  <Button
+                    key={item.key}
+                    variant="ghost"
+                    className="h-9 w-full justify-start gap-3 rounded-md px-2 text-left"
+                    onClick={() => navigate(`/app/applications?responseStatus=${encodeURIComponent(item.key)}`)}
+                    aria-label={`View ${item.label} applications: ${item.count}, ${item.percentage}%`}
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: getResponseStatusColor(item.key) }} aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium">{item.label}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{item.count} ({item.percentage}%)</span>
+                  </Button>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Activity cards share the right column on desktop so recent jobs fill the space below the chart. */}
-        <section className="space-y-6" aria-label="Application activity">
-          {/* Monthly trend — a line graph makes changes between periods easier to follow. */}
-          <Card className="border-border/40 shadow-none">
-            <CardHeader><CardTitle className="text-base font-medium">Monthly Applications</CardTitle></CardHeader>
-            <CardContent>
-              <div role="img" aria-label="Monthly applications line graph">
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={monthlyData}>
-                    {/* Subtle horizontal grid only */}
-                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      angle={-35}
-                      textAnchor="end"
-                      height={50}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={30}
-                    />
-                    {/* Glass tooltip for chart */}
-                    <Tooltip
-                      cursor={{ stroke: "hsl(var(--muted-foreground))", strokeDasharray: "3 3", strokeOpacity: 0.45 }}
-                      content={({ payload, label }) => {
-                        if (!payload?.length) return null;
-                        return (
-                          <div className="glass rounded-xl px-3 py-1.5 text-xs">
-                            <p className="font-medium">{label}</p>
-                            <p className="text-muted-foreground">{payload[0].value} applications</p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="count"
-                      stroke="hsl(var(--chart-1))"
-                      strokeWidth={3}
-                      dot={{ r: 4, fill: "hsl(var(--background))", strokeWidth: 2 }}
-                      activeDot={{ r: 6, strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Applications — compact, minimal, clickable rows */}
-          <Card className="border-border/40 shadow-none">
-            <CardHeader>
-              <CardTitle className="text-base font-medium">Recent Applications</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {recentApplications.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recent applications yet</p>
-              ) : (
-                <div className="space-y-1">
-                  {recentApplications.map((app) => (
-                    <button
-                      key={app.id}
-                      onClick={() => navigate(`/app/applications/${app.id}`)}
-                      className="flex w-full flex-col items-start justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-4"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{app.companyName}</p>
-                        <p className="truncate text-xs text-muted-foreground">{app.jobTitle}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        {/* Status pill uses the central colour helper so it matches the dashboard bars. */}
-                        <span
-                          className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium"
-                          style={getResponseStatusBadgeStyle(app.responseStatus)}
-                        >
-                          <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ background: getResponseStatusColor(app.responseStatus) }}
-                          />
-                          {app.responseStatus}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{formatDisplayDate(app.dateApplied)}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            </div>
+          )}
         </section>
       </div>
 
-      {/* Insights & Recommendations — deterministic signals plus hosted Gemini or local Ollama coaching */}
-      {(insights.length > 0 || aiInsights || applications.length > 0) && (
-        <Card className="glass-subtle border-border/40 shadow-none">
-          <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="flex items-center gap-2 text-base font-medium">
-                <Lightbulb className="h-4 w-4 text-[hsl(var(--status-offer))]" />
-                Insights & Recommendations
-              </CardTitle>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleGenerateAiInsights}
-                disabled={isDemo || !user || aiLoading || applications.length === 0}
-                className="w-full gap-2 sm:w-auto"
-              >
-                {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {isDemo ? "Log in for AI insights" : aiInsights ? "Regenerate AI insights" : "Generate AI insights"}
-              </Button>
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_1fr_0.9fr]" aria-label="Application activity">
+        <div className="app-panel overflow-hidden">
+          <div className="app-panel-title"><h2>Recent Activity</h2></div>
+          <div className="divide-y">
+            {recentActivity.length === 0 ? <p className="p-5 text-sm text-muted-foreground">No recent activity.</p> : recentActivity.map((item, index) => (
+              <button key={`${item.application.id}-${item.date.toISOString()}-${index}`} type="button" className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/50" onClick={() => navigate(`/app/applications/${item.application.id}`)}>
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><MessageCircle className="h-3.5 w-3.5" /></span>
+                <span className="min-w-0"><span className="block text-xs font-medium leading-5">{item.message}</span><span className="text-[10px] text-muted-foreground">{format(item.date, "MMM d, yyyy")}</span></span>
+              </button>
+            ))}
+          </div>
+          <Link to="/app/applications" className="block border-t px-4 py-3 text-xs font-semibold text-primary hover:bg-muted/40">View all activity →</Link>
+        </div>
+
+        <div className="app-panel overflow-hidden">
+          <div className="app-panel-title"><h2>Upcoming Follow-ups</h2></div>
+          <div className="divide-y">
+            {upcomingFollowUps.length === 0 ? <p className="p-5 text-sm text-muted-foreground">You are all caught up.</p> : upcomingFollowUps.map((application) => (
+              <button key={application.id} type="button" onClick={() => navigate(`/app/applications/${application.id}`)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50">
+                <span className="min-w-0"><span className="block truncate text-xs font-semibold">{application.companyName}</span><span className="block truncate text-[10px] text-muted-foreground">{application.jobTitle}</span></span>
+                <span className="shrink-0 text-right"><span className="block text-[10px] font-medium">{application.followUpDate ? formatDisplayDate(application.followUpDate) : "Overdue"}</span><span className="text-[10px] text-amber-600">Follow up</span></span>
+              </button>
+            ))}
+          </div>
+          <Link to="/app/follow-ups" className="block border-t px-4 py-3 text-xs font-semibold text-primary hover:bg-muted/40">View all follow-ups →</Link>
+        </div>
+
+        <div className="space-y-4">
+          <div className="app-panel overflow-hidden">
+            <div className="app-panel-title"><h2>Quick Actions</h2></div>
+            <div className="divide-y">
+              {[
+                { label: "Add Application", detail: "Add a new job", icon: Plus, action: () => navigate("/app/add") },
+                { label: "Import XLSX", detail: "Merge workbook data", icon: FileSpreadsheet, action: () => setShowImport(true) },
+                { label: "Export CSV", detail: "Download table data", icon: FileDown, action: () => exportCSV(applications) },
+                { label: "Export XLSX", detail: "Download workbook", icon: Download, action: () => exportXLSX(applications) },
+                { label: "AI & Analytics", detail: "Open guidance and trends", icon: BarChart3, action: () => navigate("/app/analytics") },
+              ].map((item) => (
+                <button key={item.label} type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50" onClick={item.action}>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary"><item.icon className="h-3.5 w-3.5" /></span>
+                  <span><span className="block text-xs font-semibold">{item.label}</span><span className="block text-[10px] text-muted-foreground">{item.detail}</span></span>
+                </button>
+              ))}
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1">
-                {importMetadata ? `Using XLSX import: ${importMetadata.fileName}` : "Using current dashboard records"}
-              </span>
-              {importMetadata && (
-                <span className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1">
-                  {importMetadata.rowCount} rows imported
-                </span>
-              )}
-            </div>
-            {isDemo ? (
-              <p className="text-xs text-muted-foreground">AI generation is disabled in the public sandbox so private access tokens never appear in demo mode.</p>
-            ) : (
-              // Google authentication replaces the manual shared-secret field for the private owner workspace.
-              <p className="text-xs text-muted-foreground">Gemini requests are authenticated with your signed-in Google session{user?.email ? ` (${user.email})` : ""}.</p>
-            )}
-
-            {aiError && (
-              <div className="rounded-md border border-[hsl(var(--status-rejected)/0.25)] bg-[hsl(var(--status-rejected)/0.08)] px-3 py-2 text-sm text-[hsl(var(--status-rejected))]">
-                {aiError}
-              </div>
-            )}
-
-            {aiInsights && (
-              <div className="space-y-3">
-                {aiInsights.summary && (
-                  <div className="glass rounded-xl px-3 py-3">
-                    <p className="text-sm leading-relaxed">{aiInsights.summary}</p>
-                  </div>
-                )}
-                <div className="grid gap-3 lg:grid-cols-3">
-                  {[
-                    { title: "Strengths", items: aiInsights.strengths },
-                    { title: "Improve", items: aiInsights.improvementAreas },
-                    { title: "Next Actions", items: aiInsights.recommendedNextActions },
-                  ].map((section) => (
-                    <div key={section.title} className="rounded-lg border border-border/50 bg-background/40 p-3">
-                      <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">{section.title}</p>
-                      <ul className="space-y-1.5">
-                        {section.items.map((item) => (
-                          <li key={item} className="text-sm leading-snug">{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {insights.length > 0 && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {insights.map((ins, i) => {
-                  // Tone-based subtle color: green=positive, red/amber=warning
-                  const toneColor =
-                    ins.tone === "positive"
-                      ? "text-[hsl(var(--status-offer))]"
-                      : ins.tone === "warning"
-                      ? "text-[hsl(var(--status-rejected))]"
-                      : "text-muted-foreground";
-                  return (
-                    <div key={i} className="glass flex items-start gap-3 rounded-xl px-3 py-2.5">
-                      <ins.icon className={`mt-0.5 h-4 w-4 shrink-0 ${toneColor}`} />
-                      <p className="text-sm leading-snug">{ins.label}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          <div className="rounded-md border border-primary/15 bg-primary/5 p-3 text-[11px] leading-5 text-muted-foreground"><BellRing className="mr-1 inline h-3.5 w-3.5 text-primary" />Consistent tracking makes follow-ups easier and keeps opportunities from slipping through.</div>
+        </div>
+      </section>
     </div>
   );
 }
