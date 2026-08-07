@@ -217,7 +217,8 @@ function JobTrackerShell({
             <Route path="applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
             <Route path="follow-ups" element={<FollowUps applications={applications} onUpdate={updateApplication} />} />
             <Route path="analytics" element={<Analytics applications={applications} isDemo={mode === "demo"} user={user} />} />
-            <Route path="documents" element={<Documents applications={applications} />} />
+            {/* Device-local documents are scoped separately from the public demo and from other owner identities. */}
+            <Route path="documents" element={<Documents applications={applications} mode={mode} ownerId={user?.uid} />} />
             <Route path="settings" element={<Settings mode={mode} user={user} syncing={syncing} offline={offline} />} />
             <Route path="add" element={<ApplicationForm onCreate={createApplication} onUpdate={updateApplication} />} />
             <Route path="*" element={<NotFound />} />

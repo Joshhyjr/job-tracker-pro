@@ -1,31 +1,97 @@
-import { ChangeEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Eye, FileText, Link2, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from "@/lib/browserStorage";
 
 type DocumentCategory = "Resumes" | "Cover letters" | "Job descriptions" | "Certificates" | "Other files";
 type StoredDocument = { id: string; name: string; category: DocumentCategory; size: number; updatedAt: string; dataUrl: string };
-const STORAGE_KEY = "job-tracker-documents-v1";
+const CATEGORIES: DocumentCategory[] = ["Resumes", "Cover letters", "Job descriptions", "Certificates", "Other files"];
+const LEGACY_STORAGE_KEY = "job-tracker-documents-v1";
+const STORAGE_KEY_PREFIX = "job-tracker-documents-v2";
 
-function loadDocuments(): StoredDocument[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as StoredDocument[]; } catch { return []; }
+function getStorageKey(mode: "demo" | "owner", ownerId?: string): string | null {
+  if (mode === "demo") return `${STORAGE_KEY_PREFIX}:demo`;
+  // Owner storage fails closed until Firebase supplies an identity, preventing accidental cross-account reuse.
+  return ownerId ? `${STORAGE_KEY_PREFIX}:owner:${ownerId}` : null;
 }
 
-export default function Documents({ applications }: { applications: JobApplication[] }) {
-  const [documents, setDocuments] = useState<StoredDocument[]>(loadDocuments);
+function isStoredDocument(value: unknown): value is StoredDocument {
+  if (!value || typeof value !== "object") return false;
+  const document = value as Partial<StoredDocument>;
+  return typeof document.id === "string"
+    && typeof document.name === "string"
+    && CATEGORIES.includes(document.category as DocumentCategory)
+    && typeof document.size === "number"
+    && Number.isFinite(document.size)
+    && document.size >= 0
+    && typeof document.updatedAt === "string"
+    && typeof document.dataUrl === "string"
+    && document.dataUrl.startsWith("data:");
+}
+
+function parseDocuments(raw: string): StoredDocument[] | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) && parsed.every(isStoredDocument) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadDocuments(storageKey: string | null, migrateLegacyOwnerDocuments: boolean): StoredDocument[] {
+  if (!storageKey) return [];
+  const scopedRaw = safeLocalStorageGetItem(storageKey);
+  if (scopedRaw !== null) return parseDocuments(scopedRaw) ?? [];
+  if (!migrateLegacyOwnerDocuments) return [];
+
+  const legacyRaw = safeLocalStorageGetItem(LEGACY_STORAGE_KEY);
+  if (legacyRaw === null) return [];
+  const legacyDocuments = parseDocuments(legacyRaw);
+  if (!legacyDocuments) return [];
+
+  // Migrate the old shared key only after authentication, and retain it if the scoped write cannot be verified.
+  const serialized = JSON.stringify(legacyDocuments);
+  safeLocalStorageSetItem(storageKey, serialized);
+  if (safeLocalStorageGetItem(storageKey) === serialized) safeLocalStorageRemoveItem(LEGACY_STORAGE_KEY);
+  return legacyDocuments;
+}
+
+export default function Documents({ applications, mode, ownerId }: { applications: JobApplication[]; mode: "demo" | "owner"; ownerId?: string }) {
+  const storageKey = getStorageKey(mode, ownerId);
+  const [documents, setDocuments] = useState<StoredDocument[]>(() => loadDocuments(storageKey, mode === "owner"));
   const [category, setCategory] = useState<DocumentCategory>("Resumes");
   const inputRef = useRef<HTMLInputElement>(null);
+  const activeStorageKey = useRef(storageKey);
   const { toast } = useToast();
-  const categories: DocumentCategory[] = ["Resumes", "Cover letters", "Job descriptions", "Certificates", "Other files"];
   const visible = useMemo(() => documents.filter((document) => document.category === category), [category, documents]);
 
-  function persist(next: StoredDocument[]) {
-    // Document content is intentionally device-local until a dedicated private cloud document store is configured.
+  useEffect(() => {
+    if (activeStorageKey.current === storageKey) return;
+    activeStorageKey.current = storageKey;
+    // Identity changes must replace in-memory files as well as switching the persistence namespace.
+    setDocuments(loadDocuments(storageKey, mode === "owner"));
+  }, [mode, storageKey]);
+
+  function persist(next: StoredDocument[]): boolean {
+    if (!storageKey) {
+      toast({ title: "Document not saved", description: "Your account identity is not available yet. Please retry.", variant: "destructive" });
+      return false;
+    }
+    // Verify device-local persistence before updating the UI so quota failures never look like successful saves.
+    const serialized = JSON.stringify(next);
+    safeLocalStorageSetItem(storageKey, serialized);
+    if (safeLocalStorageGetItem(storageKey) !== serialized) {
+      toast({ title: "Document not saved", description: "This browser could not store the file. Free some site storage and retry.", variant: "destructive" });
+      return false;
+    }
+    // A verified owner write supersedes any legacy recovery copy left behind by an earlier quota failure.
+    if (mode === "owner") safeLocalStorageRemoveItem(LEGACY_STORAGE_KEY);
     setDocuments(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    return true;
   }
 
   function upload(event: ChangeEvent<HTMLInputElement>) {
@@ -37,8 +103,8 @@ export default function Documents({ applications }: { applications: JobApplicati
     }
     const reader = new FileReader();
     reader.onload = () => {
-      persist([{ id: crypto.randomUUID(), name: file.name, category, size: file.size, updatedAt: new Date().toISOString(), dataUrl: String(reader.result) }, ...documents]);
-      toast({ title: "Document uploaded", description: `${file.name} is available on this device.` });
+      const saved = persist([{ id: crypto.randomUUID(), name: file.name, category, size: file.size, updatedAt: new Date().toISOString(), dataUrl: String(reader.result) }, ...documents]);
+      if (saved) toast({ title: "Document uploaded", description: `${file.name} is available on this device.` });
     };
     reader.readAsDataURL(file);
     event.target.value = "";
@@ -49,7 +115,7 @@ export default function Documents({ applications }: { applications: JobApplicati
       <PageHeader title="Documents" description="Keep job-search files organized and ready to attach." actions={<Button size="sm" onClick={() => inputRef.current?.click()}><Upload />Upload file</Button>} />
       <input ref={inputRef} className="hidden" type="file" aria-label="Upload document" onChange={upload} />
       <div className="flex gap-1 overflow-x-auto border-b" role="tablist" aria-label="Document categories">
-        {categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-semibold ${category === item ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCategory(item)}>{item} <span className="ml-1 text-[10px]">({documents.filter((document) => document.category === item).length})</span></button>)}
+        {CATEGORIES.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-semibold ${category === item ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCategory(item)}>{item} <span className="ml-1 text-[10px]">({documents.filter((document) => document.category === item).length})</span></button>)}
       </div>
       <section className="app-panel overflow-hidden">
         <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b bg-muted/30 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"><span>Name</span><span>Used by</span><span className="w-10" /></div>
