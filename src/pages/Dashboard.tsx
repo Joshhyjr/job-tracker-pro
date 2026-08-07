@@ -32,6 +32,7 @@ import {
 } from "@/lib/responseStatus";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
 import { formatDisplayDate } from "@/lib/utils";
+import { CompanyLogo } from "@/components/CompanyLogo";
 
 function safeDate(value: string): Date | null {
   const parsed = parseISO(value || "");
@@ -223,7 +224,7 @@ export default function Dashboard({
           <div className="divide-y">
             {recentActivity.length === 0 ? <p className="p-5 text-sm text-muted-foreground">No recent activity.</p> : recentActivity.map((item, index) => (
               <button key={`${item.application.id}-${item.date.toISOString()}-${index}`} type="button" className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/50" onClick={() => navigate(`/app/applications/${item.application.id}`)}>
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><MessageCircle className="h-3.5 w-3.5" /></span>
+                {/* Activity rows show the employer logo from the central service instead of a generic icon. */}<CompanyLogo companyName={item.application.companyName} jobLink={item.application.jobLink} companyDomain={item.application.companyDomain} companyLogoUrl={item.application.companyLogoUrl} className="mt-0.5" />
                 <span className="min-w-0"><span className="block text-xs font-medium leading-5">{item.message}</span><span className="text-[10px] text-muted-foreground">{format(item.date, "MMM d, yyyy")}</span></span>
               </button>
             ))}

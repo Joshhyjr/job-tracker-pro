@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import type { JobApplication } from "@/lib/types";
 import { buildJobLocationGroups, buildJobLocationGroupsAsync, getApplicationLocationLabel, type JobLocationGroup, type JobLocationGroupsResult } from "@/lib/locations";
 import { getEffectiveCurrentStatus } from "@/lib/responseStatus";
+import { CompanyLogo } from "@/components/CompanyLogo";
 
 // OpenFreeMap provides the detailed vector basemap without an account, API key, or billing setup.
 const OPEN_FREE_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
@@ -142,7 +143,7 @@ function LocationDetails({ group }: { group: JobLocationGroup }) {
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{application.companyName}</p>
+                <p className="flex items-center gap-2 truncate text-sm font-medium"><CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} />{application.companyName}</p>
                 <p className="truncate text-xs text-muted-foreground">{application.jobTitle}</p>
               </div>
               <StatusBadge status={getEffectiveCurrentStatus(application)} />
@@ -562,7 +563,7 @@ export function JobLocationsMap({
               <div className="mt-3 space-y-2">
                 {unresolved.slice(0, 5).map((application) => (
                   <div key={application.id} className="rounded-md bg-muted/40 px-3 py-2">
-                    <p className="truncate text-sm font-medium">{application.companyName}</p>
+                    <p className="flex items-center gap-2 truncate text-sm font-medium"><CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} />{application.companyName}</p>
                     <p className="truncate text-xs text-muted-foreground">{getApplicationLocationLabel(application)}</p>
                   </div>
                 ))}
