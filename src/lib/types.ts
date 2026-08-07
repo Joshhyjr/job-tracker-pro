@@ -52,6 +52,10 @@ export interface JobApplication {
   followUpDate: string;
   /** Optional fields captured from flexible spreadsheet templates. */
   jobLink?: string;
+  /** Verified employer domain used by the company logo service (manual override wins over link parsing). */
+  companyDomain?: string;
+  /** Explicit logo image URL that bypasses domain-based resolution. */
+  companyLogoUrl?: string;
   salary?: string;
   daysSinceApplied?: number;
   coverLetterIncluded?: boolean;
