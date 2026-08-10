@@ -94,7 +94,7 @@ Start with Vercel's **Log** action if you want to observe normal traffic before 
 ## Notes
 
 - Signed-in job tracker data synchronizes through Cloud Firestore, with Firestore's persistent browser cache supporting trusted-device offline use.
-- Hosted AI Insights sends only summarized application metrics to Gemini; notes, links, recruiters, custom fields, and complete application records are not sent to Gemini.
+- Hosted AI Insights sends bounded metrics plus top company, role, and location labels to Gemini. It excludes notes, links, recruiters, workbook filenames, import timestamps, custom-field names and values, local coaching signals, and complete application records.
 - The Gemini endpoint verifies the Firebase bearer ID token and the approved owner email in addition to same-origin, payload, and application-level rate-limit protections. Keep the Vercel Firewall limits above enabled and configure provider spend alerts.
 - Google Authentication and Firestore Security Rules restrict cloud data to the approved verified account; deploy rule changes alongside application changes.
 - Do not commit temporary workspace folders such as `tmp/`.

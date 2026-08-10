@@ -1,6 +1,15 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 // Explicit JavaScript specifiers remain resolvable after Vercel emits these TypeScript functions as Node ESM.
-import { enforceRateLimit, isAllowedBrowserRequest, jsonResponse } from "./_shared/security.js";
+import {
+  RequestPayloadTooLargeError,
+  cancelResponseBody,
+  enforceRateLimit,
+  getProviderRequestId,
+  isAllowedBrowserRequest,
+  isJsonRequest,
+  jsonResponse,
+  toBoundedWebRequest,
+} from "./_shared/security.js";
 
 const MAX_REQUEST_BYTES = 8_192;
 const MAX_NAME_LENGTH = 120;
@@ -60,7 +69,7 @@ export async function handleContactRequest(request: Request, options: HandlerOpt
   // Throttle before parsing or calling Resend so repeated same-origin submissions cannot consume provider quota.
   const rateLimitResponse = enforceRateLimit(request, "contact", RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_MS);
   if (rateLimitResponse) return rateLimitResponse;
-  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return jsonResponse({ error: "Content-Type must be application/json." }, 415);
+  if (!isJsonRequest(request)) return jsonResponse({ error: "Content-Type must be application/json." }, 415);
 
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > MAX_REQUEST_BYTES) return jsonResponse({ error: "Message is too large." }, 413);
@@ -106,49 +115,31 @@ export async function handleContactRequest(request: Request, options: HandlerOpt
     }),
   });
 
+  const requestId = response.ok ? null : getProviderRequestId(response);
+  // Resend's response payload is unused; cancel it so the connection can be released without retaining echoed PII.
+  await cancelResponseBody(response);
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    // Provider details stay in server logs so the browser never receives secrets or diagnostics.
-    console.error("Contact email failed", { status: response.status, detail: detail.slice(0, 500) });
+    // Retain only allowlisted correlation metadata; provider bodies may echo contact PII.
+    console.error("Contact email failed", requestId ? { status: response.status, requestId } : { status: response.status });
     return jsonResponse({ error: "Message could not be sent right now." }, 502);
   }
 
   return jsonResponse({ ok: true }, 200);
 }
 
-async function toWebRequest(request: IncomingMessage): Promise<Request> {
-  const headers = new Headers();
-  Object.entries(request.headers).forEach(([name, value]) => {
-    if (Array.isArray(value)) value.forEach((item) => headers.append(name, item));
-    else if (value !== undefined) headers.set(name, value);
-  });
-
-  const protocolHeader = request.headers["x-forwarded-proto"];
-  const protocol = Array.isArray(protocolHeader) ? protocolHeader[0] : protocolHeader || "https";
-  const host = request.headers.host || "localhost";
-  const method = request.method || "GET";
-  const chunks: Buffer[] = [];
-
-  if (method !== "GET" && method !== "HEAD") {
-    for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-
-  return new Request(`${protocol}://${host}${request.url || "/"}`, {
-    method,
-    headers,
-    body: chunks.length ? Buffer.concat(chunks) : undefined,
-  });
-}
-
 export default async function handler(request: IncomingMessage, response: ServerResponse): Promise<void> {
   try {
-    const webResponse = await handleContactRequest(await toWebRequest(request));
+    const webResponse = await handleContactRequest(await toBoundedWebRequest(request, MAX_REQUEST_BYTES));
     response.statusCode = webResponse.status;
     webResponse.headers.forEach((value, name) => response.setHeader(name, value));
     response.end(await webResponse.text());
-  } catch {
-    response.statusCode = 500;
-    response.setHeader("Content-Type", "application/json; charset=utf-8");
-    response.end(JSON.stringify({ error: "Message could not be sent right now." }));
+  } catch (error) {
+    // Typed size failures remain distinguishable from unexpected runtime errors at the Node adapter boundary.
+    const webResponse = error instanceof RequestPayloadTooLargeError
+      ? jsonResponse({ error: "Message is too large." }, 413)
+      : jsonResponse({ error: "Message could not be sent right now." }, 500);
+    response.statusCode = webResponse.status;
+    webResponse.headers.forEach((value, name) => response.setHeader(name, value));
+    response.end(await webResponse.text());
   }
 }

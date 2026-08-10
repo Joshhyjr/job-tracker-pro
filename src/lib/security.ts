@@ -2,22 +2,25 @@ import { CURRENT_STATUSES, type ActivityLogEntry, type CurrentStatus, type JobAp
 import { normalizeResponseStatus } from "./responseStatus";
 import { normalizeCompanyDomain } from "./companyLogos";
 
-function sanitizeHttpUrl(value: string): string {
-  if (!value) return "";
-  try {
-    const url = new URL(value);
-    // Only http(s) images are persisted so imported data cannot smuggle javascript:/data: sources.
-    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
-  } catch {
-    return "";
-  }
-}
-
 const MAX_SHORT_TEXT_LENGTH = 200;
 const MAX_NOTES_LENGTH = 2000;
 const MAX_URL_LENGTH = 2048;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ACTIVITY_LOG_TYPES: ActivityLogEntry["type"][] = ["status_change", "follow_up", "note"];
+const SAFE_CSS_IDENTIFIER_FALLBACK = "safe";
+const SAFE_CSS_COLOR_PATTERN = /^(?:#[\da-f]{3,4}|#[\da-f]{6}(?:[\da-f]{2})?|transparent|currentcolor|black|white|var\(--[a-z0-9_-]+\)|(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\((?:(?:[-+.\d%/,\s]+)|var\(--[a-z0-9_-]+\))+\))$/i;
+
+export function sanitizeExternalHttpUrl(value: unknown): string {
+  const candidate = sanitizeSingleLineText(value, MAX_URL_LENGTH);
+  if (!candidate) return "";
+  try {
+    const url = new URL(candidate);
+    // External navigation is fail-closed: only absolute HTTP(S) URLs may cross persistence or href boundaries.
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
 
 export type SanitizedApplicationInput = Omit<JobApplication, "id" | "activityLog">;
 
@@ -48,6 +51,27 @@ export function sanitizeMultilineText(value: unknown, maxLength = MAX_NOTES_LENG
 export function sanitizeDateInput(value: unknown): string {
   const date = sanitizeSingleLineText(value, 10);
   return DATE_PATTERN.test(date) ? date : "";
+}
+
+function normalizeCssIdentifier(value: unknown): string {
+  const normalized = sanitizeSingleLineText(value, 120).toLowerCase();
+  return normalized
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+export function sanitizeCssIdentifier(value: unknown, fallback = SAFE_CSS_IDENTIFIER_FALLBACK): string {
+  // CSS selectors and custom-property names must never interpolate raw caller-provided identifiers.
+  return normalizeCssIdentifier(value) || normalizeCssIdentifier(fallback) || SAFE_CSS_IDENTIFIER_FALLBACK;
+}
+
+export function sanitizeCssColor(value: unknown): string {
+  const candidate = sanitizeSingleLineText(value, 160);
+  if (!SAFE_CSS_COLOR_PATTERN.test(candidate)) return "";
+  // Native parsing rejects malformed values while the conservative regex keeps SSR/test behavior fail-closed.
+  if (typeof CSS !== "undefined" && typeof CSS.supports === "function" && !CSS.supports("color", candidate)) return "";
+  return candidate;
 }
 
 export function sanitizeCurrentStatus(value: unknown): CurrentStatus {
@@ -113,10 +137,10 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   const city = sanitizeSingleLineText(input.city);
   const region = sanitizeSingleLineText(input.region);
   const country = sanitizeSingleLineText(input.country);
-  const jobLink = sanitizeSingleLineText(input.jobLink, MAX_URL_LENGTH);
+  const jobLink = sanitizeExternalHttpUrl(input.jobLink);
   // Company branding overrides are normalized/validated by the logo service before being stored.
   const companyDomain = normalizeCompanyDomain(sanitizeSingleLineText(input.companyDomain, MAX_URL_LENGTH)) ?? "";
-  const companyLogoUrl = sanitizeHttpUrl(sanitizeSingleLineText(input.companyLogoUrl, MAX_URL_LENGTH));
+  const companyLogoUrl = sanitizeExternalHttpUrl(input.companyLogoUrl);
   const salary = sanitizeSingleLineText(input.salary);
   const recruiterContactName = sanitizeSingleLineText(input.recruiterContactName);
   const tags = sanitizeSingleLineText(input.tags);

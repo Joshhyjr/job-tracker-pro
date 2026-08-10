@@ -107,7 +107,7 @@ npm run test:rules
 
 ## AI Insights
 
-AI insights use Google Gemini through the server-side `/api/ai-insights` Vercel Function. Only the dashboard's summarized application metrics are sent; notes, links, recruiter names, custom fields, and complete application records remain in the browser.
+AI insights use Google Gemini through the server-side `/api/ai-insights` Vercel Function. The hosted request contains bounded metrics plus top company, role, and location labels. Notes, links, recruiter names, workbook filenames, import timestamps, custom-field names and values, local coaching signals, and complete application records are excluded from Gemini; the richer summary remains available only to the on-device Ollama fallback.
 
 Add these server-side environment variables locally and in Vercel:
 

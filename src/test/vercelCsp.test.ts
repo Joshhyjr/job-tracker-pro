@@ -13,5 +13,7 @@ describe("Vercel content security policy", () => {
     expect(contentSecurityPolicy).toContain("img-src 'self' data: blob:");
     expect(contentSecurityPolicy).toContain("https://www.google.com");
     expect(contentSecurityPolicy).toContain("connect-src 'self' https://*.googleapis.com https://cloudflareinsights.com https://tiles.openfreemap.org");
+    // Restrict future form submissions without changing the existing Firebase and map resource allowances.
+    expect(contentSecurityPolicy).toContain("form-action 'self'");
   });
 });

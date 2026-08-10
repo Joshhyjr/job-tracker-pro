@@ -71,6 +71,43 @@ describe("useDemoApplications", () => {
     expect(getApplications()).toMatchObject([{ id: "owner-app", companyName: "Private Company" }]);
   });
 
+  it("removes rejected URL fields from demo updates without dropping unrelated data", async () => {
+    saveDemoApplications([application({
+      jobLink: "https://jobs.example/demo",
+      companyLogoUrl: "https://cdn.example/logo.png",
+      salary: "$120k",
+      customFields: { Portfolio: "Keep this field" },
+      createdAt: "2026-08-10T10:00:00.000Z",
+    })]);
+    markDemoSeeded();
+    const { result } = renderHook(() => useDemoApplications());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let updated: JobApplication | undefined;
+    await act(async () => {
+      updated = await result.current.updateApplication({
+        ...result.current.applications[0],
+        jobLink: "javascript:alert(document.domain)",
+        companyLogoUrl: "data:image/svg+xml,<svg onload='alert(1)' />",
+        salary: "$125k",
+        customFields: { Portfolio: "Still present" },
+      });
+    });
+
+    const [stored] = JSON.parse(localStorage.getItem("job-tracker-demo-data") || "[]") as JobApplication[];
+    // Return value, visible state, and raw demo persistence must all exclude sanitizer-rejected URLs.
+    [updated, result.current.applications[0], stored].forEach((record) => {
+      expect(record).not.toHaveProperty("jobLink");
+      expect(record).not.toHaveProperty("companyLogoUrl");
+      expect(record).toMatchObject({
+        salary: "$125k",
+        customFields: { Portfolio: "Still present" },
+        createdAt: "2026-08-10T10:00:00.000Z",
+        notes: "Synthetic demo record",
+      });
+    });
+  });
+
   it("merges signed-out spreadsheet changes without replacing current demo jobs", async () => {
     const ibm = application({ id: "ibm-job", companyName: "IBM" });
     const apple = application({ id: "apple-job", companyName: "Apple", dateApplied: "2026-08-05" });

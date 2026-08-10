@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
 
+import { sanitizeCssColor, sanitizeCssIdentifier } from "@/lib/security";
 import { cn } from "@/lib/utils";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -37,7 +38,8 @@ const ChartContainer = React.forwardRef<
   }
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId();
-  const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
+  // The DOM attribute and generated selector share one sanitized identifier so caller input cannot escape either context.
+  const chartId = sanitizeCssIdentifier(`chart-${id || uniqueId.replace(/:/g, "")}`, "chart");
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -59,7 +61,10 @@ const ChartContainer = React.forwardRef<
 ChartContainer.displayName = "Chart";
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
+  const safeId = sanitizeCssIdentifier(id, "chart");
+  const colorConfig = Object.entries(config)
+    .map(([key, itemConfig]) => ({ key: sanitizeCssIdentifier(key, "series"), itemConfig }))
+    .filter(({ itemConfig }) => itemConfig.theme || itemConfig.color);
 
   if (!colorConfig.length) {
     return null;
@@ -71,10 +76,11 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart="${safeId}"] {
 ${colorConfig
-  .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+  .map(({ key, itemConfig }) => {
+    // Only validated color grammar reaches the raw style block; rejected values omit the variable entirely.
+    const color = sanitizeCssColor(itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color);
     return color ? `  --color-${key}: ${color};` : null;
   })
   .join("\n")}

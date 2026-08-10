@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Documents from "@/pages/Documents";
+import { isPreviewableDocumentDataUrl } from "@/lib/documentPreview";
 
 const { toastMock } = vi.hoisted(() => ({ toastMock: vi.fn() }));
 
@@ -118,5 +119,46 @@ describe("Documents", () => {
     expect(screen.getByText("private-resume.pdf")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem(storageKey) || "[]")).toEqual([privateResume]);
     expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Document not saved", variant: "destructive" }));
+  });
+
+  it("uses an exact inert MIME allowlist for document previews", () => {
+    // Common inert documents remain previewable while active HTML, XML, and SVG formats are download-only.
+    expect(isPreviewableDocumentDataUrl("data:application/pdf;base64,AA==")).toBe(true);
+    expect(isPreviewableDocumentDataUrl("data:image/png;base64,AA==")).toBe(true);
+    expect(isPreviewableDocumentDataUrl("data:text/plain;charset=utf-8,notes")).toBe(true);
+    expect(isPreviewableDocumentDataUrl("data:text/html,<script>alert(1)</script>")).toBe(false);
+    expect(isPreviewableDocumentDataUrl("data:application/xml,<root />")).toBe(false);
+    expect(isPreviewableDocumentDataUrl("data:image/svg+xml,<svg />")).toBe(false);
+  });
+
+  it("keeps active-content uploads stored and downloadable without rendering Preview", async () => {
+    const storageKey = "job-tracker-documents-v2:owner:owner-a";
+    const svgDocument = {
+      ...privateResume,
+      id: "active-svg",
+      name: "portfolio.svg",
+      dataUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+    };
+    localStorage.setItem(storageKey, JSON.stringify([svgDocument]));
+    render(<Documents applications={[]} mode="owner" ownerId="owner-a" />);
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Actions for portfolio.svg" }), { button: 0, ctrlKey: false });
+
+    // Preview suppression must not delete, rewrite, or block recovery of the user's original upload.
+    const download = await screen.findByRole("menuitem", { name: "Download" });
+    expect(download).toHaveAttribute("href", svgDocument.dataUrl);
+    expect(screen.queryByRole("menuitem", { name: "Preview" })).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(storageKey) || "[]")).toEqual([svgDocument]);
+  });
+
+  it("continues rendering Preview for allowlisted PDF documents", async () => {
+    localStorage.setItem("job-tracker-documents-v2:owner:owner-a", JSON.stringify([privateResume]));
+    render(<Documents applications={[]} mode="owner" ownerId="owner-a" />);
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Actions for private-resume.pdf" }), { button: 0, ctrlKey: false });
+
+    // Existing inert preview behavior remains available after the MIME gate is introduced.
+    expect(await screen.findByRole("menuitem", { name: "Preview" })).toHaveAttribute("href", privateResume.dataUrl);
+    expect(screen.getByRole("menuitem", { name: "Download" })).toBeInTheDocument();
   });
 });

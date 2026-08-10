@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
+import type { JobApplication } from "@/lib/types";
 import {
   addApplication,
   createImportBackup,
+  generateId,
   getApplications,
   getLastImportMetadata,
   getLatestImportBackup,
@@ -12,6 +14,7 @@ import {
   markSeeded,
   saveApplications,
   saveLastImportMetadata,
+  updateApplication,
 } from "@/lib/storage";
 
 beforeEach(() => {
@@ -20,6 +23,36 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe("generateId", () => {
+  it("prefers randomUUID when Web Crypto provides it", () => {
+    const randomUuid = "11111111-2222-4333-8444-555555555555";
+    vi.stubGlobal("crypto", { randomUUID: () => randomUuid, getRandomValues: vi.fn() });
+
+    // Native UUID generation is the strongest and simplest browser path.
+    expect(generateId()).toBe(randomUuid);
+  });
+
+  it("uses getRandomValues as a UUID-compatible fallback", () => {
+    vi.stubGlobal("crypto", {
+      getRandomValues: (bytes: Uint8Array) => {
+        bytes.set(Array.from({ length: 16 }, (_, index) => index));
+        return bytes;
+      },
+    });
+
+    // The fallback keeps 122 random bits and stamps the standard UUID version and variant bits.
+    expect(generateId()).toBe("00010203-0405-4607-8809-0a0b0c0d0e0f");
+  });
+
+  it("fails closed when Web Crypto is unavailable", () => {
+    vi.stubGlobal("crypto", undefined);
+
+    // Predictable Math.random/time identifiers must never silently replace secure entropy.
+    expect(() => generateId()).toThrow("requires Web Crypto");
+  });
 });
 
 describe("mapRowsToApplications", () => {
@@ -103,6 +136,19 @@ describe("mapRowsToApplications", () => {
       notes: "Follow up after screen.",
       dateApplied: "",
     });
+  });
+
+  it("drops non-HTTP(S) job links from imported rows", () => {
+    const applications = mapRowsToApplications([
+      { "Job Title": "Unsafe Script Link", Company: "Acme", "Job Link": "javascript:alert(1)" },
+      { "Job Title": "Unsafe Data Link", Company: "Beacon", "Job Link": "data:text/html,<script>alert(1)</script>" },
+      { "Job Title": "Safe Link", Company: "Northstar", "Job Link": "https://jobs.example/safe" },
+    ]);
+
+    // Workbook links are untrusted and must cross the same absolute HTTP(S) boundary as app edits.
+    expect(applications[0]).not.toHaveProperty("jobLink");
+    expect(applications[1]).not.toHaveProperty("jobLink");
+    expect(applications[2].jobLink).toBe("https://jobs.example/safe");
   });
 
   it("maps headers with quote separators to the same fields as spaced headers", () => {
@@ -421,6 +467,46 @@ describe("getApplications", () => {
       customFields: {
         "Portfolio Notes": "Shared case study",
       },
+    });
+  });
+
+  it("removes rejected URL fields from local updates without dropping unrelated data", () => {
+    const created = addApplication({
+      jobTitle: "Security Engineer",
+      companyName: "Northstar",
+      location: "Remote",
+      currentStatus: "Applied",
+      responseStatus: "Applied",
+      followUps: false,
+      dateApplied: "2026-08-10",
+      notes: "Keep this note",
+      followUpDate: "",
+      jobLink: "https://jobs.example/security",
+      companyLogoUrl: "https://cdn.example/logo.png",
+      salary: "$130k",
+      customFields: { Portfolio: "Keep this field" },
+    });
+
+    updateApplication({
+      ...created,
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T11:00:00.000Z",
+      jobLink: "data:text/html,<script>alert(1)</script>",
+      companyLogoUrl: "javascript:alert(1)",
+      salary: "$135k",
+      customFields: { Portfolio: "Still present" },
+    });
+
+    const [stored] = JSON.parse(localStorage.getItem("job-tracker-data") || "[]") as JobApplication[];
+    // Inspect the raw durable value so a later read-time sanitizer cannot hide an unsafe update write.
+    expect(stored).not.toHaveProperty("jobLink");
+    expect(stored).not.toHaveProperty("companyLogoUrl");
+    expect(stored).toMatchObject({
+      salary: "$135k",
+      customFields: { Portfolio: "Still present" },
+      createdAt: "2026-08-10T10:00:00.000Z",
+      updatedAt: "2026-08-10T11:00:00.000Z",
+      notes: "Keep this note",
     });
   });
 

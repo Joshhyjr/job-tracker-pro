@@ -30,6 +30,8 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
     dateApplied: overrides.dateApplied ?? "2026-08-05",
     notes: overrides.notes ?? "",
     followUpDate: overrides.followUpDate ?? "",
+    // Optional link input is included so drawer security tests cannot pass on a missing fixture field.
+    jobLink: overrides.jobLink,
     activityLog: overrides.activityLog ?? [],
   };
 }
@@ -239,5 +241,28 @@ describe("ApplicationsList", () => {
     // A rejected cloud write removes the optimistic override and exposes a retryable error.
     await waitFor(() => expect(within(screen.getByRole("group", { name: "Applied column" })).getByRole("article", { name: "Frontend Engineer application card" })).toBeInTheDocument());
     expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Move not saved", variant: "destructive" }));
+  });
+
+  it("does not expose an executable job link in the application drawer", () => {
+    renderList({
+      applications: [application({ jobLink: "data:text/html,<script>alert(1)</script>" })],
+    });
+
+    fireEvent.click(screen.getByText("Frontend Engineer"));
+
+    // The drawer revalidates records at render time so stale imports cannot bypass the persistence boundary.
+    expect(screen.getByRole("heading", { name: "Frontend Engineer" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Open job posting/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps an absolute HTTPS job link clickable in the application drawer", () => {
+    renderList({
+      applications: [application({ jobLink: "https://jobs.example/frontend" })],
+    });
+
+    fireEvent.click(screen.getByText("Frontend Engineer"));
+
+    // The same render-time guard must preserve safe posting links for existing records.
+    expect(screen.getByRole("link", { name: /Open job posting/i })).toHaveAttribute("href", "https://jobs.example/frontend");
   });
 });

@@ -3,7 +3,7 @@ import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSe
 import { isSupportedExcelWorkbook } from "./excelFile";
 import { loadExcelJs } from "./exceljs";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
-import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
+import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeExternalHttpUrl, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
 
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
@@ -142,7 +142,16 @@ const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
 };
 
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+  const webCrypto = globalThis.crypto;
+  // IDs are durable and externally stored, so generation fails closed instead of falling back to predictable entropy.
+  if (typeof webCrypto?.randomUUID === "function") return webCrypto.randomUUID();
+  if (typeof webCrypto?.getRandomValues !== "function") throw new Error("Secure random ID generation requires Web Crypto.");
+
+  const bytes = webCrypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
 function parseExcelDate(val: unknown): string {
@@ -319,7 +328,8 @@ function parseGeographicCoordinate(value: unknown, min: number, max: number): nu
 }
 
 function addTextField(application: JobApplication, key: "jobLink" | "salary" | "recruiterContactName" | "tags" | "city" | "country", value: unknown) {
-  const sanitized = sanitizeSingleLineText(value, key === "jobLink" ? 2048 : undefined);
+  // Imported job links use the same absolute HTTP(S) boundary as form and cloud persistence paths.
+  const sanitized = key === "jobLink" ? sanitizeExternalHttpUrl(value) : sanitizeSingleLineText(value);
   if (sanitized) application[key] = sanitized;
 }
 
@@ -732,12 +742,16 @@ export function addApplication(app: Omit<JobApplication, "id" | "activityLog">):
 
 export function updateApplication(updated: JobApplication) {
   const sanitized = sanitizeApplicationInput(updated);
+  const createdAt = sanitizeSingleLineText(updated.createdAt);
+  const updatedAt = sanitizeSingleLineText(updated.updatedAt);
   const apps = getApplications().map((a) => (
     a.id === updated.id
       ? {
-          ...updated,
+          // Build the stored row from sanitized fields so rejected optional URLs are removed, not merged back in.
           ...sanitized,
           id: sanitizeSingleLineText(updated.id) || a.id,
+          ...(createdAt ? { createdAt } : {}),
+          ...(updatedAt ? { updatedAt } : {}),
           activityLog: sanitizeActivityLog(updated.activityLog),
         }
       : a

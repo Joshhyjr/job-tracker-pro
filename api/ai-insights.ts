@@ -1,7 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 // Explicit JavaScript specifiers remain resolvable after Vercel emits these TypeScript functions as Node ESM.
 import { FirebaseAdminConfigurationError, verifyOwnerIdToken } from "./_shared/firebaseAuth.js";
-import { enforceRateLimit, isAllowedBrowserRequest, jsonResponse } from "./_shared/security.js";
+import {
+  RequestPayloadTooLargeError,
+  cancelResponseBody,
+  enforceRateLimit,
+  getProviderRequestId,
+  isAllowedBrowserRequest,
+  isJsonRequest,
+  jsonResponse,
+  toBoundedWebRequest,
+} from "./_shared/security.js";
 
 // Keep the function contract local so Vercel's Node runtime does not import browser-only modules.
 interface AiInsightSummary {
@@ -22,9 +31,7 @@ interface AiInsightSummary {
   topLocations: Array<{ name: string; count: number }>;
   dataSource: {
     type: "xlsx-import" | "browser-records";
-    fileName: string;
     rowCount: number;
-    importedAt: string;
     warningCount: number;
   };
   spreadsheetCoverage: {
@@ -36,10 +43,8 @@ interface AiInsightSummary {
     withCustomFields: number;
     withLocation: number;
     withCoordinates: number;
-    customFieldHeaders: string[];
   };
   recentMomentum: "up" | "down" | "flat";
-  improvementSignals: string[];
 }
 
 interface AiInsights {
@@ -55,9 +60,9 @@ const MAX_REQUEST_BYTES = 16_384;
 const MAX_TEXT_LENGTH = 160;
 const MAX_LIST_ITEMS = 8;
 const MAX_RESPONSE_ITEMS = 4;
-const MAX_CUSTOM_FIELD_HEADERS = 6;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 12;
+const PRE_AUTH_RATE_LIMIT_MAX_REQUESTS = 60;
 
 type HandlerOptions = {
   apiKey?: string;
@@ -102,27 +107,17 @@ function parseCountItems(value: unknown, nameKey: "name" | "status", limit = MAX
   return parsed;
 }
 
-function parseSignals(value: unknown): string[] | null {
-  if (!Array.isArray(value) || value.length > MAX_LIST_ITEMS) return null;
-  const signals = value.map(boundedText);
-  return signals.every((item): item is string => item !== null) ? signals : null;
-}
-
 function parseDataSource(value: unknown): AiInsightSummary["dataSource"] | null {
   if (!isRecord(value)) return null;
   const type = value.type;
-  const fileName = typeof value.fileName === "string" && value.fileName.length <= MAX_TEXT_LENGTH ? value.fileName.trim() : null;
   const rowCount = boundedNumber(value.rowCount);
   const warningCount = boundedNumber(value.warningCount);
-  const importedAt = typeof value.importedAt === "string" && value.importedAt.length <= MAX_TEXT_LENGTH ? value.importedAt.trim() : null;
-  if (!["xlsx-import", "browser-records"].includes(String(type)) || fileName === null || rowCount === null || importedAt === null || warningCount === null) return null;
+  if (!["xlsx-import", "browser-records"].includes(String(type)) || rowCount === null || warningCount === null) return null;
 
-  // Only metadata about the workbook is forwarded; the original XLSX and private cells never leave the browser.
+  // Exact workbook names and import timestamps are intentionally absent from the hosted-provider contract.
   return {
     type: type as AiInsightSummary["dataSource"]["type"],
-    fileName,
     rowCount,
-    importedAt,
     warningCount,
   };
 }
@@ -140,15 +135,10 @@ function parseSpreadsheetCoverage(value: unknown): AiInsightSummary["spreadsheet
     "withCoordinates",
   ] as const;
   const numbers = Object.fromEntries(numberFields.map((field) => [field, boundedNumber(value[field])]));
-  const customFieldHeaders = Array.isArray(value.customFieldHeaders)
-    ? value.customFieldHeaders.map(boundedText).filter((item): item is string => item !== null).slice(0, MAX_CUSTOM_FIELD_HEADERS)
-    : null;
-  if (Object.values(numbers).some((item) => item === null) || customFieldHeaders === null) return null;
+  if (Object.values(numbers).some((item) => item === null)) return null;
 
-  return {
-    ...(numbers as unknown as Pick<AiInsightSummary["spreadsheetCoverage"], typeof numberFields[number]>),
-    customFieldHeaders,
-  };
+  // Coverage counts remain useful without disclosing user-defined custom-field names.
+  return numbers as unknown as AiInsightSummary["spreadsheetCoverage"];
 }
 
 function parseSummary(value: unknown): AiInsightSummary | null {
@@ -176,11 +166,10 @@ function parseSummary(value: unknown): AiInsightSummary | null {
   const topLocations = parseCountItems(value.topLocations, "name", 3);
   const dataSource = parseDataSource(value.dataSource);
   const spreadsheetCoverage = parseSpreadsheetCoverage(value.spreadsheetCoverage);
-  const improvementSignals = parseSignals(value.improvementSignals);
   const recentMomentum = value.recentMomentum;
-  if (!statusBreakdown || !topCompanies || !topRoles || !topLocations || !dataSource || !spreadsheetCoverage || !improvementSignals || !["up", "down", "flat"].includes(String(recentMomentum))) return null;
+  if (!statusBreakdown || !topCompanies || !topRoles || !topLocations || !dataSource || !spreadsheetCoverage || !["up", "down", "flat"].includes(String(recentMomentum))) return null;
 
-  // Rebuilding the object from allowed fields prevents accidental private fields from reaching Gemini.
+  // Rebuilding the object from allowed fields drops extra client properties before Gemini receives the summary.
   return {
     ...(numbers as unknown as Pick<AiInsightSummary, typeof numberFields[number]>),
     statusBreakdown: statusBreakdown as AiInsightSummary["statusBreakdown"],
@@ -190,7 +179,6 @@ function parseSummary(value: unknown): AiInsightSummary | null {
     dataSource,
     spreadsheetCoverage,
     recentMomentum: recentMomentum as AiInsightSummary["recentMomentum"],
-    improvementSignals,
   };
 }
 
@@ -258,6 +246,9 @@ export async function handleAiInsightsRequest(request: Request, options: Handler
   if (!isAllowedBrowserRequest(request)) return jsonResponse({ error: "Cross-origin requests are not allowed." }, 403);
   const idToken = getBearerToken(request);
   if (!idToken) return jsonResponse({ error: "Google authentication required." }, 401);
+  // A separate, higher-cap bucket bounds invalid-token verification without letting bots exhaust the owner's quota.
+  const preAuthRateLimitResponse = enforceRateLimit(request, "ai-insights-pre-auth", PRE_AUTH_RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_MS);
+  if (preAuthRateLimitResponse) return preAuthRateLimitResponse;
   try {
     const isApprovedOwner = await (options.verifyIdToken ?? verifyOwnerIdToken)(idToken);
     if (!isApprovedOwner) return jsonResponse({ error: "This Google account is not authorized." }, 403);
@@ -269,7 +260,7 @@ export async function handleAiInsightsRequest(request: Request, options: Handler
   // Count only authenticated requests so unauthenticated traffic cannot exhaust the owner's AI bucket.
   const rateLimitResponse = enforceRateLimit(request, "ai-insights", RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_MS);
   if (rateLimitResponse) return rateLimitResponse;
-  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return jsonResponse({ error: "Content-Type must be application/json." }, 415);
+  if (!isJsonRequest(request)) return jsonResponse({ error: "Content-Type must be application/json." }, 415);
 
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > MAX_REQUEST_BYTES) return jsonResponse({ error: "Request payload is too large." }, 413);
@@ -316,21 +307,26 @@ export async function handleAiInsightsRequest(request: Request, options: Handler
 
     if (geminiResponse?.ok) break;
 
-    const providerError = geminiResponse ? await geminiResponse.text().catch(() => "") : "";
+    const providerStatus = geminiResponse?.status;
+    const requestId = geminiResponse ? getProviderRequestId(geminiResponse) : null;
     const canTryFallback = candidateModel !== models[models.length - 1] && (!geminiResponse || [429, 503].includes(geminiResponse.status));
+    if (geminiResponse) await cancelResponseBody(geminiResponse);
     if (canTryFallback) {
-      // Capacity failures should try a smaller hosted model before falling back to local Ollama.
-      console.warn("Gemini primary model unavailable; trying fallback", { model: candidateModel, status: geminiResponse?.status });
+      // Capacity failures release their response stream before trying a smaller hosted model.
+      console.warn("Gemini primary model unavailable; trying fallback", { model: candidateModel, status: providerStatus });
       continue;
     }
 
-    // Provider diagnostics stay in Vercel logs while the browser receives a sanitized error.
-    console.error("Gemini request failed", { model: candidateModel, status: geminiResponse?.status, detail: providerError.slice(0, 500) });
+    // Provider bodies are excluded from logs because upstream errors may echo submitted summary data.
+    console.error("Gemini request failed", requestId
+      ? { model: candidateModel, status: providerStatus, requestId }
+      : { model: candidateModel, status: providerStatus });
     return jsonResponse({ error: "Hosted AI insights are temporarily unavailable." }, 502);
   }
 
   let geminiPayload: unknown;
   try {
+    // A successful Gemini body is consumed for validation, so only unused error bodies are canceled above.
     geminiPayload = await geminiResponse!.json();
   } catch {
     return jsonResponse({ error: "Hosted AI insights returned an invalid response." }, 502);
@@ -350,40 +346,19 @@ export async function handleAiInsightsRequest(request: Request, options: Handler
   return jsonResponse(insights, 200);
 }
 
-async function toWebRequest(request: IncomingMessage): Promise<Request> {
-  const headers = new Headers();
-  Object.entries(request.headers).forEach(([name, value]) => {
-    if (Array.isArray(value)) value.forEach((item) => headers.append(name, item));
-    else if (value !== undefined) headers.set(name, value);
-  });
-
-  const protocolHeader = request.headers["x-forwarded-proto"];
-  const protocol = Array.isArray(protocolHeader) ? protocolHeader[0] : protocolHeader || "https";
-  const host = request.headers.host || "localhost";
-  const method = request.method || "GET";
-  const chunks: Buffer[] = [];
-
-  if (method !== "GET" && method !== "HEAD") {
-    for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-
-  // Vercel's default Node handler uses IncomingMessage, while the core stays testable with Web Request.
-  return new Request(`${protocol}://${host}${request.url || "/"}`, {
-    method,
-    headers,
-    body: chunks.length ? Buffer.concat(chunks) : undefined,
-  });
-}
-
 export default async function handler(request: IncomingMessage, response: ServerResponse): Promise<void> {
   try {
-    const webResponse = await handleAiInsightsRequest(await toWebRequest(request));
+    const webResponse = await handleAiInsightsRequest(await toBoundedWebRequest(request, MAX_REQUEST_BYTES));
     response.statusCode = webResponse.status;
     webResponse.headers.forEach((value, name) => response.setHeader(name, value));
     response.end(await webResponse.text());
-  } catch {
-    response.statusCode = 500;
-    response.setHeader("Content-Type", "application/json; charset=utf-8");
-    response.end(JSON.stringify({ error: "Hosted AI insights are temporarily unavailable." }));
+  } catch (error) {
+    // Preserve the public 413 contract for bodies rejected before the Web Request is constructed.
+    const webResponse = error instanceof RequestPayloadTooLargeError
+      ? jsonResponse({ error: "Request payload is too large." }, 413)
+      : jsonResponse({ error: "Hosted AI insights are temporarily unavailable." }, 500);
+    response.statusCode = webResponse.status;
+    webResponse.headers.forEach((value, name) => response.setHeader(name, value));
+    response.end(await webResponse.text());
   }
 }

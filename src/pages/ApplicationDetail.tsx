@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { buildEditedApplicationWithStatusHistory, buildQuickActionResponseStatuses, buildResponseStatusChangeApplication, buildResponseStatusOptions, getResponseStatusBadgeClass, mapResponseStatusToCurrentStatus, syncEditedResponseStatus } from "@/lib/responseStatus";
+import { sanitizeExternalHttpUrl } from "@/lib/security";
 
 export default function ApplicationDetail({ application, onBack, onUpdate, onDelete, isDemo = false }: { application: JobApplication; onBack: () => void; onUpdate: (application?: JobApplication) => void | Promise<JobApplication>; onDelete?: (id: string) => Promise<void>; isDemo?: boolean }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
@@ -137,18 +138,8 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
     { label: "Follow-Up Date", key: "followUpDate" as const },
   ];
 
-  function getSafeExternalHref(value: string | undefined): string {
-    if (!value) return "";
-    try {
-      // Imported links are untrusted, so only render clickable http(s) destinations.
-      const url = new URL(value);
-      return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
-    } catch {
-      return "";
-    }
-  }
-
-  const jobPostingHref = getSafeExternalHref(app.jobLink);
+  // Re-check hydrated records at the clickable sink in case legacy or stale data predates persistence sanitization.
+  const jobPostingHref = sanitizeExternalHttpUrl(app.jobLink);
   // Keep status changes in their own discoverable timeline instead of burying them among notes and follow-ups.
   const statusHistoryEntries = app.activityLog.filter((entry) => entry.type === "status_change");
   const otherActivityEntries = app.activityLog.filter((entry) => entry.type !== "status_change");

@@ -28,13 +28,14 @@ export async function loadInitialDemoApplications(): Promise<JobApplication[]> {
 
 function normalizeDemoApplication(application: JobApplication): JobApplication {
   const sanitized = sanitizeApplicationInput(application);
-  // Treat demo edits as untrusted browser input while preserving optional application fields.
+  const createdAt = sanitizeSingleLineText(application.createdAt);
+  const updatedAt = sanitizeSingleLineText(application.updatedAt);
+  // Rebuild from the sanitized schema so omitted unsafe optionals cannot survive through a raw-record spread.
   return {
-    ...application,
     ...sanitized,
     id: sanitizeSingleLineText(application.id) || generateId(),
-    createdAt: sanitizeSingleLineText(application.createdAt),
-    updatedAt: sanitizeSingleLineText(application.updatedAt),
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
     activityLog: sanitizeActivityLog(application.activityLog),
   };
 }

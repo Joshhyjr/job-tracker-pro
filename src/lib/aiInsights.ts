@@ -42,6 +42,11 @@ export interface AiInsightSummary {
   improvementSignals: string[];
 }
 
+export type HostedAiInsightSummary = Omit<AiInsightSummary, "dataSource" | "spreadsheetCoverage" | "improvementSignals"> & {
+  dataSource: Pick<AiInsightSummary["dataSource"], "type" | "rowCount" | "warningCount">;
+  spreadsheetCoverage: Omit<AiInsightSummary["spreadsheetCoverage"], "customFieldHeaders">;
+};
+
 export interface AiInsights {
   summary: string;
   strengths: string[];
@@ -251,6 +256,43 @@ export function normalizeAiInsights(value: unknown): AiInsights {
   };
 }
 
+export function buildHostedAiInsightSummary(summary: AiInsightSummary): HostedAiInsightSummary {
+  // Explicitly allowlist hosted fields so workbook names, timestamps, custom headers, and local-only signals stay on-device.
+  return {
+    totalApplications: summary.totalApplications,
+    appliedThisWeek: summary.appliedThisWeek,
+    appliedLastWeek: summary.appliedLastWeek,
+    appliedThisMonth: summary.appliedThisMonth,
+    interviewCount: summary.interviewCount,
+    interviewRate: summary.interviewRate,
+    offerCount: summary.offerCount,
+    offerRate: summary.offerRate,
+    staleNoResponseCount: summary.staleNoResponseCount,
+    overdueFollowUpCount: summary.overdueFollowUpCount,
+    missingFollowUpDateCount: summary.missingFollowUpDateCount,
+    statusBreakdown: summary.statusBreakdown,
+    topCompanies: summary.topCompanies,
+    topRoles: summary.topRoles,
+    topLocations: summary.topLocations,
+    dataSource: {
+      type: summary.dataSource.type,
+      rowCount: summary.dataSource.rowCount,
+      warningCount: summary.dataSource.warningCount,
+    },
+    spreadsheetCoverage: {
+      withSalary: summary.spreadsheetCoverage.withSalary,
+      withRecruiter: summary.spreadsheetCoverage.withRecruiter,
+      withCoverLetter: summary.spreadsheetCoverage.withCoverLetter,
+      withInterviewDate: summary.spreadsheetCoverage.withInterviewDate,
+      withTags: summary.spreadsheetCoverage.withTags,
+      withCustomFields: summary.spreadsheetCoverage.withCustomFields,
+      withLocation: summary.spreadsheetCoverage.withLocation,
+      withCoordinates: summary.spreadsheetCoverage.withCoordinates,
+    },
+    recentMomentum: summary.recentMomentum,
+  };
+}
+
 function extractJsonObject(content: string): unknown {
   const trimmed = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   const start = trimmed.indexOf("{");
@@ -279,7 +321,8 @@ export async function generateHostedAiInsights(summary: AiInsightSummary, idToke
         Authorization: `Bearer ${idToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ summary }),
+      // Local Ollama keeps the richer summary; only the allowlisted DTO crosses the hosted API boundary.
+      body: JSON.stringify({ summary: buildHostedAiInsightSummary(summary) }),
     });
   } catch {
     throw new Error("Hosted AI insights are unavailable.");

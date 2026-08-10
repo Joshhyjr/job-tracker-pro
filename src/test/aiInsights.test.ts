@@ -146,20 +146,34 @@ describe("hosted AI insights", () => {
   });
 
   it("sends only the privacy-filtered summary to the hosted endpoint", async () => {
+    const sensitiveSummary = buildAiInsightSummary([application()], new Date("2026-06-02T12:00:00Z"), {
+      fileName: "private-client-search.xlsx",
+      importedAt: "2026-06-02T12:00:00.000Z",
+      rowCount: 1,
+      warningCount: 0,
+    });
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(hostedInsights), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(generateHostedAiInsights(summary, "firebase-id-token")).resolves.toEqual(hostedInsights);
+    await expect(generateHostedAiInsights(sensitiveSummary, "firebase-id-token")).resolves.toEqual(hostedInsights);
 
     const [, request] = fetchMock.mock.calls[0];
     const body = JSON.parse(request.body);
     expect(request.headers.Authorization).toBe("Bearer firebase-id-token");
-    expect(body).toEqual({ summary });
+    // The hosted DTO keeps useful counts while local metadata remains available for Ollama fallback.
+    expect(body.summary.dataSource).toEqual({ type: "xlsx-import", rowCount: 1, warningCount: 0 });
+    expect(body.summary.spreadsheetCoverage.withCustomFields).toBe(1);
+    expect(sensitiveSummary.dataSource.fileName).toBe("private-client-search.xlsx");
+    expect(sensitiveSummary.spreadsheetCoverage.customFieldHeaders).toEqual(["Secret"]);
     expect(JSON.stringify(body)).not.toContain("Private note");
     expect(JSON.stringify(body)).not.toContain("Private recruiter");
+    expect(JSON.stringify(body)).not.toContain("private-client-search.xlsx");
+    expect(JSON.stringify(body)).not.toContain("2026-06-02T12:00:00.000Z");
+    expect(JSON.stringify(body)).not.toContain("Secret");
+    expect(body.summary).not.toHaveProperty("improvementSignals");
     vi.unstubAllGlobals();
   });
 

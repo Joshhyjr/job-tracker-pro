@@ -33,6 +33,8 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
     dateApplied: overrides.dateApplied ?? "2026-06-01",
     notes: overrides.notes ?? "",
     followUpDate: overrides.followUpDate ?? "",
+    // Optional link input is included so rendered-sink security tests exercise the real application value.
+    jobLink: overrides.jobLink,
     activityLog: overrides.activityLog ?? [],
   };
 }
@@ -348,5 +350,31 @@ describe("ApplicationDetail", () => {
 
     // Imported custom stages should remain visible so users can save other edits without losing context.
     expect(screen.getByRole("option", { name: "Interview scheduled" })).toBeInTheDocument();
+  });
+
+  it("does not render an executable legacy job link", () => {
+    render(
+      <ApplicationDetail
+        application={application({ jobLink: "javascript:alert(document.domain)" })}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    // Detail hydration can predate current persistence rules, so the clickable sink must still fail closed.
+    expect(screen.queryByRole("link", { name: /Open posting/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps an absolute HTTPS job link clickable", () => {
+    render(
+      <ApplicationDetail
+        application={application({ jobLink: "https://jobs.example/frontend" })}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    // Sink validation must preserve normal posting navigation while rejecting other schemes.
+    expect(screen.getByRole("link", { name: /Open posting/i })).toHaveAttribute("href", "https://jobs.example/frontend");
   });
 });
