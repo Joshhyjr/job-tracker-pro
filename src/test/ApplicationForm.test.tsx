@@ -36,6 +36,24 @@ describe("ApplicationForm", () => {
     toastMock.mockReset();
   });
 
+  it("defaults new applications to the user's local calendar date", () => {
+    const originalTimeZone = process.env.TZ;
+    process.env.TZ = "America/Halifax";
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-11T01:30:00.000Z"));
+
+    try {
+      render(<ApplicationForm onSaved={vi.fn()} />);
+
+      // Halifax is still on August 10 even though UTC has crossed into August 11.
+      expect(screen.getByLabelText("Date Applied")).toHaveValue("2026-08-10");
+    } finally {
+      vi.useRealTimers();
+      if (originalTimeZone === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTimeZone;
+    }
+  });
+
   it("saves brand-new applications with the canonical Applied response status by default", async () => {
     const onSaved = vi.fn();
 
