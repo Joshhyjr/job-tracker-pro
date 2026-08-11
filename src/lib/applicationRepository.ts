@@ -13,13 +13,18 @@ import {
 } from "firebase/firestore";
 import { getFirestoreDatabase } from "./firebase";
 import { generateId, type ImportBackup } from "./storage";
-import type { JobApplication } from "./types";
+import { companiesFromApplications } from "./companyDirectory";
+import type { Company, JobApplication } from "./types";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeSingleLineText } from "./security";
 
 const BATCH_OPERATION_LIMIT = 450;
 
 function applicationCollection(userId: string) {
   return collection(getFirestoreDatabase(), "users", userId, "applications");
+}
+
+function companyCollection(userId: string) {
+  return collection(getFirestoreDatabase(), "users", userId, "companies");
 }
 
 function importBackupCollection(userId: string) {
@@ -52,6 +57,51 @@ export function deserializeApplication(id: string, data: DocumentData): JobAppli
     updatedAt: sanitizeSingleLineText(record.updatedAt),
     activityLog: sanitizeActivityLog(record.activityLog),
   };
+}
+
+/** Firestore keeps the requested database column names while TypeScript uses idiomatic camelCase. */
+export function serializeCompany(company: Company): DocumentData {
+  return {
+    id: sanitizeSingleLineText(company.id),
+    name: sanitizeSingleLineText(company.name),
+    display_name: sanitizeSingleLineText(company.displayName),
+    domain: sanitizeSingleLineText(company.domain),
+    logo_url: sanitizeSingleLineText(company.logoUrl, 2048),
+    primary_color: sanitizeSingleLineText(company.primaryColor),
+    website: sanitizeSingleLineText(company.website, 2048),
+  };
+}
+
+async function persistCompanies(userId: string, applications: JobApplication[]): Promise<void> {
+  const companies = companiesFromApplications(applications);
+  // Small bounded chunks avoid a large import opening thousands of simultaneous network requests.
+  for (let index = 0; index < companies.length; index += 50) {
+    await Promise.all(companies.slice(index, index + 50).map((company) =>
+      setDoc(doc(companyCollection(userId), company.id), serializeCompany(company), { merge: true })));
+  }
+}
+
+const synchronizedCompanySignatures = new Map<string, string>();
+
+/** Backfills stable company references for existing cloud rows without touching application timestamps or notes. */
+export async function synchronizeCompanyDirectory(userId: string, applications: JobApplication[]): Promise<void> {
+  const signature = applications.map((application) => `${application.id}:${application.companyId ?? ""}:${application.companyLogoUrl ?? ""}`).sort().join("|");
+  if (!signature || synchronizedCompanySignatures.get(userId) === signature) return;
+
+  await persistCompanies(userId, applications);
+  for (let index = 0; index < applications.length; index += 100) {
+    await Promise.all(applications.slice(index, index + 100).map((application) => setDoc(
+      doc(applicationCollection(userId), application.id),
+      {
+        companyId: application.companyId,
+        companyName: application.companyName,
+        companyDomain: application.companyDomain ?? "",
+        companyLogoUrl: application.companyLogoUrl ?? "",
+      },
+      { merge: true },
+    )));
+  }
+  synchronizedCompanySignatures.set(userId, signature);
 }
 
 export async function createApplicationImportBackup(
@@ -138,12 +188,14 @@ export async function createApplication(
     updatedAt: now,
     activityLog: [{ id: generateId(), date: now, type: "note", message: "Application created" }],
   };
+  await persistCompanies(userId, [application]);
   await setDoc(doc(applicationCollection(userId), application.id), serializeApplication(application));
   return application;
 }
 
 export async function updateApplication(userId: string, application: JobApplication): Promise<JobApplication> {
   const updated = { ...application, createdAt: application.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+  await persistCompanies(userId, [updated]);
   await setDoc(doc(applicationCollection(userId), updated.id), serializeApplication(updated));
   return updated;
 }
@@ -172,6 +224,7 @@ export async function replaceApplications(userId: string, applications: JobAppli
   // Invalid workbooks can parse to zero rows; never turn that failure into an implicit full cloud deletion.
   if (applications.length === 0) throw new Error("Cannot replace applications with an empty dataset.");
 
+  await persistCompanies(userId, applications);
   const existing = await getDocs(applicationCollection(userId));
   const now = new Date().toISOString();
   const incomingIds = new Set(applications.map((application) => application.id));
@@ -190,6 +243,7 @@ export async function replaceApplications(userId: string, applications: JobAppli
 
 export async function upsertApplications(userId: string, applications: JobApplication[]): Promise<void> {
   if (applications.length === 0) return;
+  await persistCompanies(userId, applications);
   const now = new Date().toISOString();
   // Incremental imports only set additions/explicit-ID updates; they never queue delete operations.
   await commitOperations(applications.map((application) => ({
@@ -209,6 +263,7 @@ export async function mergeLocalApplicationsOnce(userId: string, localApplicatio
     .filter((application) => !cloudIds.has(application.id))
     .map((application) => ({ ...application, createdAt: application.createdAt || now, updatedAt: application.updatedAt || now }));
 
+  await persistCompanies(userId, uniqueLocal);
   await commitOperations(uniqueLocal.map((application) => ({ type: "set" as const, application })), userId);
   // The marker is written last so interrupted uploads remain eligible for a safe idempotent retry.
   await setDoc(markerRef, { completedAt: now, importedCount: uniqueLocal.length });

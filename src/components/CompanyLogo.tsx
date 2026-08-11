@@ -1,82 +1,198 @@
-import { useEffect, useMemo, useState } from "react";
-import { getCompanyInitials, getCompanyLogoSource } from "@/lib/companyLogos";
+import { useMemo, useState, type ReactNode } from "react";
+import {
+  cacheFailedCompanyLogo,
+  cacheSuccessfulCompanyLogo,
+  getCompanyFallbackStyle,
+  getCompanyInitials,
+  getCompanyLogoCandidates,
+  resolveCompanyDomain,
+  type CompanyLogoSource,
+} from "@/lib/companyLogos";
 import { cn } from "@/lib/utils";
 
-type CompanyLogoSize = "sm" | "md" | "lg";
+type CompanyLogoSize = "sm" | "md" | "lg" | number;
+type CompanyLogoRounding = boolean | "none" | "sm" | "md" | "lg" | "full";
 
-const SIZE_CLASSES: Record<CompanyLogoSize, { frame: string; wordmarkFrame: string; image: string; wordmarkImage: string; text: string }> = {
+export interface CompanyLogoProps {
+  /** `company` remains a concise alias for callers using <CompanyLogo company="Google" />. */
+  company?: string;
+  companyName?: string;
+  companyId?: string;
+  jobLink?: string;
+  companyDomain?: string;
+  logoUrl?: string;
+  /** Backwards-compatible application field alias. */
+  companyLogoUrl?: string;
+  size?: CompanyLogoSize;
+  rounded?: CompanyLogoRounding;
+  fallback?: ReactNode | false;
+  className?: string;
+}
+
+const SIZE_CLASSES = {
   sm: { frame: "h-7 w-7", wordmarkFrame: "h-8 w-14 px-1", image: "h-5 w-5", wordmarkImage: "h-6 w-12", text: "text-[10px]" },
   md: { frame: "h-9 w-9", wordmarkFrame: "h-9 w-16 px-1", image: "h-6 w-6", wordmarkImage: "h-7 w-14", text: "text-xs" },
   lg: { frame: "h-12 w-12", wordmarkFrame: "h-12 w-20 px-1.5", image: "h-9 w-9", wordmarkImage: "h-9 w-16", text: "text-sm" },
+} as const;
+
+const ROUNDING_CLASSES: Record<Exclude<CompanyLogoRounding, boolean>, string> = {
+  none: "rounded-none",
+  sm: "rounded-sm",
+  md: "rounded-md",
+  lg: "rounded-lg",
+  full: "rounded-full",
 };
 
-export function CompanyLogo({
+function retryUrl(src: string, attempt: number): string {
+  if (attempt === 0 || src.startsWith("data:") || src.startsWith("blob:")) return src;
+  try {
+    const url = new URL(src, window.location.origin);
+    // A distinct query bypasses cached transient failures while preserving every provider parameter.
+    url.searchParams.set("logo_retry", String(attempt));
+    return src.startsWith("/") ? `${url.pathname}${url.search}` : url.toString();
+  } catch {
+    return src;
+  }
+}
+
+function CompanyLogoImage({
   companyName,
-  jobLink,
   companyDomain,
-  companyLogoUrl,
-  size = "sm",
+  sources,
+  size,
+  rounded,
+  fallback,
   className,
 }: {
   companyName: string;
-  jobLink?: string;
   companyDomain?: string;
-  companyLogoUrl?: string;
-  size?: CompanyLogoSize;
+  sources: CompanyLogoSource[];
+  size: CompanyLogoSize;
+  rounded: CompanyLogoRounding;
+  fallback?: ReactNode | false;
   className?: string;
 }) {
-  // A single service resolves every logo so the same company renders identically across the app.
-  const logo = useMemo(
-    () => getCompanyLogoSource(companyName, jobLink, { companyDomain, companyLogoUrl }),
-    [companyName, jobLink, companyDomain, companyLogoUrl],
-  );
-  const [failed, setFailed] = useState(false);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const source = sources[sourceIndex];
+  const usesWordmark = source?.presentation === "wordmark";
+  const namedSize = typeof size === "number" ? null : SIZE_CLASSES[size];
+  const numericFrameStyle = typeof size === "number"
+    ? { width: usesWordmark ? Math.round(size * 1.65) : size, height: size }
+    : undefined;
+  const numericImageStyle = typeof size === "number"
+    ? { width: usesWordmark ? Math.round(size * 1.4) : Math.round(size * 0.72), height: Math.round(size * 0.72) }
+    : undefined;
+  const roundingClass = rounded === true
+    ? "rounded-full"
+    : rounded === false
+      ? "rounded-none"
+      : ROUNDING_CLASSES[rounded];
+  const showImage = Boolean(source);
 
-  useEffect(() => {
-    // A changed application should get a fresh image attempt instead of inheriting the prior row's failure.
-    setFailed(false);
+  function handleImageError() {
+    if (!source) return;
+    if (attempt === 0) {
+      // Retry each trusted source exactly once before advancing through the provider chain.
+      setLoaded(false);
+      setAttempt(1);
+      return;
+    }
+    cacheFailedCompanyLogo(companyName, source);
     setLoaded(false);
-  }, [logo?.src]);
+    setAttempt(0);
+    setSourceIndex((current) => current + 1);
+  }
 
-  const usesWordmark = logo?.presentation === "wordmark";
-  const sizes = SIZE_CLASSES[size];
-  const showImage = Boolean(logo) && !failed;
+  function handleImageLoad() {
+    if (!source) return;
+    setLoaded(true);
+    cacheSuccessfulCompanyLogo(companyName, source, resolveCompanyDomain(companyName, undefined, companyDomain));
+  }
 
   return (
     <span
       className={cn(
-        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-md border bg-white shadow-sm",
-        usesWordmark ? sizes.wordmarkFrame : sizes.frame,
+        "relative flex shrink-0 items-center justify-center overflow-hidden border shadow-sm",
+        showImage ? "bg-white" : "rounded-full border-transparent",
+        showImage ? roundingClass : "rounded-full",
+        namedSize && (usesWordmark ? namedSize.wordmarkFrame : namedSize.frame),
         className,
       )}
+      style={!showImage ? { ...numericFrameStyle, ...getCompanyFallbackStyle(companyName) } : numericFrameStyle}
       data-testid="company-logo"
-      data-logo-presentation={logo?.presentation ?? "fallback"}
+      data-logo-presentation={source?.presentation ?? "fallback"}
+      data-logo-provider={source?.provider ?? "fallback"}
     >
       {showImage ? (
         <>
-          {/* Skeleton keeps table rows from flickering while remote favicons resolve. */}
-          {!loaded && <span aria-hidden className="absolute inset-0 animate-pulse bg-slate-200" />}
+          {/* The fixed frame and in-place skeleton prevent table and card layout shifts. */}
+          {!loaded ? <span aria-hidden className="absolute inset-0 animate-pulse bg-slate-200" /> : null}
           <img
-            src={logo!.src}
+            src={retryUrl(source.src, attempt)}
             alt={`${companyName} logo`}
-            // Wordmarks receive a wider frame while square marks keep the compact table rhythm.
-            className={cn("relative object-contain", usesWordmark ? sizes.wordmarkImage : sizes.image, !loaded && "opacity-0")}
+            width={typeof size === "number" ? numericImageStyle?.width : undefined}
+            height={typeof size === "number" ? numericImageStyle?.height : undefined}
+            className={cn(
+              "relative object-contain transition-opacity",
+              namedSize && (usesWordmark ? namedSize.wordmarkImage : namedSize.image),
+              !loaded && "opacity-0",
+            )}
+            style={numericImageStyle}
             loading="lazy"
-            referrerPolicy="no-referrer"
-            onLoad={() => setLoaded(true)}
-            onError={() => setFailed(true)}
+            decoding="async"
+            referrerPolicy="strict-origin-when-cross-origin"
+            onLoad={handleImageLoad}
+            onError={handleImageError}
           />
         </>
       ) : (
-        // Verified initials are the consistent fallback instead of a generic building icon.
         <span
-          className={cn("font-bold text-slate-600", sizes.text)}
-          aria-label={`${companyName} logo unavailable`}
+          className={cn("font-bold", namedSize?.text)}
+          role="img"
+          aria-label={`${companyName} logo`}
         >
-          {getCompanyInitials(companyName)}
+          {/* A custom fallback can replace the default initials without changing the frame contract. */}
+          {fallback === false ? null : fallback ?? getCompanyInitials(companyName)}
         </span>
       )}
     </span>
+  );
+}
+
+export function CompanyLogo({
+  company,
+  companyName: companyNameProp,
+  companyId,
+  jobLink,
+  companyDomain,
+  logoUrl,
+  companyLogoUrl,
+  size = "sm",
+  rounded = "md",
+  fallback,
+  className,
+}: CompanyLogoProps) {
+  const companyName = (companyNameProp ?? company ?? "Unknown company").trim() || "Unknown company";
+  // Memoize source lookup because it reads the versioned browser directory and builds the same URLs for every render.
+  const sources = useMemo(
+    () => getCompanyLogoCandidates(companyName, jobLink, { companyId, companyDomain, companyLogoUrl: logoUrl ?? companyLogoUrl }),
+    [companyId, companyName, jobLink, companyDomain, logoUrl, companyLogoUrl],
+  );
+  const sourceKey = sources.map((source) => source.src).join("|");
+
+  return (
+    <CompanyLogoImage
+      // Keyed state resets retries only when the resolved company/source chain actually changes.
+      key={`${companyName}|${sourceKey}`}
+      companyName={companyName}
+      companyDomain={companyDomain}
+      sources={sources}
+      size={size}
+      rounded={rounded}
+      fallback={fallback}
+      className={className}
+    />
   );
 }

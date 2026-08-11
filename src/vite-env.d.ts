@@ -1,6 +1,15 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  /** Browser-safe Logo.dev key used only by the image CDN. */
+  readonly VITE_LOGO_DEV_PUBLISHABLE_KEY?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+interface ImportMetaEnv {
   readonly VITE_FIREBASE_API_KEY: string;
   readonly VITE_FIREBASE_AUTH_DOMAIN: string;
   readonly VITE_FIREBASE_PROJECT_ID: string;

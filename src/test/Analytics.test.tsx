@@ -56,11 +56,14 @@ describe("Analytics", () => {
     // The chart and insight cards carry these measures without a duplicate summary row beneath them.
     expect(screen.queryByRole("region", { name: "Conversion metrics" })).not.toBeInTheDocument();
     const analyticsRegion = screen.getByRole("region", { name: "Job search analytics" });
-    // The visualization row now contains the two existing trends and one source-backed job-title ranking card.
-    expect(analyticsRegion.children).toHaveLength(3);
+    // The visualization row contains two trends plus source-backed job-title and company rankings.
+    expect(analyticsRegion.children).toHaveLength(4);
     const titlesCard = screen.getByText("Job titles applied to most").closest(".app-panel");
     expect(titlesCard).not.toBeNull();
     expect(within(titlesCard as HTMLElement).getByText("Data Analyst")).toBeInTheDocument();
     expect(within(titlesCard as HTMLElement).getByText("3 applications")).toBeInTheDocument();
+    const companiesCard = screen.getByText("Companies applied to most").closest(".app-panel");
+    expect(companiesCard).not.toBeNull();
+    expect(within(companiesCard as HTMLElement).getByRole("img", { name: "Acme logo" })).toBeInTheDocument();
   });
 });

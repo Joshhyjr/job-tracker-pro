@@ -13,6 +13,7 @@ function toRows(apps: JobApplication[]) {
   return apps.map((a) => ({
     // Stable IDs let re-imports update the exact exported record without relying on fuzzy identity matching.
     "Application ID": a.id,
+    "Company ID": a.companyId ?? "",
     "Job Title": a.jobTitle,
     "Company Name": a.companyName,
     Location: a.location,
@@ -28,6 +29,8 @@ function toRows(apps: JobApplication[]) {
     Notes: a.notes,
     "Follow-Up Date": a.followUpDate,
     "Job Link": a.jobLink ?? "",
+    "Company Domain": a.companyDomain ?? "",
+    "Company Logo URL": a.companyLogoUrl ?? "",
     Salary: a.salary ?? "",
     "Days Since Applied": a.daysSinceApplied ?? "",
     "Cover Letter Included": a.coverLetterIncluded == null ? "" : a.coverLetterIncluded ? "Yes" : "No",
@@ -42,6 +45,7 @@ function toRows(apps: JobApplication[]) {
 function getExportHeaders(rows: ReturnType<typeof toRows>) {
   const headers = new Set<string>([
     "Application ID",
+    "Company ID",
     "Job Title",
     "Company Name",
     "Location",
@@ -57,6 +61,8 @@ function getExportHeaders(rows: ReturnType<typeof toRows>) {
     "Notes",
     "Follow-Up Date",
     "Job Link",
+    "Company Domain",
+    "Company Logo URL",
     "Salary",
     "Days Since Applied",
     "Cover Letter Included",

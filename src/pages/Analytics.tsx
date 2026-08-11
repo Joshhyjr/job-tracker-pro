@@ -21,6 +21,7 @@ import {
   YAxis,
 } from "recharts";
 import PageHeader from "@/components/PageHeader";
+import { CompanyLogo } from "@/components/CompanyLogo";
 import { Button } from "@/components/ui/button";
 import type { JobApplication } from "@/lib/types";
 import type { AiInsights } from "@/lib/aiInsights";
@@ -67,10 +68,16 @@ export default function Analytics({ applications, isDemo = false, user }: { appl
 
     const countries = new Map<string, number>();
     const titles = new Map<string, number>();
+    const companies = new Map<string, { application: JobApplication; count: number }>();
     applications.forEach((application) => {
       const country = application.country || application.location.split(",").at(-1)?.trim() || "Unknown";
       countries.set(country, (countries.get(country) || 0) + 1);
       titles.set(application.jobTitle, (titles.get(application.jobTitle) || 0) + 1);
+      // Keep one representative application so ranked companies retain their resolved domain and stored logo URL.
+      const companyKey = application.companyId ?? application.companyName;
+      const company = companies.get(companyKey);
+      // Stable IDs keep analytics totals unified even while an older display-name alias is being migrated.
+      companies.set(companyKey, { application: company?.application ?? application, count: (company?.count ?? 0) + 1 });
     });
 
     const monthly = new Map<string, { sortKey: string; month: string; count: number; responses: number }>();
@@ -98,6 +105,7 @@ export default function Analytics({ applications, isDemo = false, user }: { appl
       score,
       countries: [...countries.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, count]) => ({ name, count })),
       titles: [...titles.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, count]) => ({ name, count })),
+      companies: [...companies.values()].sort((a, b) => b.count - a.count).slice(0, 6),
       monthly: monthlyTimeline,
       responseTimeline: monthlyTimeline.map((item) => ({
         month: item.month,
@@ -180,7 +188,7 @@ export default function Analytics({ applications, isDemo = false, user }: { appl
         </section>
       )}
 
-      <section className="grid gap-4 xl:grid-cols-3" aria-label="Job search analytics">
+      <section className="grid gap-4 xl:grid-cols-4" aria-label="Job search analytics">
         <div className="app-panel overflow-hidden"><div className="app-panel-title flex items-center gap-2"><BarChart3 className="h-4 w-4 text-primary" />Monthly Application Volume</div><div className="p-4"><ResponsiveContainer width="100%" height={250}><LineChart data={analysis.monthly}><CartesianGrid vertical={false} stroke="hsl(var(--border))" /><XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} /><Tooltip /><Line dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ fill: "hsl(var(--primary))" }} /></LineChart></ResponsiveContainer></div></div>
         <div className="app-panel overflow-hidden"><div className="app-panel-title flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" />Response Rate Over Time</div><div className="p-4"><ResponsiveContainer width="100%" height={250}><LineChart data={analysis.responseTimeline}><CartesianGrid vertical={false} stroke="hsl(var(--border))" /><XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} /><Tooltip /><Line type="monotone" dataKey="responseRate" name="Response rate" unit="%" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer></div></div>
         {/* Rank frequent titles beside the trend cards without introducing a second analytics row. */}
@@ -203,6 +211,23 @@ export default function Analytics({ applications, isDemo = false, user }: { appl
                 })}
               </ol>
             ) : <p className="py-20 text-center text-xs text-muted-foreground">Add applications to see your most frequent job titles.</p>}
+          </div>
+        </div>
+        <div className="app-panel overflow-hidden">
+          <div className="app-panel-title flex items-center gap-2"><BriefcaseBusiness className="h-4 w-4 text-primary" />Companies applied to most</div>
+          <div className="p-4">
+            {analysis.companies.length ? (
+              <ol className="space-y-3">
+                {analysis.companies.map(({ application, count }) => (
+                  <li key={application.companyName} className="flex items-center gap-2" aria-label={`${application.companyName}: ${count} application${count === 1 ? "" : "s"}`}>
+                    {/* Analytics uses actual company records so its logo cannot drift from list and detail views. */}
+                    <CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} logoUrl={application.companyLogoUrl} />
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold">{application.companyName}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{count}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : <p className="py-20 text-center text-xs text-muted-foreground">Add applications to see your most frequent companies.</p>}
           </div>
         </div>
       </section>

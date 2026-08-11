@@ -29,12 +29,25 @@ export interface ActivityLogEntry {
   toStatus?: string;
 }
 
+/** Canonical employer identity stored once and referenced by applications through companyId. */
+export interface Company {
+  id: string;
+  name: string;
+  displayName: string;
+  domain: string;
+  logoUrl: string;
+  primaryColor: string;
+  website: string;
+}
+
 export interface JobApplication {
   id: string;
   /** Cloud sync timestamps remain optional so existing XLSX and browser records stay compatible. */
   createdAt?: string;
   updatedAt?: string;
   jobTitle: string;
+  /** Stable foreign key for the normalized owner company collection. */
+  companyId?: string;
   companyName: string;
   location: string;
   /** Optional parsed geography used by the locations map without changing the table's location field. */

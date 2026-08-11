@@ -4,6 +4,7 @@ import { isSupportedExcelWorkbook } from "./excelFile";
 import { loadExcelJs } from "./exceljs";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeExternalHttpUrl, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
+import { enrichApplicationCompanyBranding } from "./companyLogos";
 
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
@@ -29,6 +30,7 @@ function safeStorageRemoveItem(key: string): void {
 
 type ImportField =
   | "id"
+  | "companyId"
   | "jobTitle"
   | "companyName"
   | "location"
@@ -44,6 +46,8 @@ type ImportField =
   | "notes"
   | "followUpDate"
   | "jobLink"
+  | "companyDomain"
+  | "companyLogoUrl"
   | "salary"
   | "daysSinceApplied"
   | "coverLetterIncluded"
@@ -92,6 +96,7 @@ const REQUIRED_IMPORT_FIELDS: ImportField[] = ["jobTitle", "companyName"];
 
 const FIELD_LABELS: Record<ImportField, string> = {
   id: "Application ID",
+  companyId: "Company ID",
   jobTitle: "Job Title",
   companyName: "Company",
   location: "Location",
@@ -107,6 +112,8 @@ const FIELD_LABELS: Record<ImportField, string> = {
   notes: "Notes",
   followUpDate: "Follow-Up Date",
   jobLink: "Job Link",
+  companyDomain: "Company Domain",
+  companyLogoUrl: "Company Logo URL",
   salary: "Salary",
   daysSinceApplied: "Days Since Applied",
   coverLetterIncluded: "Cover Letter Included",
@@ -118,6 +125,7 @@ const FIELD_LABELS: Record<ImportField, string> = {
 // Header aliases let user-created templates keep their own language while mapping into stable app fields.
 const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
   id: ["Application ID", "Application Id", "Record ID", "Record Id", "Job Application ID"],
+  companyId: ["Company ID", "Company Id", "Employer ID", "Employer Id"],
   jobTitle: ["Job Title", "Position", "Position Title", "Role", "Title", "Job Role", "Job Name", "Opening", "Opportunity"],
   companyName: ["Company Name", "Company", "Organization", "Organisation", "Employer", "Company/Employer", "Hiring Company"],
   location: ["Location", "Job Location", "Office Location", "Work Location"],
@@ -133,6 +141,8 @@ const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
   notes: ["Notes", "Comments", "Comment", "Application Notes", "Custom Notes"],
   followUpDate: ["Follow-Up Date", "Follow Up Date", "Follow-up Date", "Next Follow Up", "Follow Up On"],
   jobLink: ["Job Link", "Job URL", "Job Url", "Posting Link", "Application Link", "Posting URL", "URL", "Link"],
+  companyDomain: ["Company Domain", "Employer Domain", "Company Website", "Employer Website", "Website Domain"],
+  companyLogoUrl: ["Company Logo URL", "Company Logo Url", "Employer Logo URL", "Logo URL", "Logo Url"],
   salary: ["Salary", "Compensation", "Pay", "Salary Range", "Compensation Range", "Rate"],
   daysSinceApplied: ["Days Since Applied", "Days Applied", "Days Since Application", "Days Outstanding"],
   coverLetterIncluded: ["Cover Letter Included", "Cover Letter", "Cover Letter Sent", "Cover Letter Submitted"],
@@ -327,9 +337,11 @@ function parseGeographicCoordinate(value: unknown, min: number, max: number): nu
   return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
 }
 
-function addTextField(application: JobApplication, key: "jobLink" | "salary" | "recruiterContactName" | "tags" | "city" | "country", value: unknown) {
-  // Imported job links use the same absolute HTTP(S) boundary as form and cloud persistence paths.
-  const sanitized = key === "jobLink" ? sanitizeExternalHttpUrl(value) : sanitizeSingleLineText(value);
+function addTextField(application: JobApplication, key: "companyId" | "jobLink" | "companyDomain" | "companyLogoUrl" | "salary" | "recruiterContactName" | "tags" | "city" | "country", value: unknown) {
+  // Navigation URLs fail closed immediately; logo URLs may also be curated relative assets and are validated downstream.
+  const sanitized = key === "jobLink"
+    ? sanitizeExternalHttpUrl(value)
+    : sanitizeSingleLineText(value, key === "companyLogoUrl" ? 2048 : undefined);
   if (sanitized) application[key] = sanitized;
 }
 
@@ -604,7 +616,10 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
       activityLog: [],
     };
 
+    addTextField(application, "companyId", getMappedCell(row, mapping, "companyId"));
     addTextField(application, "jobLink", getMappedCell(row, mapping, "jobLink"));
+    addTextField(application, "companyDomain", getMappedCell(row, mapping, "companyDomain"));
+    addTextField(application, "companyLogoUrl", getMappedCell(row, mapping, "companyLogoUrl"));
     addTextField(application, "salary", getMappedCell(row, mapping, "salary"));
     addTextField(application, "recruiterContactName", getMappedCell(row, mapping, "recruiterContactName"));
     addTextField(application, "tags", getMappedCell(row, mapping, "tags"));
@@ -620,7 +635,8 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
     if (longitude !== undefined) application.longitude = longitude;
     if (customFields) application.customFields = customFields;
 
-    applications.push(application);
+    // Resolve branding during parsing so the preview and confirmed import immediately share a cached company identity.
+    applications.push(enrichApplicationCompanyBranding(application));
   });
 
   return { applications, warnings };

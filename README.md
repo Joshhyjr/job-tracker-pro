@@ -105,6 +105,22 @@ npm install --global firebase-tools
 npm run test:rules
 ```
 
+## Company logos
+
+All company surfaces use `CompanyLogo`, the normalized catalog in `src/lib/companyDirectory.ts`, and the shared resolver in `src/lib/companyLogos.ts`. Applications reference `users/{uid}/companies/{companyId}` instead of treating a display-name spelling as identity. Canonical official assets win over stale per-application URLs, followed by a successful cached source, Logo.dev, Simple Icons SVGs, and the verified official-domain favicon. Each source is retried once before the next trusted source is attempted; initials with a deterministic color are the final fallback.
+
+The Firestore company document shape is `id`, `name`, `display_name`, `domain`, `logo_url`, `primary_color`, and `website`. Legacy spellings such as `Gov't of NS` are used only once to migrate an old record to a stable `companyId`; rendering and analytics use the normalized identity afterward. Firestore rules keep this collection private to the verified owner.
+
+Logo.dev is optional. To enable its maintained Clearbit-replacement image API, create a browser-safe publishable key and add it locally and in Vercel:
+
+```sh
+VITE_LOGO_DEV_PUBLISHABLE_KEY="pk_your_publishable_key"
+```
+
+Do not expose a Logo.dev secret/search key through Vite. The publishable image key is designed for browser use. Follow the attribution and caching terms for the selected Logo.dev plan. Without this key, supported Simple Icons SVGs, bundled official assets, and official-domain favicons continue to work.
+
+XLSX import/export recognizes `Company ID`, `Company Domain`, and `Company Logo URL`. Imports resolve and persist the company row before application writes, so newly imported applications immediately reuse the same identity and official logo everywhere.
+
 ## AI Insights
 
 AI insights use Google Gemini through the server-side `/api/ai-insights` Vercel Function. The hosted request contains bounded metrics plus top company, role, and location labels. Notes, links, recruiter names, workbook filenames, import timestamps, custom-field names and values, local coaching signals, and complete application records are excluded from Gemini; the richer summary remains available only to the on-device Ollama fallback.

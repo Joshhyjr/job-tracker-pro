@@ -67,6 +67,23 @@ describe("mapRowsToApplications", () => {
     expect(application.id).toBe("stable-application-id");
   });
 
+  it("preserves a normalized company foreign key from an exported workbook", () => {
+    const [application] = mapRowsToApplications([{
+      "Application ID": "stable-application-id",
+      "Company ID": "ibm",
+      "Job Title": "Platform Engineer",
+      Company: "International Business Machines",
+    }]);
+
+    // Company ID is authoritative and restores the canonical display name and official logo during import.
+    expect(application).toMatchObject({
+      companyId: "ibm",
+      companyName: "IBM",
+      companyDomain: "ibm.com",
+      companyLogoUrl: "https://www.ibm.com/design/language/2285fa814297ab5eb0ffa21d2ee009db/ibm.svg",
+    });
+  });
+
   it("reads Decision Status as the imported response status", () => {
     const applications = mapRowsToApplications([
       {
@@ -196,6 +213,21 @@ describe("mapRowsToApplications", () => {
       customFields: {
         "Portfolio Notes": "Sent case study link",
       },
+    });
+  });
+
+  it("imports and enriches reusable company branding fields", () => {
+    const [application] = mapRowsToApplications([{
+      Employer: "Example Employer",
+      Position: "Platform Engineer",
+      "Company Website": "https://www.example.com/about",
+      "Company Logo URL": "https://assets.example.com/example.svg",
+    }]);
+
+    // Import enrichment normalizes the domain while preserving the stored logo as the first rendering source.
+    expect(application).toMatchObject({
+      companyDomain: "example.com",
+      companyLogoUrl: "https://assets.example.com/example.svg",
     });
   });
 

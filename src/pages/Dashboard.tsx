@@ -237,7 +237,11 @@ export default function Dashboard({
           <div className="divide-y">
             {upcomingFollowUps.length === 0 ? <p className="p-5 text-sm text-muted-foreground">You are all caught up.</p> : upcomingFollowUps.map((application) => (
               <button key={application.id} type="button" onClick={() => navigate(`/app/applications/${application.id}`)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50">
-                <span className="min-w-0"><span className="block truncate text-xs font-semibold">{application.companyName}</span><span className="block truncate text-[10px] text-muted-foreground">{application.jobTitle}</span></span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {/* Dashboard follow-ups use the same resolved source as activity rows and the dedicated queue. */}
+                  <CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} logoUrl={application.companyLogoUrl} />
+                  <span className="min-w-0"><span className="block truncate text-xs font-semibold">{application.companyName}</span><span className="block truncate text-[10px] text-muted-foreground">{application.jobTitle}</span></span>
+                </span>
                 <span className="shrink-0 text-right"><span className="block text-[10px] font-medium">{application.followUpDate ? formatDisplayDate(application.followUpDate) : "Overdue"}</span><span className="text-[10px] text-amber-600">Follow up</span></span>
               </button>
             ))}

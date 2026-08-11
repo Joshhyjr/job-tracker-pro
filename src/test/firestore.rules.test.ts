@@ -31,6 +31,20 @@ describeWithEmulator("Firestore Security Rules", () => {
     await assertSucceeds(getDoc(reference));
   });
 
+  it("allows only the verified owner to maintain the normalized company directory", async () => {
+    const owner = environment.authenticatedContext("owner", {
+      email: "joshuakivaria@gmail.com",
+      email_verified: true,
+    }).firestore();
+    const anonymous = environment.unauthenticatedContext().firestore();
+    const reference = doc(owner, "users/owner/companies/ibm");
+
+    // Company rows are shared by the owner's applications but remain inaccessible outside that account.
+    await assertSucceeds(setDoc(reference, { display_name: "IBM", domain: "ibm.com" }));
+    await assertSucceeds(getDoc(reference));
+    await assertFails(getDoc(doc(anonymous, "users/owner/companies/ibm")));
+  });
+
   it("denies anonymous, unapproved, and cross-user access", async () => {
     const anonymous = environment.unauthenticatedContext().firestore();
     const otherEmail = environment.authenticatedContext("owner", { email: "other@example.com", email_verified: true }).firestore();

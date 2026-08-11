@@ -1,6 +1,6 @@
 import { CURRENT_STATUSES, type ActivityLogEntry, type CurrentStatus, type JobApplication } from "./types";
 import { normalizeResponseStatus } from "./responseStatus";
-import { normalizeCompanyDomain } from "./companyLogos";
+import { enrichApplicationCompanyBranding, normalizeCompanyDomain } from "./companyLogos";
 
 const MAX_SHORT_TEXT_LENGTH = 200;
 const MAX_NOTES_LENGTH = 2000;
@@ -20,6 +20,14 @@ export function sanitizeExternalHttpUrl(value: unknown): string {
   } catch {
     return "";
   }
+}
+
+function sanitizeCompanyLogoUrl(value: unknown): string {
+  const candidate = sanitizeSingleLineText(value, MAX_URL_LENGTH);
+  if (!candidate) return "";
+  // Curated bundled assets may be relative, while remote logos share the strict HTTP(S) boundary.
+  if (/^\/company-logos\/[a-z0-9._/-]+$/i.test(candidate)) return candidate;
+  return sanitizeExternalHttpUrl(candidate);
 }
 
 export type SanitizedApplicationInput = Omit<JobApplication, "id" | "activityLog">;
@@ -138,9 +146,11 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   const region = sanitizeSingleLineText(input.region);
   const country = sanitizeSingleLineText(input.country);
   const jobLink = sanitizeExternalHttpUrl(input.jobLink);
+  const companyId = sanitizeSingleLineText(input.companyId);
   // Company branding overrides are normalized/validated by the logo service before being stored.
   const companyDomain = normalizeCompanyDomain(sanitizeSingleLineText(input.companyDomain, MAX_URL_LENGTH)) ?? "";
-  const companyLogoUrl = sanitizeExternalHttpUrl(input.companyLogoUrl);
+  const suppliedCompanyLogoUrl = sanitizeSingleLineText(input.companyLogoUrl, MAX_URL_LENGTH);
+  const companyLogoUrl = sanitizeCompanyLogoUrl(input.companyLogoUrl);
   const salary = sanitizeSingleLineText(input.salary);
   const recruiterContactName = sanitizeSingleLineText(input.recruiterContactName);
   const tags = sanitizeSingleLineText(input.tags);
@@ -154,6 +164,7 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   if (region) sanitized.region = region;
   if (country) sanitized.country = country;
   if (jobLink) sanitized.jobLink = jobLink;
+  if (companyId) sanitized.companyId = companyId;
   if (companyDomain) sanitized.companyDomain = companyDomain;
   if (companyLogoUrl) sanitized.companyLogoUrl = companyLogoUrl;
   if (salary) sanitized.salary = salary;
@@ -166,5 +177,11 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   if (longitude !== undefined) sanitized.longitude = longitude;
   if (customFields) sanitized.customFields = customFields;
 
-  return sanitized;
+  // Every create, edit, cloud read, and import shares the same domain/logo enrichment boundary.
+  const enriched = enrichApplicationCompanyBranding(sanitized);
+  if (suppliedCompanyLogoUrl && !companyLogoUrl) {
+    // An explicitly rejected override stays absent in durable data; render-time resolution may still show a trusted logo.
+    delete enriched.companyLogoUrl;
+  }
+  return enriched;
 }

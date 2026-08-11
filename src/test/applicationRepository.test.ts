@@ -4,6 +4,7 @@ import {
   deserializeApplication,
   replaceApplications,
   serializeApplication,
+  serializeCompany,
   upsertApplications,
 } from "@/lib/applicationRepository";
 import type { JobApplication } from "@/lib/types";
@@ -102,6 +103,29 @@ describe("application repository serialization", () => {
     // Firestore rejects undefined values, but populated XLSX fields must remain intact.
     expect(serialized).not.toHaveProperty("salary");
     expect(serialized).toMatchObject({ id: "app-1", recruiterContactName: "Alex" });
+  });
+
+  it("serializes normalized company rows with the requested database columns", () => {
+    const serialized = serializeCompany({
+      id: "google",
+      name: "google",
+      displayName: "Google",
+      domain: "google.com",
+      logoUrl: "https://www.gstatic.com/google.svg",
+      primaryColor: "#4285F4",
+      website: "https://www.google.com/",
+    });
+
+    // Firestore field names mirror the normalized table contract rather than application display labels.
+    expect(serialized).toEqual({
+      id: "google",
+      name: "google",
+      display_name: "Google",
+      domain: "google.com",
+      logo_url: "https://www.gstatic.com/google.svg",
+      primary_color: "#4285F4",
+      website: "https://www.google.com/",
+    });
   });
 
   it("uses the Firestore document ID as the canonical application ID", () => {
@@ -205,6 +229,19 @@ describe("replaceApplications", () => {
 });
 
 describe("upsertApplications", () => {
+  it("persists the normalized company row before its imported application", async () => {
+    mockBatchedReplacement(0);
+
+    await upsertApplications("user-1", [application({ companyName: "IBM" })]);
+
+    // The company table is durable independently of any one job row and uses IBM's canonical identity.
+    expect(firestoreMocks.setDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "ibm", path: expect.stringContaining("users/user-1/companies/ibm") }),
+      expect.objectContaining({ display_name: "IBM", domain: "ibm.com" }),
+      { merge: true },
+    );
+  });
+
   it("writes additions and updates without reading or deleting existing records", async () => {
     const committedBatches = mockBatchedReplacement(500);
     const changes = [application({ id: "existing-update" }), application({ id: "new-application" })];

@@ -10,6 +10,7 @@ import {
   mergeLocalApplicationsOnce,
   replaceApplications as replaceCloudApplications,
   subscribeApplications,
+  synchronizeCompanyDirectory,
   upsertApplications,
   updateApplication,
 } from "@/lib/applicationRepository";
@@ -93,6 +94,14 @@ export function useApplications(user?: User) {
     // Cache verified employer domains so a company keeps the same logo on rows without a direct link.
     learnCompanyDomains(applications);
   }, [applications]);
+
+  useEffect(() => {
+    if (!user || loading || applications.length === 0) return;
+    // Existing free-text records are normalized in place after their safe realtime read completes.
+    void synchronizeCompanyDirectory(user.uid, applications).catch((error: Error) => {
+      setSyncError(error.message || "Could not synchronize the company directory.");
+    });
+  }, [applications, loading, user]);
 
   const runMutation = useCallback(async <T,>(mutation: () => Promise<T>): Promise<T> => {
     setSyncing(true);

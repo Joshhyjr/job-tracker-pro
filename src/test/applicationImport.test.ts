@@ -10,9 +10,11 @@ import {
   saveApplications,
 } from "@/lib/storage";
 import type { JobApplication } from "@/lib/types";
+import { enrichApplicationCompanyBranding } from "@/lib/companyLogos";
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
-  return {
+  // Fixtures model the same branding enrichment applied at every production persistence boundary.
+  return enrichApplicationCompanyBranding({
     id: "ibm-application",
     jobTitle: "Platform Engineer",
     companyName: "IBM",
@@ -25,7 +27,7 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
     followUpDate: "",
     activityLog: [],
     ...overrides,
-  };
+  });
 }
 
 beforeEach(() => {
