@@ -111,12 +111,13 @@ export function useDemoApplications() {
     deleteApplication: (applicationId: string) => runMutation(() => {
       commitApplications(applicationsRef.current.filter((item) => item.id !== applicationId));
     }),
-    backupApplications: (currentApplications: JobApplication[], fileName: string) => runMutation(() => {
-      // Signed-out users have no owner Firestore access, so their recovery point stays in the demo namespace.
-      return createImportBackup(currentApplications, fileName, "demo");
+    backupApplications: (applicationsToBackup: JobApplication[], fileName: string, mode: "merge" | "replace") => runMutation(() => {
+      // Demo merge updates keep scoped preimages locally, while replacement retains a complete browser snapshot.
+      return createImportBackup(applicationsToBackup, fileName, "demo", mode === "replace" ? "full" : "changes");
     }),
-    mergeApplications: (changedApplications: JobApplication[]) => runMutation(() => {
+    mergeApplications: (additions: JobApplication[], updates: JobApplication[]) => runMutation(() => {
       // Signed-out merge imports preserve existing demo jobs and apply only additions or stable-ID updates.
+      const changedApplications = [...updates, ...additions];
       const changesById = new Map(changedApplications.map((application) => [application.id, normalizeDemoApplication(application)]));
       const updated = applicationsRef.current.map((application) => changesById.get(application.id) ?? application);
       const existingIds = new Set(applicationsRef.current.map((application) => application.id));

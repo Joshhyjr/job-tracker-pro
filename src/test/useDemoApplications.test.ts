@@ -118,7 +118,8 @@ describe("useDemoApplications", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     await act(async () => {
-      await result.current.mergeApplications([apple]);
+      // Demo imports receive additions separately just like the collision-safe owner persistence boundary.
+      await result.current.mergeApplications([apple], []);
     });
 
     // The demo merge contract mirrors owner imports: IBM remains and Apple is appended locally.

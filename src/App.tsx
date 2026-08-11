@@ -72,7 +72,7 @@ interface JobTrackerShellProps {
   updateApplication: (application: JobApplication) => Promise<JobApplication>;
   deleteApplication: (applicationId: string) => Promise<void>;
   backupApplications: (applications: JobApplication[], fileName: string, mode: ApplicationImportMode) => Promise<ImportBackup>;
-  mergeApplications: (applications: JobApplication[]) => Promise<void>;
+  mergeApplications: (additions: JobApplication[], updates: JobApplication[]) => Promise<void>;
   replaceApplications: (applications: JobApplication[]) => Promise<void>;
   mode: "demo" | "owner";
   user?: User;
@@ -155,10 +155,13 @@ function JobTrackerShell({
           description: `Replaced the active dataset with ${pendingImport.result.applications.length} jobs from the workbook. The previous dataset was backed up in ${backupLocation} first.`,
         });
       } else {
-        const backupLocation = mode === "owner" ? "Firestore" : "this browser";
+        const recoveryDescription = pendingPlan.updates.length > 0
+          ? `The ${pendingPlan.updates.length} changed ${pendingPlan.updates.length === 1 ? "job was" : "jobs were"} backed up before updating.`
+          : "No backup was needed because no current jobs were changed.";
         toast({
           title: "Import merged safely",
-          description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted, and the previous dataset was backed up in ${backupLocation}.`,
+          // Report the narrower recovery boundary so additions-only imports never imply a costly full snapshot.
+          description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted. ${recoveryDescription}`,
         });
       }
       pendingImport.result.warnings.forEach((warning) => {

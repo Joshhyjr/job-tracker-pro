@@ -76,7 +76,7 @@ export default function ImportConfirmationDialog({
           >
             <RadioGroupItem id="import-mode-merge" value="merge" className="mt-0.5" />
             <span>
-              <span className="block font-medium">Back up and merge</span>
+              <span className="block font-medium">Merge jobs safely</span>
               <span className="mt-1 block text-sm font-normal text-muted-foreground">Keep every current job, add new rows, update stable-ID matches, and skip duplicates.</span>
             </span>
           </Label>
@@ -111,10 +111,12 @@ export default function ImportConfirmationDialog({
             <div className="rounded-md bg-muted p-3 text-sm">
               <p className="font-medium">Your current jobs will not be deleted.</p>
               <p className="mt-1 text-muted-foreground">
-                {/* Owner recovery points are cross-device; demo recovery points cannot enter private Firestore. */}
-                {backupDestination === "firestore"
-                  ? "A verified owner-only Firestore backup will be created before this merge starts."
-                  : "A browser backup of the demo dataset will be created before this merge starts."}
+                {/* Additions need no preimage; stable-ID updates retain only the records they can overwrite. */}
+                {updatedCount === 0
+                  ? "This import only adds jobs or skips duplicates, so no current job needs to be backed up."
+                  : backupDestination === "firestore"
+                    ? `Only the ${updatedCount} current ${updatedCount === 1 ? "job" : "jobs"} being updated will be backed up and verified in Firestore.`
+                    : `Only the ${updatedCount} current ${updatedCount === 1 ? "job" : "jobs"} being updated will be backed up in this browser.`}
               </p>
             </div>
           </>
@@ -135,13 +137,13 @@ export default function ImportConfirmationDialog({
           <AlertDialogAction
             disabled={isApplying}
             onClick={(event) => {
-              // Keep the dialog open until the backup and selected persistence transaction both succeed.
+              // Keep the dialog open until any required scoped backup and the selected persistence both succeed.
               event.preventDefault();
               void onConfirm();
             }}
             className={mode === "replace" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
           >
-            {isApplying ? (mode === "replace" ? "Replacing..." : "Merging...") : (mode === "replace" ? "Back up and replace" : "Back up and merge")}
+            {isApplying ? (mode === "replace" ? "Replacing..." : "Merging...") : (mode === "replace" ? "Back up and replace" : "Merge jobs")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

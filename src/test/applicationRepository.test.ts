@@ -11,8 +11,12 @@ import type { JobApplication } from "@/lib/types";
 
 const firestoreMocks = vi.hoisted(() => ({
   getDocs: vi.fn(),
+  getDocFromServer: vi.fn(),
   getDocsFromServer: vi.fn(),
+  runTransaction: vi.fn(),
   setDoc: vi.fn(),
+  transactionGet: vi.fn(),
+  transactionSet: vi.fn(),
   writeBatch: vi.fn(),
 }));
 
@@ -39,9 +43,11 @@ vi.mock("firebase/firestore", () => ({
     }).join("/"),
   })),
   getDoc: vi.fn(),
+  getDocFromServer: firestoreMocks.getDocFromServer,
   getDocs: firestoreMocks.getDocs,
   getDocsFromServer: firestoreMocks.getDocsFromServer,
   onSnapshot: vi.fn(),
+  runTransaction: firestoreMocks.runTransaction,
   setDoc: firestoreMocks.setDoc,
   writeBatch: firestoreMocks.writeBatch,
 }));
@@ -91,9 +97,20 @@ function mockBatchedReplacement(existingCount: number, failAtBatch?: number) {
 
 beforeEach(() => {
   firestoreMocks.getDocs.mockReset();
+  firestoreMocks.getDocFromServer.mockReset();
   firestoreMocks.getDocsFromServer.mockReset();
   firestoreMocks.setDoc.mockReset();
+  firestoreMocks.runTransaction.mockReset();
+  firestoreMocks.transactionGet.mockReset();
+  firestoreMocks.transactionSet.mockReset();
   firestoreMocks.writeBatch.mockReset();
+  // Scoped-backup and transactional reads default to missing unless a focused test supplies cloud state.
+  firestoreMocks.getDocFromServer.mockResolvedValue({ exists: () => false });
+  firestoreMocks.transactionGet.mockResolvedValue({ exists: () => false });
+  firestoreMocks.runTransaction.mockImplementation(async (_database: unknown, callback: (transaction: unknown) => Promise<void>) => callback({
+    get: firestoreMocks.transactionGet,
+    set: firestoreMocks.transactionSet,
+  }));
 });
 
 describe("application repository serialization", () => {
@@ -153,6 +170,7 @@ describe("createApplicationImportBackup", () => {
     expect(firestoreMocks.setDoc.mock.calls[0][1]).toMatchObject({
       applicationCount: 451,
       mode: "replace",
+      scope: "full",
       sourceFileName: "replacement.xlsx",
       status: "writing",
     });
@@ -161,15 +179,35 @@ describe("createApplicationImportBackup", () => {
     expect(backup).toMatchObject({ sourceFileName: "replacement.xlsx", applications: current });
   });
 
-  it("rejects an incomplete cloud snapshot without marking it ready", async () => {
+  it("reads and stores only stable-ID update preimages for a merge", async () => {
     const current = [application({ id: "ibm" }), application({ id: "apple" })];
     mockBatchedReplacement(0);
-    firestoreMocks.getDocsFromServer.mockResolvedValue({
-      docs: current.map((item) => ({ id: item.id, data: () => serializeApplication(item) })),
+    firestoreMocks.getDocFromServer.mockImplementation(async (reference: { id: string }) => {
+      const item = current.find((application) => application.id === reference.id)!;
+      return { id: item.id, exists: () => true, data: () => serializeApplication(item) };
     });
     firestoreMocks.getDocs.mockResolvedValue({ docs: [{ id: "ibm" }] });
 
-    await expect(createApplicationImportBackup("user-1", "merge.xlsx", "merge"))
+    const backup = await createApplicationImportBackup("user-1", "updates.xlsx", "merge", ["ibm"]);
+
+    // Apple is untouched, so neither the authoritative read nor the recovery snapshot should include it.
+    expect(firestoreMocks.getDocsFromServer).not.toHaveBeenCalled();
+    expect(firestoreMocks.getDocFromServer).toHaveBeenCalledOnce();
+    expect(firestoreMocks.getDocFromServer).toHaveBeenCalledWith(expect.objectContaining({ id: "ibm" }));
+    expect(firestoreMocks.setDoc.mock.calls[0][1]).toMatchObject({ applicationCount: 1, mode: "merge", scope: "changes" });
+    expect(backup).toMatchObject({ scope: "changes", applications: [expect.objectContaining({ id: "ibm" })] });
+  });
+
+  it("rejects an incomplete cloud snapshot without marking it ready", async () => {
+    const current = [application({ id: "ibm" }), application({ id: "apple" })];
+    mockBatchedReplacement(0);
+    firestoreMocks.getDocFromServer.mockImplementation(async (reference: { id: string }) => {
+      const item = current.find((application) => application.id === reference.id)!;
+      return { id: item.id, exists: () => true, data: () => serializeApplication(item) };
+    });
+    firestoreMocks.getDocs.mockResolvedValue({ docs: [{ id: "ibm" }] });
+
+    await expect(createApplicationImportBackup("user-1", "merge.xlsx", "merge", current.map((item) => item.id)))
       .rejects.toThrow("Could not verify");
 
     // The writing manifest can be diagnosed later, but it cannot be mistaken for a valid recovery point.
@@ -183,7 +221,7 @@ describe("createApplicationImportBackup", () => {
       docs: current.map((item) => ({ id: item.id, data: () => serializeApplication(item) })),
     });
 
-    await expect(createApplicationImportBackup("user-1", "merge.xlsx", "merge"))
+    await expect(createApplicationImportBackup("user-1", "replacement.xlsx", "replace"))
       .rejects.toThrow("application IDs are not unique");
 
     // One Firestore document per job requires unique stable IDs for a complete, verifiable snapshot.
@@ -230,8 +268,6 @@ describe("replaceApplications", () => {
 
 describe("upsertApplications", () => {
   it("persists the normalized company row before its imported application", async () => {
-    mockBatchedReplacement(0);
-
     await upsertApplications("user-1", [application({ companyName: "IBM" })]);
 
     // The company table is durable independently of any one job row and uses IBM's canonical identity.
@@ -242,25 +278,35 @@ describe("upsertApplications", () => {
     );
   });
 
-  it("writes additions and updates without reading or deleting existing records", async () => {
-    const committedBatches = mockBatchedReplacement(500);
+  it("atomically validates and writes additions and updates without deleting records", async () => {
     const changes = [application({ id: "existing-update" }), application({ id: "new-application" })];
+    firestoreMocks.transactionGet
+      .mockResolvedValueOnce({ exists: () => true })
+      .mockResolvedValueOnce({ exists: () => false });
 
-    await upsertApplications("user-1", changes);
+    await upsertApplications("user-1", [changes[1]], [changes[0]]);
 
-    // Incremental import has no stale-record cleanup phase, so unrelated cloud jobs cannot be deleted.
+    // The transaction sees the update first and the addition second, then writes both without deletions.
     expect(firestoreMocks.getDocs).not.toHaveBeenCalled();
-    expect(committedBatches.flat()).toEqual([
-      { type: "set", id: "existing-update" },
-      { type: "set", id: "new-application" },
-    ]);
-    expect(committedBatches.flat().some((operation) => operation.type === "delete")).toBe(false);
+    expect(firestoreMocks.transactionSet.mock.calls.map((call) => call[1].id)).toEqual(["existing-update", "new-application"]);
+    expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
   });
 
   it("does not open a write batch when every imported row was skipped", async () => {
     await upsertApplications("user-1", []);
 
     // A duplicate-only workbook remains a successful no-op after confirmation.
+    expect(firestoreMocks.runTransaction).not.toHaveBeenCalled();
     expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects an addition whose ID appeared in Firestore after preview", async () => {
+    firestoreMocks.transactionGet.mockResolvedValue({ exists: () => true });
+
+    await expect(upsertApplications("user-1", [application({ id: "cross-device-job" })]))
+      .rejects.toThrow("another device");
+
+    // A stale browser plan may refresh harmless company metadata, but it cannot overwrite the newer application.
+    expect(firestoreMocks.transactionSet).not.toHaveBeenCalled();
   });
 });

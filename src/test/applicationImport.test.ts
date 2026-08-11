@@ -36,17 +36,18 @@ beforeEach(() => {
 
 function persistBrowserBackup(scope: "owner" | "demo" = "owner") {
   // The import coordinator accepts either the owner Firestore writer or the isolated demo browser writer.
-  return vi.fn(async (applications: JobApplication[], fileName: string) => createImportBackup(applications, fileName, scope));
+  return vi.fn(async (applications: JobApplication[], fileName: string, mode: "merge" | "replace") =>
+    createImportBackup(applications, fileName, scope, mode === "replace" ? "full" : "changes"));
 }
 
 describe("applyConfirmedApplicationImport", () => {
-  it("creates the backup before writing and keeps existing jobs in the merged dataset", async () => {
+  it("adds new jobs without backing up unchanged current records", async () => {
     const current = [application()];
     const imported = [application({ id: "apple-application", companyName: "Apple", dateApplied: "2026-08-05" })];
     const plan = planApplicationImport(current, imported);
     const persistMerge = vi.fn(async () => {
-      // Reaching cloud persistence without the IBM snapshot would violate the import safety boundary.
-      expect(getLatestImportBackup()?.applications).toMatchObject([{ companyName: "IBM" }]);
+      // Pure additions cannot overwrite IBM, so the fast path reaches persistence without a recovery snapshot.
+      expect(getLatestImportBackup()).toBeNull();
     });
     const persistReplacement = vi.fn();
     const persistBackup = persistBrowserBackup();
@@ -61,8 +62,9 @@ describe("applyConfirmedApplicationImport", () => {
       persistReplacement,
     });
 
-    expect(persistMerge).toHaveBeenCalledWith(imported);
-    expect(persistBackup).toHaveBeenCalledWith(current, "new-jobs.xlsx", "merge");
+    // The coordinator preserves additions separately from protected stable-ID updates.
+    expect(persistMerge).toHaveBeenCalledWith(imported, []);
+    expect(persistBackup).not.toHaveBeenCalled();
     expect(persistReplacement).not.toHaveBeenCalled();
     expect(getApplications()).toMatchObject([{ companyName: "IBM" }, { companyName: "Apple" }]);
     expect(getLastImportMetadata()).toMatchObject({ fileName: "new-jobs.xlsx", rowCount: 1 });
@@ -70,7 +72,7 @@ describe("applyConfirmedApplicationImport", () => {
 
   it("retains the pre-import dataset when cloud persistence fails", async () => {
     const current = [application()];
-    const imported = [application({ id: "apple-application", companyName: "Apple", dateApplied: "2026-08-05" })];
+    const imported = [application({ jobTitle: "Senior Platform Engineer" })];
     const plan = planApplicationImport(current, imported);
     saveApplications(current);
 
@@ -86,10 +88,11 @@ describe("applyConfirmedApplicationImport", () => {
       persistReplacement: vi.fn(),
     })).rejects.toThrow("cloud unavailable");
 
-    // Failure leaves the current browser dataset and import breadcrumb untouched while retaining the backup.
+    // Failure leaves the current browser dataset untouched and retains only the overwritten IBM preimage.
     expect(getApplications()).toEqual(current);
     expect(getLastImportMetadata()).toBeNull();
     expect(getLatestImportBackup()?.applications).toEqual(current);
+    expect(getLatestImportBackup()?.scope).toBe("changes");
   });
 
   it("backs up the current dataset before replacing it with workbook rows", async () => {
@@ -167,10 +170,10 @@ describe("applyConfirmedApplicationImport", () => {
       storageScope: "demo",
     });
 
-    // The public sandbox receives IBM and Apple while every private owner namespace remains untouched.
+    // Additions need no demo backup; the public sandbox receives IBM and Apple without touching owner storage.
     expect(getDemoApplications()).toMatchObject([{ companyName: "IBM" }, { companyName: "Apple" }]);
     expect(getApplications()).toEqual(owner);
-    expect(getLatestImportBackup("demo")?.applications).toEqual(demoCurrent);
+    expect(getLatestImportBackup("demo")).toBeNull();
     expect(getLatestImportBackup("owner")).toBeNull();
     expect(getLastImportMetadata()).toBeNull();
   });
@@ -201,7 +204,7 @@ describe("applyConfirmedApplicationImport", () => {
     expect(getLastImportMetadata()).toBeNull();
   });
 
-  it("does not start merge or replacement when the required cloud backup fails", async () => {
+  it("does not start replacement when its required full backup fails", async () => {
     const current = [application()];
     const imported = [application({ id: "apple-application", companyName: "Apple" })];
     const plan = planApplicationImport(current, imported);
@@ -219,8 +222,28 @@ describe("applyConfirmedApplicationImport", () => {
       persistReplacement,
     })).rejects.toThrow("Firestore backup unavailable");
 
-    // Backup readiness is the hard transaction boundary for both safe import modes.
+    // Full backup readiness remains the hard transaction boundary for destructive replacement.
     expect(persistMerge).not.toHaveBeenCalled();
     expect(persistReplacement).not.toHaveBeenCalled();
+  });
+
+  it("does not update a stable-ID match when its scoped backup fails", async () => {
+    const current = [application()];
+    const imported = [application({ jobTitle: "Senior Platform Engineer" })];
+    const plan = planApplicationImport(current, imported);
+    const persistMerge = vi.fn();
+
+    await expect(applyConfirmedApplicationImport({
+      currentApplications: current,
+      fileName: "updates.xlsx",
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      plan,
+      persistBackup: vi.fn().mockRejectedValue(new Error("Scoped backup unavailable")),
+      persistMerge,
+      persistReplacement: vi.fn(),
+    })).rejects.toThrow("Scoped backup unavailable");
+
+    // Stable-ID updates remain blocked until the exact records they can overwrite are recoverable.
+    expect(persistMerge).not.toHaveBeenCalled();
   });
 });

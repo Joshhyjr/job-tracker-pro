@@ -81,6 +81,7 @@ export interface ImportBackup {
   id: string;
   createdAt: string;
   sourceFileName: string;
+  scope: "full" | "changes";
   applications: JobApplication[];
 }
 
@@ -690,6 +691,8 @@ export function getLatestImportBackup(scope: ImportStorageScope = "owner"): Impo
       id: sanitizeSingleLineText(parsed.id),
       createdAt: sanitizeSingleLineText(parsed.createdAt),
       sourceFileName: sanitizeSingleLineText(parsed.sourceFileName),
+      // Backups created before scoped merge recovery existed always contain the full dataset.
+      scope: parsed.scope === "changes" ? "changes" : "full",
       applications: parsed.applications.map((application) => sanitizeStoredApplication(application)),
     };
   } catch {
@@ -701,11 +704,14 @@ export function createImportBackup(
   applications: JobApplication[],
   sourceFileName: string,
   scope: ImportStorageScope = "owner",
+  backupScope: ImportBackup["scope"] = "full",
 ): ImportBackup {
   const backup: ImportBackup = {
     id: generateId(),
     createdAt: new Date().toISOString(),
     sourceFileName: sanitizeSingleLineText(sourceFileName, 255) || "Imported workbook",
+    // Recovery tooling must distinguish a replacement snapshot from merge-update preimages.
+    scope: backupScope,
     applications,
   };
 

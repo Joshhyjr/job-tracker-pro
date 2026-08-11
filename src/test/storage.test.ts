@@ -409,6 +409,7 @@ describe("import backups", () => {
     expect(getLatestImportBackup()).toEqual(backup);
     expect(backup).toMatchObject({
       sourceFileName: "new-jobs.xlsx",
+      scope: "full",
       applications: [{ companyName: "IBM", createdAt: "2026-08-01T10:00:00.000Z" }],
     });
   });
@@ -420,6 +421,19 @@ describe("import backups", () => {
 
     // A swallowed localStorage failure is promoted to an actionable import failure after verification.
     expect(() => createImportBackup([], "new-jobs.xlsx")).toThrow("Could not create the automatic import backup");
+  });
+
+  it("treats legacy browser snapshots as full backups", () => {
+    const current = mapRowsToApplications([{ "Job Title": "Platform Engineer", Company: "IBM" }]);
+    localStorage.setItem("job-tracker-latest-import-backup", JSON.stringify({
+      id: "legacy-backup",
+      createdAt: "2026-08-01T10:00:00.000Z",
+      sourceFileName: "legacy.xlsx",
+      applications: current,
+    }));
+
+    // Backups created before scoped merge recovery must remain distinguishable and restorable after upgrade.
+    expect(getLatestImportBackup()).toMatchObject({ id: "legacy-backup", scope: "full", applications: current });
   });
 });
 

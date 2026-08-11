@@ -132,10 +132,12 @@ export function useApplications(user?: User) {
       runMutation(() => createApplication(user!.uid, input)),
     updateApplication: (application: JobApplication) => runMutation(() => updateApplication(user!.uid, application)),
     deleteApplication: (applicationId: string) => runMutation(() => deleteApplication(user!.uid, applicationId)),
-    backupApplications: (_currentApplications: JobApplication[], fileName: string, mode: "merge" | "replace") =>
-      // Owner imports snapshot authoritative Firestore state rather than trusting a possibly stale browser render.
-      runMutation(() => createApplicationImportBackup(user!.uid, fileName, mode)),
-    mergeApplications: (changedApplications: JobApplication[]) => runMutation(() => upsertApplications(user!.uid, changedApplications)),
+    backupApplications: (applicationsToBackup: JobApplication[], fileName: string, mode: "merge" | "replace") =>
+      // The repository re-reads these update IDs from Firestore; replacement deliberately ignores them and reads all rows.
+      runMutation(() => createApplicationImportBackup(user!.uid, fileName, mode, applicationsToBackup.map((application) => application.id))),
+    mergeApplications: (additions: JobApplication[], updates: JobApplication[]) =>
+      // Firestore validates addition IDs separately so the fast path cannot overwrite an unseen cross-device record.
+      runMutation(() => upsertApplications(user!.uid, additions, updates)),
     replaceApplications: (nextApplications: JobApplication[]) => runMutation(() => replaceCloudApplications(user!.uid, nextApplications)),
   };
 }

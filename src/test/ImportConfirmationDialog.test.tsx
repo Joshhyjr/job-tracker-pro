@@ -22,13 +22,13 @@ describe("ImportConfirmationDialog", () => {
     const onConfirm = vi.fn().mockResolvedValue(undefined);
     render(<ImportConfirmationDialog {...summaryProps} onCancel={onCancel} onConfirm={onConfirm} />);
 
-    // The safety promise and all three counts must be visible before the user can approve the import.
+    // The scoped recovery promise and all three counts must be visible before approval.
     expect(screen.getByText("Your current jobs will not be deleted.")).toBeInTheDocument();
-    expect(screen.getByText("A verified owner-only Firestore backup will be created before this merge starts.")).toBeInTheDocument();
+    expect(screen.getByText("Only the 1 current job being updated will be backed up and verified in Firestore.")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /back up and merge/i })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /merge jobs safely/i })).toBeChecked();
     expect(screen.getByRole("radio", { name: /back up and replace/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -36,11 +36,11 @@ describe("ImportConfirmationDialog", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it("starts the backup-and-merge action only after confirmation", () => {
+  it("starts the safe merge action only after confirmation", () => {
     const onConfirm = vi.fn().mockResolvedValue(undefined);
     render(<ImportConfirmationDialog {...summaryProps} onCancel={vi.fn()} onConfirm={onConfirm} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Back up and merge" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge jobs" }));
 
     // Preventing the default dialog close leaves the parent in control until persistence succeeds.
     expect(onConfirm).toHaveBeenCalledOnce();
@@ -76,7 +76,21 @@ describe("ImportConfirmationDialog", () => {
       />,
     );
 
-    // Demo imports cannot write into the allowlisted owner's Firestore account.
-    expect(screen.getByText("A browser backup of the demo dataset will be created before this merge starts.")).toBeInTheDocument();
+    // Demo update preimages cannot write into the allowlisted owner's Firestore account.
+    expect(screen.getByText("Only the 1 current job being updated will be backed up in this browser.")).toBeInTheDocument();
+  });
+
+  it("explains why additions-only merges do not need a backup", () => {
+    render(
+      <ImportConfirmationDialog
+        {...summaryProps}
+        updatedCount={0}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    // No current record can be overwritten when every actionable row is a new addition.
+    expect(screen.getByText("This import only adds jobs or skips duplicates, so no current job needs to be backed up.")).toBeInTheDocument();
   });
 });

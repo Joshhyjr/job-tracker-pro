@@ -3,12 +3,15 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   getDocsFromServer,
   onSnapshot,
+  runTransaction,
   setDoc,
   writeBatch,
   type DocumentData,
+  type DocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
 import { getFirestoreDatabase } from "./firebase";
@@ -108,16 +111,36 @@ export async function createApplicationImportBackup(
   userId: string,
   sourceFileName: string,
   mode: "merge" | "replace",
+  applicationIds: string[] = [],
 ): Promise<ImportBackup> {
-  // Read the authoritative server collection so the snapshot cannot silently omit a newer cross-device change.
-  const currentSnapshot = await getDocsFromServer(applicationCollection(userId));
-  const applications = currentSnapshot.docs.map((item) => deserializeApplication(item.id, item.data()));
+  let applications: JobApplication[];
+  if (mode === "replace") {
+    // Replacement still snapshots the authoritative collection because any current job may be removed.
+    const currentSnapshot = await getDocsFromServer(applicationCollection(userId));
+    applications = currentSnapshot.docs.map((item) => deserializeApplication(item.id, item.data()));
+  } else {
+    const uniqueApplicationIds = Array.from(new Set(applicationIds.map((id) => sanitizeSingleLineText(id)).filter(Boolean)));
+    if (uniqueApplicationIds.length === 0) throw new Error("No existing jobs require a merge backup.");
+
+    const snapshots: DocumentSnapshot[] = [];
+    // Read only update preimages from the server so additive imports do not scale with the full job history.
+    for (let index = 0; index < uniqueApplicationIds.length; index += 50) {
+      const chunk = await Promise.all(uniqueApplicationIds.slice(index, index + 50).map((applicationId) =>
+        getDocFromServer(doc(applicationCollection(userId), applicationId))));
+      snapshots.push(...chunk);
+    }
+    if (snapshots.some((snapshot) => !snapshot.exists())) {
+      throw new Error("A job changed while the import was open. Review the refreshed merge preview and try again.");
+    }
+    applications = snapshots.map((snapshot) => deserializeApplication(snapshot.id, snapshot.data()));
+  }
   const id = generateId();
   const createdAt = new Date().toISOString();
   const backup: ImportBackup = {
     id,
     createdAt,
     sourceFileName: sanitizeSingleLineText(sourceFileName, 255) || "Imported workbook",
+    scope: mode === "replace" ? "full" : "changes",
     applications,
   };
   const expectedIds = new Set(applications.map((application) => application.id));
@@ -132,6 +155,8 @@ export async function createApplicationImportBackup(
     sourceFileName: backup.sourceFileName,
     applicationCount: applications.length,
     mode,
+    // Scoped merge backups contain only the records whose stable IDs will be updated.
+    scope: backup.scope,
     status: "writing",
   });
 
@@ -241,15 +266,40 @@ export async function replaceApplications(userId: string, applications: JobAppli
   await commitOperations(operations, userId);
 }
 
-export async function upsertApplications(userId: string, applications: JobApplication[]): Promise<void> {
+export async function upsertApplications(
+  userId: string,
+  additions: JobApplication[],
+  updates: JobApplication[] = [],
+): Promise<void> {
+  const applications = [...updates, ...additions];
   if (applications.length === 0) return;
   await persistCompanies(userId, applications);
   const now = new Date().toISOString();
-  // Incremental imports only set additions/explicit-ID updates; they never queue delete operations.
-  await commitOperations(applications.map((application) => ({
-    type: "set" as const,
-    application: { ...application, createdAt: application.createdAt || now, updatedAt: now },
-  })), userId);
+  const operations = [
+    ...updates.map((application) => ({ application, expectedToExist: true })),
+    ...additions.map((application) => ({ application, expectedToExist: false })),
+  ];
+
+  for (let index = 0; index < operations.length; index += BATCH_OPERATION_LIMIT) {
+    const chunk = operations.slice(index, index + BATCH_OPERATION_LIMIT);
+    // Transaction retries make the existence checks and writes atomic across cross-device changes.
+    await runTransaction(getFirestoreDatabase(), async (transaction) => {
+      const references = chunk.map(({ application }) => doc(applicationCollection(userId), application.id));
+      const snapshots = await Promise.all(references.map((reference) => transaction.get(reference)));
+      const conflicted = snapshots.some((snapshot, snapshotIndex) => snapshot.exists() !== chunk[snapshotIndex].expectedToExist);
+      if (conflicted) {
+        throw new Error("A job changed on another device while the import was open. Review the refreshed merge preview and try again.");
+      }
+      chunk.forEach(({ application }, operationIndex) => {
+        // Incremental imports set only additions or protected stable-ID updates and never delete unrelated jobs.
+        transaction.set(references[operationIndex], serializeApplication({
+          ...application,
+          createdAt: application.createdAt || now,
+          updatedAt: now,
+        }));
+      });
+    });
+  }
 }
 
 export async function mergeLocalApplicationsOnce(userId: string, localApplications: JobApplication[]): Promise<void> {
