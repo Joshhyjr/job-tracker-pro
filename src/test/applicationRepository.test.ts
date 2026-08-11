@@ -5,11 +5,13 @@ import {
   replaceApplications,
   serializeApplication,
   serializeCompany,
+  synchronizeCompanyDirectory,
   upsertApplications,
 } from "@/lib/applicationRepository";
 import type { JobApplication } from "@/lib/types";
 
 const firestoreMocks = vi.hoisted(() => ({
+  getDoc: vi.fn(),
   getDocs: vi.fn(),
   getDocFromServer: vi.fn(),
   getDocsFromServer: vi.fn(),
@@ -42,7 +44,7 @@ vi.mock("firebase/firestore", () => ({
       return [];
     }).join("/"),
   })),
-  getDoc: vi.fn(),
+  getDoc: firestoreMocks.getDoc,
   getDocFromServer: firestoreMocks.getDocFromServer,
   getDocs: firestoreMocks.getDocs,
   getDocsFromServer: firestoreMocks.getDocsFromServer,
@@ -96,6 +98,7 @@ function mockBatchedReplacement(existingCount: number, failAtBatch?: number) {
 }
 
 beforeEach(() => {
+  firestoreMocks.getDoc.mockReset();
   firestoreMocks.getDocs.mockReset();
   firestoreMocks.getDocFromServer.mockReset();
   firestoreMocks.getDocsFromServer.mockReset();
@@ -111,6 +114,37 @@ beforeEach(() => {
     get: firestoreMocks.transactionGet,
     set: firestoreMocks.transactionSet,
   }));
+});
+
+describe("synchronizeCompanyDirectory", () => {
+  it("coalesces realtime re-entry into one batched migration and records completion", async () => {
+    const current = Array.from({ length: 108 }, (_, index) => application({ id: `current-${index}` }));
+    const committedBatches = mockBatchedReplacement(0);
+    firestoreMocks.getDoc.mockResolvedValue({ exists: () => false });
+
+    const first = synchronizeCompanyDirectory("migration-user", current);
+    const second = synchronizeCompanyDirectory("migration-user", current);
+    await Promise.all([first, second]);
+
+    // A 108-row realtime collection must yield one application batch, not 108 overlapping setDoc cascades.
+    expect(firestoreMocks.getDoc).toHaveBeenCalledOnce();
+    expect(committedBatches.map((batch) => batch.length)).toEqual([108]);
+    const markerCalls = firestoreMocks.setDoc.mock.calls.filter(([reference]) =>
+      String((reference as { path?: string }).path).includes("metadata/companyDirectoryV1"));
+    expect(markerCalls).toHaveLength(1);
+    expect(markerCalls[0][1]).toMatchObject({ applicationCount: 108, version: 1 });
+  });
+
+  it("skips all directory writes after the durable migration marker exists", async () => {
+    firestoreMocks.getDoc.mockResolvedValue({ exists: () => true });
+
+    await synchronizeCompanyDirectory("completed-migration-user", [application()]);
+
+    // Fresh browser sessions pay for one marker read and never rewrite already-migrated applications.
+    expect(firestoreMocks.getDoc).toHaveBeenCalledOnce();
+    expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
+    expect(firestoreMocks.setDoc).not.toHaveBeenCalled();
+  });
 });
 
 describe("application repository serialization", () => {

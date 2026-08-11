@@ -21,6 +21,7 @@ import type { Company, JobApplication } from "./types";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeSingleLineText } from "./security";
 
 const BATCH_OPERATION_LIMIT = 450;
+const COMPANY_DIRECTORY_MIGRATION_ID = "companyDirectoryV1";
 
 function applicationCollection(userId: string) {
   return collection(getFirestoreDatabase(), "users", userId, "applications");
@@ -84,27 +85,47 @@ async function persistCompanies(userId: string, applications: JobApplication[]):
   }
 }
 
-const synchronizedCompanySignatures = new Map<string, string>();
+const companyDirectoryMigrations = new Map<string, Promise<void>>();
 
-/** Backfills stable company references for existing cloud rows without touching application timestamps or notes. */
-export async function synchronizeCompanyDirectory(userId: string, applications: JobApplication[]): Promise<void> {
-  const signature = applications.map((application) => `${application.id}:${application.companyId ?? ""}:${application.companyLogoUrl ?? ""}`).sort().join("|");
-  if (!signature || synchronizedCompanySignatures.get(userId) === signature) return;
+async function migrateCompanyDirectory(userId: string, applications: JobApplication[]): Promise<void> {
+  const markerRef = doc(getFirestoreDatabase(), "users", userId, "metadata", COMPANY_DIRECTORY_MIGRATION_ID);
+  // A durable marker prevents every page load from rewriting the complete application collection.
+  if ((await getDoc(markerRef)).exists()) return;
 
   await persistCompanies(userId, applications);
-  for (let index = 0; index < applications.length; index += 100) {
-    await Promise.all(applications.slice(index, index + 100).map((application) => setDoc(
-      doc(applicationCollection(userId), application.id),
-      {
+  for (let index = 0; index < applications.length; index += BATCH_OPERATION_LIMIT) {
+    const batch = writeBatch(getFirestoreDatabase());
+    applications.slice(index, index + BATCH_OPERATION_LIMIT).forEach((application) => {
+      // One atomic batch produces one realtime change instead of one snapshot and rerender per application.
+      batch.set(doc(applicationCollection(userId), application.id), {
         companyId: application.companyId,
         companyName: application.companyName,
         companyDomain: application.companyDomain ?? "",
         companyLogoUrl: application.companyLogoUrl ?? "",
-      },
-      { merge: true },
-    )));
+      }, { merge: true });
+    });
+    await batch.commit();
   }
-  synchronizedCompanySignatures.set(userId, signature);
+  // The marker is written last so an interrupted migration remains eligible for a safe retry.
+  await setDoc(markerRef, { completedAt: new Date().toISOString(), applicationCount: applications.length, version: 1 });
+}
+
+/** Backfills stable company references once without allowing realtime snapshots to start overlapping migrations. */
+export async function synchronizeCompanyDirectory(userId: string, applications: JobApplication[]): Promise<void> {
+  if (applications.length === 0) return;
+  const existingMigration = companyDirectoryMigrations.get(userId);
+  if (existingMigration) return existingMigration;
+
+  const migration = migrateCompanyDirectory(userId, applications);
+  // Register before the first await so snapshots emitted by the batch reuse this exact in-flight operation.
+  companyDirectoryMigrations.set(userId, migration);
+  try {
+    await migration;
+  } catch (error) {
+    // Failed migrations must be retryable after connectivity or permission recovery.
+    companyDirectoryMigrations.delete(userId);
+    throw error;
+  }
 }
 
 export async function createApplicationImportBackup(
