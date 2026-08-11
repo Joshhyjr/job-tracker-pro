@@ -343,4 +343,26 @@ describe("upsertApplications", () => {
     // A stale browser plan may refresh harmless company metadata, but it cannot overwrite the newer application.
     expect(firestoreMocks.transactionSet).not.toHaveBeenCalled();
   });
+
+  it("treats an existing addition as complete during an outbox retry", async () => {
+    firestoreMocks.transactionGet.mockResolvedValue({ exists: () => true, data: () => ({ pendingSyncId: "queue-entry-1" }) });
+
+    await upsertApplications("user-1", [application({ id: "already-written-job" })], [], {
+      additionSyncTokens: new Map([["already-written-job", "queue-entry-1"]]),
+    });
+
+    // A timed-out first attempt may have committed; retrying must acknowledge it without overwriting cloud data.
+    expect(firestoreMocks.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a different outbox token as an idempotent retry", async () => {
+    firestoreMocks.transactionGet.mockResolvedValue({ exists: () => true, data: () => ({ pendingSyncId: "another-device-token" }) });
+
+    await expect(upsertApplications("user-1", [application({ id: "colliding-job" })], [], {
+      additionSyncTokens: new Map([["colliding-job", "our-queue-token"]]),
+    })).rejects.toThrow("another device");
+
+    // A stable-ID collision retains the original cloud row even while the browser outbox remains retryable.
+    expect(firestoreMocks.transactionSet).not.toHaveBeenCalled();
+  });
 });

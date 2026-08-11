@@ -414,6 +414,15 @@ describe("import backups", () => {
     });
   });
 
+  it("isolates signed-in browser backups by owner UID", () => {
+    const first = createImportBackup(mapRowsToApplications([{ "Job Title": "Engineer", Company: "IBM" }]), "first.xlsx", "owner", "changes", "owner-1");
+    const second = createImportBackup(mapRowsToApplications([{ "Job Title": "Designer", Company: "Apple" }]), "second.xlsx", "owner", "changes", "owner-2");
+
+    // Shared devices must retain separate recovery points for different authenticated accounts.
+    expect(getLatestImportBackup("owner", "owner-1")).toEqual(first);
+    expect(getLatestImportBackup("owner", "owner-2")).toEqual(second);
+  });
+
   it("blocks the merge boundary when a browser backup cannot be written", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("storage quota exceeded");

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { User } from "firebase/auth";
 import AppNavbar from "@/components/AppNavbar";
 
-const requiredProps = { onExportCSV: vi.fn(), onExportXLSX: vi.fn(), onImportXLSX: vi.fn(), syncing: false, offline: false };
+const requiredProps = { onExportCSV: vi.fn(), onExportXLSX: vi.fn(), onImportXLSX: vi.fn(), syncing: false, pendingSyncCount: 0, offline: false };
 
 describe("AppNavbar", () => {
   it("keeps demo account actions grouped in the user menu", async () => {
@@ -48,5 +48,15 @@ describe("AppNavbar", () => {
     expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Log in with Google" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Choose an XLSX workbook from the navbar")).toHaveAttribute("accept", ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  });
+
+  it("reports browser-saved owner jobs waiting for cloud sync", async () => {
+    const user = { email: "joshuakivaria@gmail.com" } as User;
+    render(<MemoryRouter initialEntries={["/app"]}><AppNavbar {...requiredProps} pendingSyncCount={2} mode="owner" user={user} /></MemoryRouter>);
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Joshua/i }), { button: 0, ctrlKey: false });
+
+    // A pending count is actionable and does not leave the account menu claiming a permanent sync operation.
+    expect(await screen.findByText("2 pending")).toBeInTheDocument();
   });
 });

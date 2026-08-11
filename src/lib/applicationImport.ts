@@ -27,6 +27,7 @@ interface ApplyConfirmedImportOptions {
   persistMerge: (additions: JobApplication[], updates: JobApplication[]) => Promise<void>;
   persistReplacement: (applications: JobApplication[]) => Promise<void>;
   storageScope?: ImportStorageScope;
+  ownerId?: string;
 }
 
 export async function applyConfirmedApplicationImport({
@@ -39,6 +40,7 @@ export async function applyConfirmedApplicationImport({
   persistMerge,
   persistReplacement,
   storageScope = "owner",
+  ownerId,
 }: ApplyConfirmedImportOptions): Promise<ImportBackup | null> {
   const updatedIds = new Set(plan.updates.map((application) => application.id));
   // Additions cannot damage current jobs; only replacement and stable-ID updates need pre-write recovery data.
@@ -63,7 +65,8 @@ export async function applyConfirmedApplicationImport({
     saveDemoApplications(nextApplications);
     markDemoSeeded();
   } else {
-    saveApplications(nextApplications);
+    // Authenticated browser caches stay isolated when more than one account uses the same device.
+    saveApplications(nextApplications, ownerId);
     markSeeded();
     persistWorkbookImport(fileName, result);
   }

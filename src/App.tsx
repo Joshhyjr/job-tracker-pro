@@ -66,6 +66,7 @@ interface JobTrackerShellProps {
   applications: JobApplication[];
   loading: boolean;
   syncing: boolean;
+  pendingSyncCount: number;
   offline: boolean;
   syncError: string;
   createApplication: (input: Omit<JobApplication, "id" | "activityLog" | "createdAt" | "updatedAt">) => Promise<JobApplication>;
@@ -87,6 +88,7 @@ function JobTrackerShell({
   applications,
   loading,
   syncing,
+  pendingSyncCount,
   offline,
   syncError,
   createApplication,
@@ -135,7 +137,7 @@ function JobTrackerShell({
     setIsApplyingImport(true);
 
     try {
-      // The import transaction verifies its backup before invoking the additive cloud writer.
+      // The import transaction verifies browser recovery data before queueing additive cloud synchronization.
       await applyConfirmedApplicationImport({
         currentApplications: applications,
         fileName: pendingImport.file.name,
@@ -146,22 +148,21 @@ function JobTrackerShell({
         persistMerge: mergeApplications,
         persistReplacement: replaceApplications,
         storageScope: mode,
+        ownerId: user?.uid,
       });
       if (importMode === "replace") {
-        // Owner snapshots are durable across browsers; demo snapshots remain intentionally device-local.
-        const backupLocation = mode === "owner" ? "Firestore" : "this browser";
         toast({
           title: "Dataset replaced safely",
-          description: `Replaced the active dataset with ${pendingImport.result.applications.length} jobs from the workbook. The previous dataset was backed up in ${backupLocation} first.`,
+          description: `Replaced the active dataset with ${pendingImport.result.applications.length} jobs from the workbook. The previous dataset was backed up in this browser first.`,
         });
       } else {
         const recoveryDescription = pendingPlan.updates.length > 0
           ? `The ${pendingPlan.updates.length} changed ${pendingPlan.updates.length === 1 ? "job was" : "jobs were"} backed up before updating.`
           : "No backup was needed because no current jobs were changed.";
         toast({
-          title: "Import merged safely",
-          // Report the narrower recovery boundary so additions-only imports never imply a costly full snapshot.
-          description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted. ${recoveryDescription}`,
+          title: mode === "owner" ? "Import saved in this browser" : "Import merged safely",
+          // Owner imports are complete locally before Firestore is allowed to synchronize in the background.
+          description: `Added ${pendingPlan.additions.length}, updated ${pendingPlan.updates.length}, and skipped ${pendingPlan.skipped.length} duplicate rows. No current jobs were deleted. ${recoveryDescription}${mode === "owner" ? " Cloud sync will continue in the background." : ""}`,
         });
       }
       pendingImport.result.warnings.forEach((warning) => {
@@ -189,6 +190,7 @@ function JobTrackerShell({
       <AppNavbar
         user={user}
         syncing={syncing}
+        pendingSyncCount={pendingSyncCount}
         offline={offline}
         onSignOut={onSignOut}
         mode={mode}
@@ -211,6 +213,12 @@ function JobTrackerShell({
               <AlertDescription className="text-xs">Public demo: synthetic data is saved only in this browser. Log in with the approved Google account to open the private workspace.</AlertDescription>
             </Alert>
           )}
+          {mode === "owner" && pendingSyncCount > 0 && (
+            <Alert className="mb-5 border-amber-500/30 bg-amber-500/10 py-2.5">
+              {/* Pending jobs remain fully usable from the verified UID-scoped browser outbox. */}
+              <AlertDescription className="text-xs">{pendingSyncCount} {pendingSyncCount === 1 ? "job is" : "jobs are"} saved in this browser and waiting for Firestore. You can keep working; cloud sync retries automatically.</AlertDescription>
+            </Alert>
+          )}
           {authError && <Alert variant="destructive" className="mb-5"><AlertDescription>{authError}</AlertDescription></Alert>}
           {syncError && <Alert variant="destructive" className="mb-5"><AlertDescription>{syncError}</AlertDescription></Alert>}
           <Routes>
@@ -222,7 +230,7 @@ function JobTrackerShell({
             <Route path="analytics" element={<Analytics applications={applications} isDemo={mode === "demo"} user={user} />} />
             {/* Device-local documents are scoped separately from the public demo and from other owner identities. */}
             <Route path="documents" element={<Documents applications={applications} mode={mode} ownerId={user?.uid} />} />
-            <Route path="settings" element={<Settings mode={mode} user={user} syncing={syncing} offline={offline} />} />
+            <Route path="settings" element={<Settings mode={mode} user={user} syncing={syncing} pendingSyncCount={pendingSyncCount} offline={offline} />} />
             <Route path="add" element={<ApplicationForm onCreate={createApplication} onUpdate={updateApplication} />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -236,7 +244,7 @@ function JobTrackerShell({
         skippedCount={pendingPlan?.skipped.length ?? 0}
         currentCount={applications.length}
         importedCount={pendingImport?.result.applications.length ?? 0}
-        backupDestination={mode === "owner" ? "firestore" : "browser"}
+        backupDestination="browser"
         mode={importMode}
         isApplying={isApplyingImport}
         onCancel={() => setPendingImport(null)}

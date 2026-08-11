@@ -29,6 +29,7 @@ export interface AppNavbarProps {
   onImportXLSX: (file: File) => Promise<void>;
   user?: User;
   syncing: boolean;
+  pendingSyncCount: number;
   offline: boolean;
   onSignOut?: () => Promise<void>;
   mode: "demo" | "owner";
@@ -42,6 +43,7 @@ export default function AppNavbar({
   onImportXLSX,
   user,
   syncing,
+  pendingSyncCount,
   offline,
   onSignOut,
   mode,
@@ -115,8 +117,9 @@ export default function AppNavbar({
               <div className="px-2 py-1.5 text-xs text-muted-foreground">
                 <p className="font-medium text-foreground">{mode === "owner" ? user?.email : "Public demo workspace"}</p>
                 <p className="mt-1 flex items-center gap-1.5">
-                  {mode === "owner" ? (offline ? <CloudOff className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />) : null}
-                  {mode === "owner" ? (syncing ? "Syncing" : offline ? "Offline" : "Synced") : "Saved in this browser"}
+                  {mode === "owner" ? (offline || pendingSyncCount > 0 ? <CloudOff className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />) : null}
+                  {/* Pending is more useful than a permanent spinner when Firestore is applying quota backoff. */}
+                  {mode === "owner" ? (syncing ? "Syncing" : pendingSyncCount > 0 ? `${pendingSyncCount} pending` : offline ? "Offline" : "Synced") : "Saved in this browser"}
                 </p>
               </div>
               <DropdownMenuSeparator />

@@ -85,6 +85,8 @@ export function useDemoApplications() {
     applications,
     loading,
     syncing,
+    // Demo records never enter the authenticated Firestore outbox.
+    pendingSyncCount: 0,
     offline: false,
     syncError,
     createApplication: (input: Omit<JobApplication, "id" | "activityLog" | "createdAt" | "updatedAt">) => runMutation(() => {

@@ -291,6 +291,7 @@ export async function upsertApplications(
   userId: string,
   additions: JobApplication[],
   updates: JobApplication[] = [],
+  { additionSyncTokens }: { additionSyncTokens?: ReadonlyMap<string, string> } = {},
 ): Promise<void> {
   const applications = [...updates, ...additions];
   if (applications.length === 0) return;
@@ -307,17 +308,31 @@ export async function upsertApplications(
     await runTransaction(getFirestoreDatabase(), async (transaction) => {
       const references = chunk.map(({ application }) => doc(applicationCollection(userId), application.id));
       const snapshots = await Promise.all(references.map((reference) => transaction.get(reference)));
-      const conflicted = snapshots.some((snapshot, snapshotIndex) => snapshot.exists() !== chunk[snapshotIndex].expectedToExist);
+      const conflicted = snapshots.some((snapshot, snapshotIndex) => {
+        const operation = chunk[snapshotIndex];
+        if (operation.expectedToExist) return !snapshot.exists();
+        if (!snapshot.exists()) return false;
+        const syncToken = additionSyncTokens?.get(operation.application.id);
+        // Only our exact outbox token can turn an existing addition into an idempotent retry; cross-device rows still conflict.
+        return !syncToken || snapshot.data()?.pendingSyncId !== syncToken;
+      });
       if (conflicted) {
         throw new Error("A job changed on another device while the import was open. Review the refreshed merge preview and try again.");
       }
       chunk.forEach(({ application }, operationIndex) => {
+        const operation = chunk[operationIndex];
+        const syncToken = !operation.expectedToExist ? additionSyncTokens?.get(application.id) : undefined;
+        if (!operation.expectedToExist && snapshots[operationIndex].exists()) return;
         // Incremental imports set only additions or protected stable-ID updates and never delete unrelated jobs.
-        transaction.set(references[operationIndex], serializeApplication({
-          ...application,
-          createdAt: application.createdAt || now,
-          updatedAt: now,
-        }));
+        transaction.set(references[operationIndex], {
+          ...serializeApplication({
+            ...application,
+            createdAt: application.createdAt || now,
+            updatedAt: now,
+          }),
+          // The durable token lets a later retry distinguish its own committed write from a true ID collision.
+          ...(syncToken ? { pendingSyncId: syncToken } : {}),
+        });
       });
     });
   }

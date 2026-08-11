@@ -670,17 +670,28 @@ function getStoredApplications(storageKey: string): JobApplication[] {
   }
 }
 
-export function getApplications(): JobApplication[] {
-  return getStoredApplications(STORAGE_KEY);
+function ownerApplicationStorageKey(ownerId?: string): string {
+  // Signed-in caches are account-scoped while legacy callers retain the migration-compatible key.
+  return ownerId ? `${STORAGE_KEY}:${encodeURIComponent(ownerId)}` : STORAGE_KEY;
 }
 
-export function saveApplications(apps: JobApplication[]) {
-  safeStorageSetItem(STORAGE_KEY, JSON.stringify(apps));
+export function getApplications(ownerId?: string): JobApplication[] {
+  return getStoredApplications(ownerApplicationStorageKey(ownerId));
 }
 
-export function getLatestImportBackup(scope: ImportStorageScope = "owner"): ImportBackup | null {
-  // Demo snapshots use a separate key so signed-out imports cannot overwrite an owner's recovery point.
-  const backupKey = scope === "demo" ? LATEST_DEMO_IMPORT_BACKUP_KEY : LATEST_IMPORT_BACKUP_KEY;
+export function saveApplications(apps: JobApplication[], ownerId?: string) {
+  safeStorageSetItem(ownerApplicationStorageKey(ownerId), JSON.stringify(apps));
+}
+
+function importBackupStorageKey(scope: ImportStorageScope, ownerId?: string): string {
+  // Authenticated snapshots include the UID so a shared browser cannot expose one owner's recovery data to another.
+  if (scope === "owner" && ownerId) return `${LATEST_IMPORT_BACKUP_KEY}:${encodeURIComponent(ownerId)}`;
+  return scope === "demo" ? LATEST_DEMO_IMPORT_BACKUP_KEY : LATEST_IMPORT_BACKUP_KEY;
+}
+
+export function getLatestImportBackup(scope: ImportStorageScope = "owner", ownerId?: string): ImportBackup | null {
+  // Legacy owner callers retain their original key while signed-in flows use the UID-scoped recovery namespace.
+  const backupKey = importBackupStorageKey(scope, ownerId);
   const raw = safeLocalStorageGetItem(backupKey);
   if (!raw) return null;
 
@@ -705,6 +716,7 @@ export function createImportBackup(
   sourceFileName: string,
   scope: ImportStorageScope = "owner",
   backupScope: ImportBackup["scope"] = "full",
+  ownerId?: string,
 ): ImportBackup {
   const backup: ImportBackup = {
     id: generateId(),
@@ -716,9 +728,9 @@ export function createImportBackup(
   };
 
   // Verify the write because a merge must not start when browser storage blocks or exceeds its quota.
-  const backupKey = scope === "demo" ? LATEST_DEMO_IMPORT_BACKUP_KEY : LATEST_IMPORT_BACKUP_KEY;
+  const backupKey = importBackupStorageKey(scope, ownerId);
   safeStorageSetItem(backupKey, JSON.stringify(backup));
-  const persisted = getLatestImportBackup(scope);
+  const persisted = getLatestImportBackup(scope, ownerId);
   if (persisted?.id !== backup.id) throw new Error("Could not create the automatic import backup in this browser.");
   return persisted;
 }
