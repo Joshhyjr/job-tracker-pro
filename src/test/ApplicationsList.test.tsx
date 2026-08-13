@@ -32,6 +32,7 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
     followUpDate: overrides.followUpDate ?? "",
     // Optional link input is included so drawer security tests cannot pass on a missing fixture field.
     jobLink: overrides.jobLink,
+    customFields: overrides.customFields,
     activityLog: overrides.activityLog ?? [],
   };
 }
@@ -174,6 +175,54 @@ describe("ApplicationsList", () => {
     // The header remains aligned with row checkboxes without presenting an unexplained control.
     expect(screen.queryByLabelText("Select all filtered applications")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select all" })).toBeInTheDocument();
+  });
+
+  it("attaches a selected resume and cover letter to the chosen application", async () => {
+    const onUpdate = vi.fn().mockImplementation(async (item: JobApplication) => item);
+    const onAttachmentsComplete = vi.fn();
+    renderList({
+      onUpdate,
+      onAttachmentsComplete,
+      pendingAttachments: [
+        { id: "resume", name: "Acme Resume.pdf", category: "Resumes" },
+        { id: "cover", name: "Acme Cover Letter.pdf", category: "Cover letters" },
+      ],
+    });
+
+    const row = screen.getByText("Frontend Engineer").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row!).getByRole("button", { name: "Attach here" }));
+
+    // Both filenames persist in one application write, while bulk-delete selection stays out of attachment mode.
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      id: "app-1",
+      customFields: {
+        "Resume Used": "Acme Resume.pdf",
+        "Cover Letter Used": "Acme Cover Letter.pdf",
+      },
+      activityLog: expect.arrayContaining([
+        expect.objectContaining({ message: "Attached Acme Resume.pdf as Resume Used" }),
+        expect.objectContaining({ message: "Attached Acme Cover Letter.pdf as Cover Letter Used" }),
+      ]),
+    })));
+    expect(screen.queryByRole("button", { name: "Select all" })).not.toBeInTheDocument();
+    expect(onAttachmentsComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an existing document when manual attachment would overwrite it", () => {
+    const onUpdate = vi.fn().mockImplementation(async (item: JobApplication) => item);
+    renderList({
+      applications: [application({ customFields: { "Resume Used": "Original Resume.pdf" } })],
+      onUpdate,
+      pendingAttachments: [{ id: "resume", name: "Replacement Resume.pdf", category: "Resumes" }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Attach here" }));
+
+    // Conflict handling leaves the application and attachment mode intact so the user can choose another job.
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Existing attachment kept", variant: "destructive" }));
+    expect(screen.getByText("Replacement Resume.pdf")).toBeInTheDocument();
   });
 
   it("shows a resolved company logo in the company column", () => {

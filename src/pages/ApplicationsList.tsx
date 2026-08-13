@@ -7,6 +7,7 @@ import {
   FilterX,
   GripVertical,
   LayoutGrid,
+  Link2,
   List,
   MoreHorizontal,
   Plus,
@@ -18,6 +19,7 @@ import PageHeader from "@/components/PageHeader";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -34,6 +36,11 @@ import {
 } from "@/lib/responseStatus";
 import { generateId } from "@/lib/storage";
 import { sanitizeExternalHttpUrl } from "@/lib/security";
+import {
+  buildApplicationDocumentAttachment,
+  getDocumentSelectionError,
+  type DocumentAttachment,
+} from "@/lib/documentMatching";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
 import { cn, formatDisplayDate } from "@/lib/utils";
@@ -49,9 +56,11 @@ interface ApplicationsListProps {
   onDelete: (id: string) => Promise<void>;
   isDemo?: boolean;
   readOnly?: boolean;
+  pendingAttachments?: DocumentAttachment[];
+  onAttachmentsComplete?: () => void;
 }
 
-export default function ApplicationsList({ applications, onSelect, onUpdate, onDelete, readOnly = false }: ApplicationsListProps) {
+export default function ApplicationsList({ applications, onSelect, onUpdate, onDelete, readOnly = false, pendingAttachments = [], onAttachmentsComplete }: ApplicationsListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [companyFilter, setCompanyFilter] = useState("");
@@ -64,6 +73,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [attachingApplicationId, setAttachingApplicationId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, string>>({});
@@ -71,6 +81,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const [pageSize, setPageSize] = useState(10);
   const activeStatus = searchParams.get("status") as CurrentStatus | null;
   const activeResponseStatus = searchParams.get("responseStatus");
+  const isAttachmentMode = pendingAttachments.length > 0;
   const { toast } = useToast();
   // Drawer links revalidate legacy and imported records before exposing a browser navigation target.
   const selectedJobPostingHref = sanitizeExternalHttpUrl(selectedApplication?.jobLink);
@@ -126,6 +137,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const hasActiveFilters = Boolean(search || companyFilter.trim() || dateFilterValue || dateFilterEnd || activeStatus || activeResponseStatus);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pagedApplications = filtered.slice((Math.min(page, pageCount) - 1) * pageSize, Math.min(page, pageCount) * pageSize);
+  const tableColumnCount = readOnly ? 6 : isAttachmentMode ? 7 : 8;
 
   function currentResponseStatus(application: JobApplication) {
     return optimisticStatuses[application.id] || normalizeResponseStatus(application.responseStatus);
@@ -181,6 +193,41 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
     catch { toast({ title: "Sync failed", description: "The status was not saved. Please retry.", variant: "destructive" }); }
   }
 
+  async function handleAttachDocuments(application: JobApplication) {
+    if (!isAttachmentMode || attachingApplicationId) return;
+    const selectionError = getDocumentSelectionError(pendingAttachments);
+    if (selectionError) {
+      toast({ title: "Files not attached", description: selectionError, variant: "destructive" });
+      return;
+    }
+
+    const result = buildApplicationDocumentAttachment(application, pendingAttachments, new Date().toISOString(), generateId);
+    if (result.status === "conflict") {
+      toast({
+        title: "Existing attachment kept",
+        description: `${application.companyName} — ${application.jobTitle} already uses ${result.existingName} for ${result.field}. Choose another application or remove the existing link first.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (result.status === "unchanged") {
+      toast({ title: "Files already attached", description: `The selected files are already linked to ${application.companyName} — ${application.jobTitle}.` });
+      onAttachmentsComplete?.();
+      return;
+    }
+
+    setAttachingApplicationId(application.id);
+    try {
+      await onUpdate(result.application);
+      toast({ title: "Files attached", description: `${pendingAttachments.length} file${pendingAttachments.length === 1 ? "" : "s"} linked to ${application.companyName} — ${application.jobTitle}.` });
+      onAttachmentsComplete?.();
+    } catch {
+      toast({ title: "Files not attached", description: "The application update failed. Your files remain safe in Documents; please retry.", variant: "destructive" });
+    } finally {
+      setAttachingApplicationId(null);
+    }
+  }
+
   async function moveApplication(application: JobApplication, responseStatus: string, offerUndo = true) {
     const previousStatus = currentResponseStatus(application);
     if (previousStatus === responseStatus) return;
@@ -206,7 +253,18 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Applications" description="Manage all your job applications in one place." actions={<><Button variant="outline" size="sm" onClick={() => document.getElementById("job-tracker-import-input")?.click()}><Upload />Import</Button><Button size="sm" asChild><Link to="/app/add"><Plus />Add Application</Link></Button></>} />
+      <PageHeader title="Applications" description={isAttachmentMode ? "Choose the job that should use the selected files." : "Manage all your job applications in one place."} actions={<><Button variant="outline" size="sm" onClick={() => document.getElementById("job-tracker-import-input")?.click()}><Upload />Import</Button><Button size="sm" asChild><Link to="/app/add"><Plus />Add Application</Link></Button></>} />
+
+      {isAttachmentMode && (
+        <Alert className="border-primary/25 bg-primary/5">
+          <Link2 className="h-4 w-4" />
+          <AlertTitle>Choose an application</AlertTitle>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>{pendingAttachments.map((document) => document.name).join(" · ")}</span>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => onAttachmentsComplete?.()}>Cancel attachment</Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <section className="app-panel flex flex-col gap-2 p-3 xl:flex-row xl:items-center" aria-label="Application filters">
         <div className="relative min-w-56 flex-1"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search applications" placeholder="Search company or job title" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} className="h-9 pl-9 text-xs" /></div>
@@ -216,18 +274,47 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
         <Input aria-label={dateFilterMode === "range" ? "From date" : "Date value"} disabled={dateFilterMode === "any"} type={dateFilterMode === "range" || dateFilterMode === "date" ? "date" : dateFilterMode === "month" ? "month" : "number"} min={dateFilterMode === "year" ? "1900" : undefined} max={dateFilterMode === "year" ? "2100" : undefined} value={dateFilterValue} onChange={(event) => { setDateFilterValue(event.target.value); setPage(1); }} className="h-9 text-xs xl:w-36" />
         {dateFilterMode === "range" && <Input aria-label="To date" type="date" value={dateFilterEnd} onChange={(event) => { setDateFilterEnd(event.target.value); setPage(1); }} className="h-9 text-xs xl:w-36" />}
         {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} aria-label="Reset filters"><FilterX />Reset</Button>}
-        <div className="ml-auto flex rounded-md border p-0.5" aria-label="Application view"><Button variant={viewMode === "list" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" aria-label="List view" onClick={() => setViewMode("list")}><List /></Button><Button variant={viewMode === "board" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" aria-label="Board view" onClick={() => setViewMode("board")}><LayoutGrid /></Button></div>
+        {!isAttachmentMode && <div className="ml-auto flex rounded-md border p-0.5" aria-label="Application view"><Button variant={viewMode === "list" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" aria-label="List view" onClick={() => setViewMode("list")}><List /></Button><Button variant={viewMode === "board" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" aria-label="Board view" onClick={() => setViewMode("board")}><LayoutGrid /></Button></div>}
       </section>
 
-      {!readOnly && selectedFilteredIds.length > 0 && <div className="flex flex-col gap-3 rounded-md border border-destructive/25 bg-destructive/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs font-semibold" aria-live="polite">{selectedFilteredIds.length} of {filtered.length} filtered applications selected</p><Button variant="destructive" size="sm" onClick={() => setDeleteDialogOpen(true)}><Trash2 />Delete selected</Button></div>}
+      {!readOnly && !isAttachmentMode && selectedFilteredIds.length > 0 && <div className="flex flex-col gap-3 rounded-md border border-destructive/25 bg-destructive/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs font-semibold" aria-live="polite">{selectedFilteredIds.length} of {filtered.length} filtered applications selected</p><Button variant="destructive" size="sm" onClick={() => setDeleteDialogOpen(true)}><Trash2 />Delete selected</Button></div>}
       {/* The status dropdown is the single status-filter surface, so bulk selection can stay compact and unambiguous. */}
-      {!readOnly && filtered.length > 0 && <div className="flex justify-end"><Button variant="outline" size="sm" onClick={() => toggleSelectAll(!allFilteredSelected)}>{allFilteredSelected ? "Clear selection" : "Select all"}</Button></div>}
+      {!readOnly && !isAttachmentMode && filtered.length > 0 && <div className="flex justify-end"><Button variant="outline" size="sm" onClick={() => toggleSelectAll(!allFilteredSelected)}>{allFilteredSelected ? "Clear selection" : "Select all"}</Button></div>}
 
-      {viewMode === "list" ? (
+      {isAttachmentMode || viewMode === "list" ? (
         <section className="app-panel overflow-hidden" aria-label="Applications list">
-          <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/30">{!readOnly && <TableHead className="w-10"><span className="sr-only">Select</span></TableHead>}<TableHead>Job Title</TableHead><TableHead>Company</TableHead><TableHead className="hidden md:table-cell">Location</TableHead><TableHead>Status</TableHead><TableHead className="hidden lg:table-cell">Follow-up</TableHead><TableHead><button type="button" className="flex items-center gap-1" onClick={() => setSortAsc((current) => !current)}>Date Applied <ArrowUpDown className="h-3 w-3" /></button></TableHead>{!readOnly && <TableHead className="w-10"><span className="sr-only">Actions</span></TableHead>}</TableRow></TableHeader><TableBody>
-            {pagedApplications.length === 0 ? <TableRow><TableCell colSpan={readOnly ? 6 : 8} className="py-12 text-center text-sm text-muted-foreground">No applications found.</TableCell></TableRow> : pagedApplications.map((application) => <TableRow key={application.id} className="cursor-pointer hover:bg-muted/40" onClick={() => openDrawer(application)}>{!readOnly && <TableCell onClick={(event) => event.stopPropagation()}><Checkbox aria-label={`Select ${application.jobTitle} at ${application.companyName}`} checked={selectedIds.has(application.id)} onCheckedChange={(checked) => setSelectedIds((current) => { const next = new Set(current); if (checked === true) next.add(application.id); else next.delete(application.id); return next; })} /></TableCell>}<TableCell className="min-w-48 font-semibold">{application.jobTitle}</TableCell><TableCell><span className="flex min-w-32 items-center gap-2"><CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} /><span className="truncate">{application.companyName}</span></span></TableCell><TableCell className="hidden md:table-cell">{application.location}</TableCell><TableCell><span className="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={getResponseStatusBadgeStyle(currentResponseStatus(application))}>{currentResponseStatus(application)}</span></TableCell><TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{application.followUpDate ? formatDisplayDate(application.followUpDate) : application.followUps ? "Completed" : "—"}</TableCell><TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDisplayDate(application.dateApplied)}</TableCell>{!readOnly && <TableCell onClick={(event) => event.stopPropagation()}><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${application.jobTitle}`}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{CURRENT_STATUSES.map((status) => <DropdownMenuItem key={status} disabled={getEffectiveCurrentStatus(application) === status} onClick={() => void handleChangeStatus(application, status)}>{status}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></TableCell>}</TableRow>)}
-          </TableBody></Table></div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  {!readOnly && !isAttachmentMode && <TableHead className="w-10"><span className="sr-only">Select</span></TableHead>}
+                  <TableHead>Job Title</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead className="hidden md:table-cell">Location</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="hidden lg:table-cell">Follow-up</TableHead>
+                  <TableHead><button type="button" className="flex items-center gap-1" onClick={() => setSortAsc((current) => !current)}>Date Applied <ArrowUpDown className="h-3 w-3" /></button></TableHead>
+                  {!readOnly && <TableHead className={isAttachmentMode ? "w-28" : "w-10"}><span className="sr-only">{isAttachmentMode ? "Attach" : "Actions"}</span></TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pagedApplications.length === 0 ? (
+                  <TableRow><TableCell colSpan={tableColumnCount} className="py-12 text-center text-sm text-muted-foreground">No applications found.</TableCell></TableRow>
+                ) : pagedApplications.map((application) => (
+                  <TableRow key={application.id} className="cursor-pointer hover:bg-muted/40" onClick={() => openDrawer(application)}>
+                    {!readOnly && !isAttachmentMode && <TableCell onClick={(event) => event.stopPropagation()}><Checkbox aria-label={`Select ${application.jobTitle} at ${application.companyName}`} checked={selectedIds.has(application.id)} onCheckedChange={(checked) => setSelectedIds((current) => { const next = new Set(current); if (checked === true) next.add(application.id); else next.delete(application.id); return next; })} /></TableCell>}
+                    <TableCell className="min-w-48 font-semibold">{application.jobTitle}</TableCell>
+                    <TableCell><span className="flex min-w-32 items-center gap-2"><CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} /><span className="truncate">{application.companyName}</span></span></TableCell>
+                    <TableCell className="hidden md:table-cell">{application.location}</TableCell>
+                    <TableCell><span className="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={getResponseStatusBadgeStyle(currentResponseStatus(application))}>{currentResponseStatus(application)}</span></TableCell>
+                    <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{application.followUpDate ? formatDisplayDate(application.followUpDate) : application.followUps ? "Completed" : "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDisplayDate(application.dateApplied)}</TableCell>
+                    {!readOnly && <TableCell onClick={(event) => event.stopPropagation()}>{isAttachmentMode ? <Button size="sm" disabled={Boolean(attachingApplicationId)} onClick={() => void handleAttachDocuments(application)}>{attachingApplicationId === application.id ? "Attaching..." : "Attach here"}</Button> : <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${application.jobTitle}`}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{CURRENT_STATUSES.map((status) => <DropdownMenuItem key={status} disabled={getEffectiveCurrentStatus(application) === status} onClick={() => void handleChangeStatus(application, status)}>{status}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}</TableCell>}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           <div className="flex flex-col gap-3 border-t px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><span>Showing {filtered.length ? (Math.min(page, pageCount) - 1) * pageSize + 1 : 0}–{Math.min(Math.min(page, pageCount) * pageSize, filtered.length)} of {filtered.length}</span><div className="flex items-center gap-2"><label>Show <select aria-label="Results per page" value={pageSize} className="ml-1 h-8 rounded-md border bg-background px-2" onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option>10</option><option>25</option><option>50</option></select></label><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</Button><span>{Math.min(page, pageCount)} / {pageCount}</span><Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((current) => current + 1)}>Next</Button></div></div>
         </section>
       ) : (
@@ -243,7 +330,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
           {selectedApplication && <><SheetHeader className="border-b pb-4 pr-8"><SheetTitle>{selectedApplication.jobTitle}</SheetTitle><SheetDescription>{selectedApplication.companyName} · {selectedApplication.location}</SheetDescription></SheetHeader><div className="space-y-5 py-5"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full border px-2 py-1 text-xs font-semibold" style={getResponseStatusBadgeStyle(currentResponseStatus(selectedApplication))}>{currentResponseStatus(selectedApplication)}</span><span className="text-xs text-muted-foreground">Applied {formatDisplayDate(selectedApplication.dateApplied)}</span></div><dl className="grid gap-3 rounded-md border p-4 text-xs sm:grid-cols-2">{[
             ["Location", selectedApplication.location], ["Country", selectedApplication.country || "—"], ["Salary", selectedApplication.salary || "—"], ["Follow-up", selectedApplication.followUpDate ? formatDisplayDate(selectedApplication.followUpDate) : "Not scheduled"], ["Recruiter", selectedApplication.recruiterContactName || "—"], ["Tags", selectedApplication.tags || "—"],
-          ].map(([label, value]) => <div key={label}><dt className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="mt-1 font-medium">{value}</dd></div>)}</dl>{selectedJobPostingHref && <a href={selectedJobPostingHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">Open job posting <ExternalLink className="h-3.5 w-3.5" /></a>}<section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Notes</h3><p className="rounded-md border bg-muted/20 p-3 text-sm leading-6">{selectedApplication.notes || "No notes added."}</p></section><section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Activity history</h3><div className="space-y-2">{selectedApplication.activityLog?.length ? selectedApplication.activityLog.map((entry) => <div key={entry.id} className="flex gap-3 rounded-md border p-3"><span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-primary" /><div><p className="text-xs font-medium">{entry.message}</p><p className="mt-1 text-[10px] text-muted-foreground">{new Date(entry.date).toLocaleString()}</p></div></div>) : <p className="text-xs text-muted-foreground">No activity recorded.</p>}</div></section><section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Additional fields</h3><dl className="space-y-2">{Object.entries(selectedApplication.customFields || {}).map(([key, value]) => <div key={key} className="flex justify-between gap-4 border-b pb-2 text-xs"><dt className="text-muted-foreground">{key}</dt><dd className="text-right font-medium">{value || "—"}</dd></div>)}</dl></section></div><SheetFooter><Button variant="outline" onClick={() => { setSelectedApplication(null); onSelect(selectedApplication); }}>Open full record</Button><Button asChild><Link to={`/app/applications/${selectedApplication.id}`}>Edit application</Link></Button></SheetFooter></>}
+          ].map(([label, value]) => <div key={label}><dt className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="mt-1 font-medium">{value}</dd></div>)}</dl>{selectedJobPostingHref && <a href={selectedJobPostingHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">Open job posting <ExternalLink className="h-3.5 w-3.5" /></a>}<section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Notes</h3><p className="rounded-md border bg-muted/20 p-3 text-sm leading-6">{selectedApplication.notes || "No notes added."}</p></section><section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Activity history</h3><div className="space-y-2">{selectedApplication.activityLog?.length ? selectedApplication.activityLog.map((entry) => <div key={entry.id} className="flex gap-3 rounded-md border p-3"><span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-primary" /><div><p className="text-xs font-medium">{entry.message}</p><p className="mt-1 text-[10px] text-muted-foreground">{new Date(entry.date).toLocaleString()}</p></div></div>) : <p className="text-xs text-muted-foreground">No activity recorded.</p>}</div></section><section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Additional fields</h3><dl className="space-y-2">{Object.entries(selectedApplication.customFields || {}).map(([key, value]) => <div key={key} className="flex justify-between gap-4 border-b pb-2 text-xs"><dt className="text-muted-foreground">{key}</dt><dd className="text-right font-medium">{value || "—"}</dd></div>)}</dl></section></div><SheetFooter>{isAttachmentMode ? <Button disabled={Boolean(attachingApplicationId)} onClick={() => void handleAttachDocuments(selectedApplication)}>{attachingApplicationId === selectedApplication.id ? "Attaching..." : "Attach files to this application"}</Button> : <><Button variant="outline" onClick={() => { setSelectedApplication(null); onSelect(selectedApplication); }}>Open full record</Button><Button asChild><Link to={`/app/applications/${selectedApplication.id}`}>Edit application</Link></Button></>}</SheetFooter></>}
         </SheetContent>
       </Sheet>
 

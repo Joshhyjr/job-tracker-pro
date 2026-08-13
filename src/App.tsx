@@ -30,6 +30,7 @@ import {
   type WorkbookImportResult,
 } from "@/lib/storage";
 import type { JobApplication } from "@/lib/types";
+import type { DocumentAttachment } from "@/lib/documentMatching";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,7 +48,7 @@ function ApplicationDetailRoute({ applications, onUpdate, onDelete, isDemo }: { 
 }
 
 // Keep application selection in the URL so details remain shareable and refresh-safe.
-function ApplicationsListRoute({ applications, onUpdate, onDelete, isDemo }: { applications: JobApplication[]; onUpdate: (application: JobApplication) => Promise<JobApplication>; onDelete: (id: string) => Promise<void>; isDemo: boolean }) {
+function ApplicationsListRoute({ applications, onUpdate, onDelete, isDemo, pendingAttachments, onAttachmentsComplete }: { applications: JobApplication[]; onUpdate: (application: JobApplication) => Promise<JobApplication>; onDelete: (id: string) => Promise<void>; isDemo: boolean; pendingAttachments: DocumentAttachment[]; onAttachmentsComplete: () => void }) {
   const navigate = useNavigate();
 
   // The list owns selection and confirmation while the shared hook remains the persistence boundary.
@@ -58,6 +59,8 @@ function ApplicationsListRoute({ applications, onUpdate, onDelete, isDemo }: { a
       onUpdate={onUpdate}
       onDelete={onDelete}
       isDemo={isDemo}
+      pendingAttachments={pendingAttachments}
+      onAttachmentsComplete={onAttachmentsComplete}
     />
   );
 }
@@ -103,7 +106,9 @@ function JobTrackerShell({
   onResetDemo,
 }: JobTrackerShellProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [pendingImport, setPendingImport] = useState<{ file: File; result: WorkbookImportResult } | null>(null);
+  const [pendingDocumentAttachments, setPendingDocumentAttachments] = useState<DocumentAttachment[]>([]);
   const [importMode, setImportMode] = useState<ApplicationImportMode>("merge");
   const [isApplyingImport, setIsApplyingImport] = useState(false);
   // Recompute against live owner state so a realtime change while the dialog is open cannot be omitted.
@@ -212,13 +217,13 @@ function JobTrackerShell({
           {syncError && <Alert variant="destructive" className="mb-5"><AlertDescription>{syncError}</AlertDescription></Alert>}
           <Routes>
             <Route index element={<Dashboard applications={applications} isDemo={mode === "demo"} onImportXLSX={handleImportXLSX} />} />
-            <Route path="applications" element={<ApplicationsListRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
+            <Route path="applications" element={<ApplicationsListRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} pendingAttachments={pendingDocumentAttachments} onAttachmentsComplete={() => setPendingDocumentAttachments([])} />} />
             <Route path="locations" element={<Locations applications={applications} />} />
             <Route path="applications/:id" element={<ApplicationDetailRoute applications={applications} onUpdate={updateApplication} onDelete={deleteApplication} isDemo={mode === "demo"} />} />
             <Route path="follow-ups" element={<FollowUps applications={applications} onUpdate={updateApplication} />} />
             <Route path="analytics" element={<Analytics applications={applications} isDemo={mode === "demo"} user={user} />} />
             {/* Device-local documents are scoped separately from the public demo and from other owner identities. */}
-            <Route path="documents" element={<Documents applications={applications} mode={mode} ownerId={user?.uid} />} />
+            <Route path="documents" element={<Documents applications={applications} mode={mode} ownerId={user?.uid} onUpdateApplication={updateApplication} onChooseApplication={(documents) => { setPendingDocumentAttachments(documents); navigate("/app/applications"); }} />} />
             <Route path="settings" element={<Settings mode={mode} user={user} syncing={syncing} offline={offline} />} />
             <Route path="add" element={<ApplicationForm onCreate={createApplication} onUpdate={updateApplication} />} />
             <Route path="*" element={<NotFound />} />
