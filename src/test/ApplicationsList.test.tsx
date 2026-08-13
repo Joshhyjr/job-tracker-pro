@@ -65,6 +65,22 @@ describe("ApplicationsList", () => {
     toastMock.mockReset();
   });
 
+  it("filters country links by normalized ISO code", () => {
+    const countryApplications = [
+      application({ id: "ca", jobTitle: "Canada Role", location: "Halifax, Canada" }),
+      application({ id: "us", jobTitle: "US Role", location: "Boston, United States" }),
+    ];
+    render(
+      <MemoryRouter initialEntries={["/app/applications?country=CA"]}>
+        <ApplicationsList applications={countryApplications} onSelect={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    // ISO filtering is independent of display aliases and free-text search state.
+    expect(screen.getByText("Canada Role")).toBeInTheDocument();
+    expect(screen.queryByText("US Role")).not.toBeInTheDocument();
+  });
+
   it("combines partial company and current-status filters", () => {
     renderList();
 

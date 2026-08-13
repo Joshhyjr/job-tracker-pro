@@ -17,6 +17,9 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
     jobTitle: "Platform Engineer",
     companyName: "IBM",
     location: "Remote",
+    // Import fixtures reflect the normalized work-mode migration applied at browser/cloud read boundaries.
+    workMode: "Remote",
+    locationStatus: "work_mode_only",
     currentStatus: "Applied",
     responseStatus: "Applied",
     followUps: false,

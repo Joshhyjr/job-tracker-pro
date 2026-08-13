@@ -4,6 +4,7 @@ import { isSupportedExcelWorkbook } from "./excelFile";
 import { loadExcelJs } from "./exceljs";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeExternalHttpUrl, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
+import { normalizeApplicationGeography } from "./geography";
 
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
@@ -35,6 +36,9 @@ type ImportField =
   | "city"
   | "region"
   | "country"
+  | "countryCode"
+  | "workMode"
+  | "locationStatus"
   | "latitude"
   | "longitude"
   | "currentStatus"
@@ -98,6 +102,9 @@ const FIELD_LABELS: Record<ImportField, string> = {
   city: "City",
   region: "Province/Region",
   country: "Country",
+  countryCode: "Country Code",
+  workMode: "Work Mode",
+  locationStatus: "Location Status",
   latitude: "Latitude",
   longitude: "Longitude",
   currentStatus: "Current Status",
@@ -124,6 +131,9 @@ const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
   city: ["City", "Job City", "Office City", "Location City"],
   region: ["Province/Region", "Province", "Region", "State", "Admin Region", "Administrative Region", "Location Region"],
   country: ["Country", "Job Country", "Office Country", "Location Country"],
+  countryCode: ["Country Code", "ISO Country Code", "ISO 3166 Code", "ISO2"],
+  workMode: ["Work Mode", "Work Arrangement", "Work Type", "Remote/Hybrid/On-site"],
+  locationStatus: ["Location Status"],
   latitude: ["Latitude", "Lat"],
   longitude: ["Longitude", "Lng", "Long", "Lon"],
   currentStatus: ["Current Status", "Tracker Status", "Internal Status"],
@@ -620,7 +630,12 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
     if (longitude !== undefined) application.longitude = longitude;
     if (customFields) application.customFields = customFields;
 
-    applications.push(application);
+    // Imported geography is enriched only when the parser can resolve it confidently; ambiguous rows stay reviewable.
+    applications.push(normalizeApplicationGeography({
+      ...application,
+      countryCode: sanitizeSingleLineText(getMappedCell(row, mapping, "countryCode")),
+      workMode: sanitizeSingleLineText(getMappedCell(row, mapping, "workMode")) as JobApplication["workMode"],
+    }));
   });
 
   return { applications, warnings };

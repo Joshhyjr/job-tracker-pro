@@ -35,11 +35,12 @@ const application = (id: string, location: string, country?: string): JobApplica
 });
 
 describe("Locations", () => {
-  it("shows country flags and a laptop for remote rows", () => {
+  it("shows country flags while keeping remote rows out of country rankings", () => {
     render(<Locations applications={[application("1", "Halifax, Canada", "Canada"), application("2", "Remote")]} />);
 
     expect(screen.getByText("🇨🇦")).toBeInTheDocument();
-    expect(screen.getByText("💻")).toBeInTheDocument();
+    expect(screen.getByText("Remote roles").previousElementSibling).toHaveTextContent("1");
+    expect(within(screen.getByTestId("locations-top-row")).queryByText("Remote")).not.toBeInTheDocument();
   });
 
   it("uses a globe for unrecognized location labels", () => {

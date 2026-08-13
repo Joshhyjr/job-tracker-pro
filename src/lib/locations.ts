@@ -1,5 +1,6 @@
 import type { JobApplication } from "./types";
 import { safeLocalStorageGetItem, safeLocalStorageSetItem } from "./browserStorage";
+import { getCountryIso3, parseJobLocation } from "./geography";
 
 export type LocationResolutionSource = "coordinates" | "city" | "local-city" | "local-region" | "country";
 
@@ -8,6 +9,8 @@ export interface JobLocationGroup {
   city: string;
   region: string;
   country: string;
+  countryCode: string;
+  countryIso3: string;
   label: string;
   latitude: number;
   longitude: number;
@@ -30,6 +33,8 @@ type CoordinateResolution = {
   city: string;
   region: string;
   country: string;
+  countryCode: string;
+  countryIso3: string;
   source: LocationResolutionSource;
 };
 
@@ -176,30 +181,19 @@ function isRemoteOrBlankApplication(application: JobApplication): boolean {
   const longitude = parseCoordinate(application.longitude, -180, 180);
   if (latitude !== undefined && longitude !== undefined) return false;
 
-  const place = getApplicationPlace(application);
-  const locationText = normalizeLocationPart(application.location);
-  const searchable = [locationText, place.city, place.region, place.country].filter(Boolean).join(" ");
-
-  // Remote and blank jobs are valid applications, but they should not create pins or cleanup noise.
-  return !searchable || /\b(remote|blank|n\/a|na|none|tbd|various|multiple)\b/i.test(searchable);
+  const parsed = parseJobLocation(application);
+  // Work-mode-only and blank jobs are valid applications, but they should not create geographic pins.
+  return parsed.locationStatus === "work_mode_only" || (!application.location && !parsed.countryCode);
 }
 
-function getApplicationPlace(application: JobApplication): { city: string; region: string; country: string } {
-  const fromLocation = splitLocation(application.location);
-  const hasStructuredLocationText = application.location.split(",").map(normalizeLocationPart).filter(Boolean).length >= 2;
-
-  if (hasStructuredLocationText) {
-    return {
-      city: fromLocation.city,
-      region: fromLocation.region,
-      country: fromLocation.country || normalizeLocationPart(application.country),
-    };
-  }
-
+function getApplicationPlace(application: JobApplication): { city: string; region: string; country: string; countryCode: string; countryIso3: string } {
+  const parsed = parseJobLocation(application);
   return {
-    city: normalizeLocationPart(application.city) || fromLocation.city,
-    region: normalizeLocationPart(application.region) || fromLocation.region,
-    country: normalizeLocationPart(application.country) || fromLocation.country,
+    city: parsed.city ?? "",
+    region: parsed.region ?? "",
+    country: parsed.country ?? "",
+    countryCode: parsed.countryCode ?? "",
+    countryIso3: getCountryIso3(parsed.countryCode) ?? "",
   };
 }
 
@@ -247,12 +241,12 @@ function getCoordinateResolution(application: JobApplication): CoordinateResolut
   }
 
   if (place.city && !place.region && CITY_COORDINATES[cityKey]) {
-    return { ...CITY_COORDINATES[cityKey], region: "", source: "city" as const };
+    return { ...CITY_COORDINATES[cityKey], region: place.region, countryCode: place.countryCode, countryIso3: place.countryIso3, source: "city" as const };
   }
 
   if (!place.city && !place.region && countryKey && COUNTRY_COORDINATES[countryKey]) {
     const country = COUNTRY_COORDINATES[countryKey];
-    return { city: "", region: "", country: country.country, latitude: country.latitude, longitude: country.longitude, source: "country" as const };
+    return { city: "", region: "", country: country.country, countryCode: place.countryCode, countryIso3: place.countryIso3, latitude: country.latitude, longitude: country.longitude, source: "country" as const };
   }
 
   return null;
@@ -290,19 +284,19 @@ async function getCoordinateResolutionAsync(application: JobApplication, resolve
   for (const query of queries) {
     const cacheKey = getCoordinateCacheKey(query);
     const cached = getCachedCoordinates(cacheKey);
-    if (cached) return { ...cached, source: cached.region ? "local-region" : "local-city" };
+    if (cached) return { ...cached, countryCode: place.countryCode, countryIso3: place.countryIso3, source: cached.region ? "local-region" : "local-city" };
 
     const resolved = await resolver(query);
     if (resolved) {
       const source: LocationResolutionSource = resolved.region && !resolved.city ? "local-region" : "local-city";
       setCachedCoordinates(cacheKey, resolved);
-      return { ...resolved, city: resolved.city ?? "", region: resolved.region ?? "", source };
+      return { ...resolved, city: resolved.city ?? "", region: resolved.region ?? "", countryCode: place.countryCode, countryIso3: place.countryIso3, source };
     }
   }
 
   if (countryKey && COUNTRY_COORDINATES[countryKey]) {
     const country = COUNTRY_COORDINATES[countryKey];
-    return { city: "", region: "", country: country.country, latitude: country.latitude, longitude: country.longitude, source: "country" as const };
+    return { city: "", region: "", country: country.country, countryCode: place.countryCode, countryIso3: place.countryIso3, latitude: country.latitude, longitude: country.longitude, source: "country" as const };
   }
 
   return null;
@@ -340,6 +334,8 @@ function addApplicationToLocationGroup(grouped: Map<string, JobLocationGroup>, a
     city: resolution.city,
     region: resolution.region,
     country: resolution.country,
+    countryCode: resolution.countryCode,
+    countryIso3: resolution.countryIso3,
     label: originalLabel === "No location" ? fallbackLabel : originalLabel,
     latitude: resolution.latitude,
     longitude: resolution.longitude,

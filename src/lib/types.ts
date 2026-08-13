@@ -3,6 +3,10 @@ export type CurrentStatus = "Applied" | "No Response" | "Pre-screen call" | "Ass
 
 export const CURRENT_STATUSES: CurrentStatus[] = ["Applied", "No Response", "Pre-screen call", "Assessment", "Interview", "Offer", "Rejected", "Withdrawn"];
 
+// Geographic metadata uses stable ISO/work-mode values while legacy location text remains display-compatible.
+export type WorkMode = "Remote" | "Hybrid" | "On-site";
+export type LocationStatus = "resolved" | "needs_review" | "work_mode_only";
+
 // Keep form-select options aligned with the app's canonical response-status labels so
 // new records and edits do not drift away from the values used by filters and charts.
 export const RESPONSE_STATUSES: string[] = [
@@ -41,8 +45,11 @@ export interface JobApplication {
   city?: string;
   region?: string;
   country?: string;
+  countryCode?: string;
   latitude?: number;
   longitude?: number;
+  workMode?: WorkMode;
+  locationStatus?: LocationStatus;
   currentStatus: CurrentStatus;
   /** Dynamic — can be any string from the imported dataset */
   responseStatus: string;
