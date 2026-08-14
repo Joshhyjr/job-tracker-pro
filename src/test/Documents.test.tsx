@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Documents from "@/pages/Documents";
 import { isPreviewableDocumentDataUrl } from "@/lib/documentPreview";
@@ -212,6 +212,75 @@ describe("Documents", () => {
       customFields: { "Resume Used": "Joshua_Kivaria_Amazon_SDE_Resume.pdf" },
     }));
     expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Document attached automatically" }));
+  });
+
+  it("serializes automatic resume and cover-letter updates for the same application", async () => {
+    const resume = { ...privateResume, name: "Mariner Resume.pdf" };
+    const coverLetter = { ...privateResume, id: "cover-1", name: "Mariner Cover Letter.pdf", category: "Cover letters" as const };
+    let resolveFirstUpdate: (() => void) | undefined;
+    const onUpdateApplication = vi.fn()
+      .mockImplementationOnce((application: JobApplication) => new Promise<JobApplication>((resolve) => {
+        resolveFirstUpdate = () => resolve(application);
+      }))
+      .mockImplementation(async (application: JobApplication) => application);
+    localStorage.setItem("job-tracker-documents-v2:demo", JSON.stringify([resume, coverLetter]));
+
+    render(<Documents applications={[marinerApplication]} mode="demo" onUpdateApplication={onUpdateApplication} />);
+
+    // A per-application queue must keep the cover-letter write behind the unresolved resume write.
+    await waitFor(() => expect(onUpdateApplication).toHaveBeenCalledTimes(1));
+    expect(onUpdateApplication.mock.calls[0][0]).toEqual(expect.objectContaining({
+      customFields: { "Resume Used": "Mariner Resume.pdf" },
+    }));
+
+    await act(async () => resolveFirstUpdate?.());
+
+    // Rebasing the queued write preserves both fields and both history entries in the final full-record save.
+    await waitFor(() => expect(onUpdateApplication).toHaveBeenCalledTimes(2));
+    expect(onUpdateApplication.mock.calls[1][0]).toEqual(expect.objectContaining({
+      customFields: {
+        "Resume Used": "Mariner Resume.pdf",
+        "Cover Letter Used": "Mariner Cover Letter.pdf",
+      },
+      activityLog: expect.arrayContaining([
+        expect.objectContaining({ message: "Attached Mariner Resume.pdf as Resume Used" }),
+        expect.objectContaining({ message: "Attached Mariner Cover Letter.pdf as Cover Letter Used" }),
+      ]),
+    }));
+  });
+
+  it("continues queued attachments and retries a failed automatic link", async () => {
+    const resume = { ...privateResume, name: "Mariner Resume.pdf" };
+    const coverLetter = { ...privateResume, id: "cover-1", name: "Mariner Cover Letter.pdf", category: "Cover letters" as const };
+    let rejectFirstUpdate: ((error: Error) => void) | undefined;
+    const onUpdateApplication = vi.fn()
+      .mockImplementationOnce(() => new Promise<JobApplication>((_resolve, reject) => {
+        rejectFirstUpdate = reject;
+      }))
+      .mockImplementation(async (application: JobApplication) => application);
+    localStorage.setItem("job-tracker-documents-v2:demo", JSON.stringify([resume, coverLetter]));
+
+    const { rerender } = render(<Documents applications={[marinerApplication]} mode="demo" onUpdateApplication={onUpdateApplication} />);
+    await waitFor(() => expect(onUpdateApplication).toHaveBeenCalledTimes(1));
+
+    await act(async () => rejectFirstUpdate?.(new Error("offline")));
+
+    // A failed resume save must not poison the per-application queue or suppress the cover-letter save.
+    await waitFor(() => expect(onUpdateApplication).toHaveBeenCalledTimes(2));
+    const savedCoverLetter = onUpdateApplication.mock.calls[1][0] as JobApplication;
+    expect(savedCoverLetter.customFields).toEqual({ "Cover Letter Used": "Mariner Cover Letter.pdf" });
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Document not attached", variant: "destructive" }));
+
+    rerender(<Documents applications={[savedCoverLetter]} mode="demo" onUpdateApplication={onUpdateApplication} />);
+
+    // Reconciliation retries the cleared resume reservation against the successful cover-letter base.
+    await waitFor(() => expect(onUpdateApplication).toHaveBeenCalledTimes(3));
+    expect(onUpdateApplication.mock.calls[2][0]).toEqual(expect.objectContaining({
+      customFields: {
+        "Cover Letter Used": "Mariner Cover Letter.pdf",
+        "Resume Used": "Mariner Resume.pdf",
+      },
+    }));
   });
 
   it("keeps an existing application attachment instead of silently replacing it", async () => {
