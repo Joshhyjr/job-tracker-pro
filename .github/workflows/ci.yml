@@ -23,7 +23,7 @@ jobs:
 
       # Match package.json and the Node 22 production runtime.
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
