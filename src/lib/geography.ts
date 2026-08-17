@@ -40,6 +40,25 @@ export interface GeographySummary {
   needsReviewCount: number;
 }
 
+// Spreadsheet templates use several labels for the same work-mode field; keep them centralized for import and legacy-data recovery.
+export const WORK_MODE_SPREADSHEET_HEADERS = [
+  "Work Mode",
+  "Work Arrangement",
+  "Working Arrangement",
+  "Work Type",
+  "Work Model",
+  "Working Model",
+  "Workplace Type",
+  "Workplace Model",
+  "Work Location Type",
+  "Location Type",
+  "Remote Status",
+  "Remote/Hybrid/On-site",
+  "Remote/Hybrid/Onsite",
+  "On-site/Remote",
+  "Onsite/Remote",
+] as const;
+
 // ISO alpha-2 is the persisted key; alpha-3 bridges application data to Natural Earth boundaries.
 const COUNTRY_CODE_TO_ISO3: Record<string, string> = {
   "AQ": "ATA",
@@ -369,6 +388,9 @@ function normalizeLookup(value: unknown): string {
     .trim();
 }
 
+// Precompute normalized header keys because map summaries may parse thousands of imported applications repeatedly.
+const WORK_MODE_SPREADSHEET_HEADER_KEYS = new Set(WORK_MODE_SPREADSHEET_HEADERS.map(normalizeLookup));
+
 function cleanLocationPart(value: unknown): string {
   return String(value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ");
 }
@@ -410,31 +432,44 @@ export function getCountryFlag(countryCode: unknown): string {
 export function normalizeCity(value: unknown): string | undefined {
   const city = cleanLocationPart(value);
   const cityKey = normalizeLookup(city);
-  // Spreadsheet placeholders describe missing data and must never become cities, markers, or ranking entries.
-  if (!city || isRemoteLocation(city) || ["unknown", "not known", "not specified", "n a", "none", "tbd"].includes(cityKey)) return undefined;
+  // Spreadsheet placeholders and every work mode must never become cities, markers, or ranking entries.
+  if (!city || normalizeWorkMode(city) || ["unknown", "not known", "not specified", "n a", "none", "tbd"].includes(cityKey)) return undefined;
   return city.replace(/\b\w/g, (character) => character.toLocaleUpperCase());
 }
 
 export function normalizeWorkMode(value: unknown): WorkMode | undefined {
   const key = normalizeLookup(value);
   if (!key) return undefined;
-  if (/\bremote\b/.test(key)) return "Remote";
+  // Normalize explicit spreadsheet wording while avoiding assumptions from an ordinary geographic location.
+  if (/\b(remote|telecommute|telecommuting|virtual)\b/.test(key) || /\b(work from home|w ?f ?h)\b/.test(key)) return "Remote";
   if (/\bhybrid\b/.test(key)) return "Hybrid";
-  if (/\b(on ?site|onsite|in office)\b/.test(key)) return "On-site";
+  if (/\b(on ?site|onsite|in office|office based|office only|in person|site based)\b/.test(key)) return "On-site";
   return undefined;
 }
 
 export function isRemoteLocation(value: unknown): boolean {
-  const key = normalizeLookup(value);
-  return Boolean(key && /\b(remote|work from home|wfh)\b/.test(key));
+  return normalizeWorkMode(value) === "Remote";
 }
 
 function stripWorkMode(value: string): string {
   // Only remove explicit work-mode labels; surrounding geographic text remains untouched.
   return value
-    .replace(/\((?:remote|hybrid|on[ -]?site|in[ -]?office)\)/gi, "")
-    .replace(/(?:^|\s[-–—|/]\s)(?:remote|hybrid|on[ -]?site|in[ -]?office)(?=$|\s[-–—|/]\s)/gi, " ")
+    .replace(/\((?:remote|hybrid|on[ -]?site|in[ -]?office|office[ -]?based|in[ -]?person|work from home|w\.?f\.?h\.?|telecommut(?:e|ing)|virtual)\)/gi, "")
+    .replace(/(?:^|\s[-–—|/]\s)(?:remote|hybrid|on[ -]?site|in[ -]?office|office[ -]?based|in[ -]?person|work from home|w\.?f\.?h\.?|telecommut(?:e|ing)|virtual)(?=$|\s[-–—|/]\s)/gi, " ")
     .trim();
+}
+
+function getSpreadsheetWorkMode(customFields: JobApplication["customFields"]): WorkMode | undefined {
+  if (!customFields) return undefined;
+
+  // Older imports may have retained an unrecognized work-mode column as a custom field; recover it without requiring a re-import.
+  for (const [header, value] of Object.entries(customFields)) {
+    if (!WORK_MODE_SPREADSHEET_HEADER_KEYS.has(normalizeLookup(header))) continue;
+    const workMode = normalizeWorkMode(value);
+    if (workMode) return workMode;
+  }
+
+  return undefined;
 }
 
 function validCoordinate(value: unknown, min: number, max: number): number | undefined {
@@ -454,7 +489,7 @@ export function parseJobLocation(input: string | Partial<JobApplication>): Parse
   const application = typeof input === "string" ? { location: input } : input;
   const rawLocation = cleanLocationPart(application.location);
   const workMode = normalizeWorkMode(application.workMode)
-    ?? normalizeWorkMode(application.customFields?.["Work Arrangement"])
+    ?? getSpreadsheetWorkMode(application.customFields)
     ?? normalizeWorkMode(rawLocation);
   const latitude = validCoordinate(application.latitude, -90, 90);
   const longitude = validCoordinate(application.longitude, -180, 180);

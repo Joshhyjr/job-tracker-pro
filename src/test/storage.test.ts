@@ -241,6 +241,32 @@ describe("mapRowsToApplications", () => {
     });
   });
 
+  it("maps common Excel work-mode headers into canonical values", () => {
+    const applications = mapRowsToApplications([
+      {
+        Position: "Support Engineer",
+        Employer: "Northstar",
+        Location: "Halifax, Canada",
+        "Workplace Type": "WFH",
+      },
+      {
+        Position: "Data Analyst",
+        Employer: "Beacon",
+        Location: "Toronto, Canada",
+        "Working Model": "Office-based",
+      },
+      {
+        Position: "Product Designer",
+        Employer: "Atlas",
+        Location: "Ottawa, Canada",
+        "Remote/Hybrid/Onsite": "Hybrid - 2 days in office",
+      },
+    ]);
+
+    // Imported wording is normalized once so all map filters consume the same stable values.
+    expect(applications.map((application) => application.workMode)).toEqual(["Remote", "On-site", "Hybrid"]);
+  });
+
   it("preserves assessment and withdrawn tracker statuses from imported workbooks", () => {
     const applications = mapRowsToApplications([
       {

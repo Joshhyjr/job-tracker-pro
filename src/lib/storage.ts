@@ -4,7 +4,7 @@ import { isSupportedExcelWorkbook } from "./excelFile";
 import { loadExcelJs } from "./exceljs";
 import { mapResponseStatusToCurrentStatus, normalizeResponseStatus, normalizeResponseStatusList } from "./responseStatus";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeCurrentStatus, sanitizeDateInput, sanitizeExternalHttpUrl, sanitizeMultilineText, sanitizeSingleLineText } from "./security";
-import { normalizeApplicationGeography } from "./geography";
+import { normalizeApplicationGeography, WORK_MODE_SPREADSHEET_HEADERS } from "./geography";
 
 const STORAGE_KEY = "job-tracker-data";
 const SEEDED_KEY = "job-tracker-seeded";
@@ -132,7 +132,8 @@ const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
   region: ["Province/Region", "Province", "Region", "State", "Admin Region", "Administrative Region", "Location Region"],
   country: ["Country", "Job Country", "Office Country", "Location Country"],
   countryCode: ["Country Code", "ISO Country Code", "ISO 3166 Code", "ISO2"],
-  workMode: ["Work Mode", "Work Arrangement", "Work Type", "Remote/Hybrid/On-site"],
+  // Work-mode headers mirror the canonical geography aliases so Excel imports and stored records cannot drift apart.
+  workMode: [...WORK_MODE_SPREADSHEET_HEADERS],
   locationStatus: ["Location Status"],
   latitude: ["Latitude", "Lat"],
   longitude: ["Longitude", "Lng", "Long", "Lon"],
