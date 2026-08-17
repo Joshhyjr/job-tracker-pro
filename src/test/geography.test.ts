@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGeographySummary, normalizeCountryCode, parseJobLocation } from "@/lib/geography";
+import { buildGeographySummary, normalizeCountryCode, normalizeWorkMode, parseJobLocation } from "@/lib/geography";
 import type { JobApplication } from "@/lib/types";
 
 function application(location: string, overrides: Partial<JobApplication> = {}): JobApplication {
@@ -61,6 +61,20 @@ describe("geography normalization", () => {
     expect(parseJobLocation("Remote - Americas")).toEqual({ workMode: "Remote", locationStatus: "work_mode_only" });
     expect(parseJobLocation("Unknown")).toEqual({ locationStatus: "needs_review" });
     expect(parseJobLocation("Springfield")).toEqual({ locationStatus: "needs_review" });
+  });
+
+  it("normalizes explicit Excel work-mode wording and legacy custom columns", () => {
+    // Spreadsheet aliases should drive work-mode filters without turning their values into geographic fields.
+    expect(normalizeWorkMode("WFH")).toBe("Remote");
+    expect(normalizeWorkMode("Office-based")).toBe("On-site");
+    expect(parseJobLocation(application("Canada", { city: "Hybrid", country: "Canada" }))).not.toHaveProperty("city");
+    expect(parseJobLocation(application("Halifax, Canada", {
+      customFields: { "Workplace Type": "Hybrid - 2 days in office" },
+    }))).toMatchObject({
+      city: "Halifax",
+      countryCode: "CA",
+      workMode: "Hybrid",
+    });
   });
 
   it("excludes Unknown from cities while retaining safely resolved country data", () => {
