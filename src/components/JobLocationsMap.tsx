@@ -11,6 +11,7 @@ import type { JobApplication } from "@/lib/types";
 import { buildJobLocationGroups, buildJobLocationGroupsAsync, getApplicationLocationLabel, type JobLocationGroup, type JobLocationGroupsResult } from "@/lib/locations";
 import { getEffectiveCurrentStatus } from "@/lib/responseStatus";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { buildGeographySummary, normalizeCountryCode } from "@/lib/geography";
 
 // OpenFreeMap provides the detailed vector basemap without an account, API key, or billing setup.
 const OPEN_FREE_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
@@ -42,7 +43,7 @@ function buildSummaryMapStyle(): StyleSpecification {
 
 type MapLibreModule = typeof import("maplibre-gl");
 type CountryBoundaryProperties = { iso3: string; name: string };
-type ShadedCountryProperties = CountryBoundaryProperties & { applicationCount: number };
+type ShadedCountryProperties = CountryBoundaryProperties & { applicationCount: number; countryCode: string; percentage: number; flag: string };
 type CountryBoundaryCollection = FeatureCollection<MultiPolygon, CountryBoundaryProperties>;
 type ShadedCountryCollection = FeatureCollection<MultiPolygon, ShadedCountryProperties>;
 type MarkerBinding = {
@@ -53,21 +54,6 @@ type MarkerBinding = {
 };
 
 let countryBoundaryPromise: Promise<CountryBoundaryCollection> | null = null;
-
-const COUNTRY_NAME_ALIASES: Record<string, string> = {
-  america: "united states",
-  england: "united kingdom",
-  "great britain": "united kingdom",
-  uae: "united arab emirates",
-  uk: "united kingdom",
-  us: "united states",
-  usa: "united states",
-};
-
-function normalizeCountryName(country: string) {
-  const normalized = country.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  return COUNTRY_NAME_ALIASES[normalized] ?? normalized;
-}
 
 function loadCountryBoundaries() {
   if (!countryBoundaryPromise) {
@@ -80,23 +66,23 @@ function loadCountryBoundaries() {
   return countryBoundaryPromise;
 }
 
-function buildShadedCountryCollection(
-  boundaries: CountryBoundaryCollection,
-  groups: JobLocationGroup[],
-  includeEmptyCountries = false,
-): ShadedCountryCollection {
-  const counts = new Map<string, number>();
-  groups.forEach((group) => {
-    const countryKey = normalizeCountryName(group.country);
-    counts.set(countryKey, (counts.get(countryKey) ?? 0) + group.applications.length);
-  });
+function buildShadedCountryCollection(boundaries: CountryBoundaryCollection, applications: JobApplication[], includeEmptyCountries = false): ShadedCountryCollection {
+  // Country joins use ISO-3 identifiers from the boundary file, never display-name string equality.
+  const counts = new Map(buildGeographySummary(applications).countries.map((country) => [country.iso3, country]));
 
   const features = boundaries.features.flatMap((feature) => {
-    const applicationCount = counts.get(normalizeCountryName(feature.properties.name)) ?? 0;
+    const summary = counts.get(feature.properties.iso3);
+    const applicationCount = summary?.count ?? 0;
     if (!includeEmptyCountries && applicationCount === 0) return [];
     return [{
       ...feature,
-      properties: { ...feature.properties, applicationCount },
+      properties: {
+        ...feature.properties,
+        applicationCount,
+        countryCode: summary?.code ?? "",
+        percentage: summary?.percentage ?? 0,
+        flag: summary?.flag ?? "",
+      },
     } satisfies Feature<MultiPolygon, ShadedCountryProperties>];
   });
 
@@ -122,7 +108,7 @@ function removeMarkerBindings(bindings: MarkerBinding[]) {
 
 function LocationDetails({ group }: { group: JobLocationGroup }) {
   const navigate = useNavigate();
-  const visibleApplications = group.applications.slice(0, 6);
+  const visibleApplications = [...group.applications].sort((a, b) => (b.dateApplied || "").localeCompare(a.dateApplied || "")).slice(0, 6);
 
   return (
     <div className="space-y-4 rounded-lg border border-border/50 bg-card/80 p-4">
@@ -134,6 +120,7 @@ function LocationDetails({ group }: { group: JobLocationGroup }) {
         <Badge variant="outline" className="shrink-0 capitalize">{group.source}</Badge>
       </div>
       <div className="space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground">Recent</p>
         {visibleApplications.map((application) => (
           <button
             key={application.id}
@@ -153,6 +140,7 @@ function LocationDetails({ group }: { group: JobLocationGroup }) {
         {group.applications.length > visibleApplications.length && (
           <p className="text-xs text-muted-foreground">+{group.applications.length - visibleApplications.length} more in this location</p>
         )}
+        <button type="button" onClick={() => navigate(`/app/applications?q=${encodeURIComponent(group.city || group.country)}`)} className="text-xs font-semibold text-primary hover:underline">View applications</button>
       </div>
     </div>
   );
@@ -161,9 +149,13 @@ function LocationDetails({ group }: { group: JobLocationGroup }) {
 export function JobLocationsMap({
   applications,
   variant = "interactive",
+  mode = "country",
+  onCountrySelect,
 }: {
   applications: JobApplication[];
   variant?: "interactive" | "summary";
+  mode?: "country" | "city";
+  onCountrySelect?: (countryCode: string) => void;
 }) {
   const isSummary = variant === "summary";
   const initialLocationResult = useMemo(() => buildJobLocationGroups(applications), [applications]);
@@ -173,10 +165,15 @@ export function JobLocationsMap({
   // Filter the resolved groups once so map markers, counts, fitting, and details always describe the same country results.
   const groups = useMemo(() => {
     const query = countryFilter.trim().toLocaleLowerCase();
-    if (!query) return allGroups;
-    return allGroups.filter((group) => group.country.toLocaleLowerCase().includes(query));
-  }, [allGroups, countryFilter]);
+    const modeGroups = isSummary && mode === "city" ? allGroups.filter((group) => Boolean(group.city)) : allGroups;
+    if (!query) return modeGroups;
+    return modeGroups.filter((group) => group.country.toLocaleLowerCase().includes(query));
+  }, [allGroups, countryFilter, isSummary, mode]);
   const mappedApplicationCount = groups.reduce((total, group) => total + group.applications.length, 0);
+  const geographySummary = useMemo(() => buildGeographySummary(applications), [applications]);
+  const displayedApplicationCount = isSummary && mode === "country"
+    ? geographySummary.countries.reduce((total, country) => total + country.count, 0)
+    : mappedApplicationCount;
   const [activeKey, setActiveKey] = useState<string | null>(groups[0]?.key ?? null);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -227,19 +224,14 @@ export function JobLocationsMap({
           ...(isSummary ? {
             attributionControl: false,
             renderWorldCopies: false,
-            dragPan: false,
-            scrollZoom: false,
-            boxZoom: false,
-            doubleClickZoom: false,
-            keyboard: false,
-            touchZoomRotate: false,
           } : {}),
           // Interactive mode keeps MapLibre's default attribution; summary mode uses only local public-domain boundaries.
           dragRotate: false,
           pitchWithRotate: false,
         });
         mapRef.current = map;
-        if (!isSummary) map.addControl(new maplibre.NavigationControl({ showCompass: false, showZoom: true }), "top-right");
+        // Compact native controls make both overview layers explorable without introducing a second map interaction model.
+        map.addControl(new maplibre.NavigationControl({ showCompass: false, showZoom: true }), "top-right");
         map.touchZoomRotate.disableRotation();
         // Surface asynchronous style, tile, CSP, and worker failures instead of leaving the loading overlay indefinitely.
         initialErrorHandler = markInitialLoadFailed;
@@ -302,7 +294,8 @@ export function JobLocationsMap({
     loadCountryBoundaries()
       .then((boundaries) => {
         if (cancelled) return;
-        const shadedCountries = buildShadedCountryCollection(boundaries, groups, isSummary);
+        const shadedApplications = isSummary ? applications : groups.flatMap((group) => group.applications);
+        const shadedCountries = buildShadedCountryCollection(boundaries, shadedApplications, isSummary);
         const existingSource = map.getSource(COUNTRY_SHADING_SOURCE_ID) as GeoJSONSource | undefined;
 
         if (existingSource) {
@@ -337,12 +330,20 @@ export function JobLocationsMap({
           const showCountryName = (event: MapLayerMouseEvent) => {
             const properties = event.features?.[0]?.properties as ShadedCountryProperties | undefined;
             if (!properties?.name) return;
-            // Keep the hover label focused on geographic identification, as requested.
+            const applicationLabel = properties.applicationCount === 0
+              ? "No applications yet"
+              : `${properties.applicationCount} application${properties.applicationCount === 1 ? "" : "s"} · ${properties.percentage ?? 0}% of applications`;
+            // A single accessible popup string keeps flags, counts, and percentages available without custom HTML injection.
             popup
               .setLngLat(event.lngLat)
-              .setText(properties.name)
+              .setText(`${properties.flag ? `${properties.flag} ` : ""}${properties.name}\n${applicationLabel}`)
               .addTo(map);
             canvas.style.cursor = "pointer";
+          };
+          const selectCountry = (event: MapLayerMouseEvent) => {
+            const properties = event.features?.[0]?.properties as ShadedCountryProperties | undefined;
+            const countryCode = normalizeCountryCode(properties?.countryCode);
+            if (countryCode) onCountrySelect?.(countryCode);
           };
           const hideCountryName = () => {
             popup.remove();
@@ -351,10 +352,12 @@ export function JobLocationsMap({
 
           map.on("mousemove", COUNTRY_SHADING_LAYER_ID, showCountryName);
           map.on("mouseleave", COUNTRY_SHADING_LAYER_ID, hideCountryName);
+          map.on("click", COUNTRY_SHADING_LAYER_ID, selectCountry);
 
           removeHoverHandlers = () => {
             map.off("mousemove", COUNTRY_SHADING_LAYER_ID, showCountryName);
             map.off("mouseleave", COUNTRY_SHADING_LAYER_ID, hideCountryName);
+            map.off("click", COUNTRY_SHADING_LAYER_ID, selectCountry);
             hideCountryName();
           };
         }
@@ -367,15 +370,15 @@ export function JobLocationsMap({
       cancelled = true;
       removeHoverHandlers?.();
     };
-  }, [groups, isSummary, mapReady]);
+  }, [applications, groups, isSummary, mapReady, onCountrySelect]);
 
   useEffect(() => {
     const map = mapRef.current;
     const maplibre = mapLibreModuleRef.current;
     if (!mapReady || !map || !maplibre) return;
 
-    if (isSummary) {
-      // Summary mode is a stable choropleth overview, so it deliberately omits pins and interaction.
+    if (isSummary && mode === "country") {
+      // Country mode keeps the complete choropleth unobstructed; city mode uses projected MapLibre markers.
       removeMarkerBindings(markerBindingsRef.current);
       markerBindingsRef.current = [];
       map.fitBounds([[-179, -60], [179, 85]], { padding: 10, duration: 0 });
@@ -388,6 +391,10 @@ export function JobLocationsMap({
       element.type = "button";
       element.textContent = String(count);
       element.title = group.label;
+      // Marker diameter grows sublinearly so busy cities stand out without covering nearby locations.
+      const markerSize = Math.min(48, 26 + Math.sqrt(count) * 5);
+      element.style.width = `${markerSize}px`;
+      element.style.height = `${markerSize}px`;
       element.setAttribute("aria-label", `${group.label}, ${count} application${count === 1 ? "" : "s"}`);
       setMarkerAppearance(element, group.key === selectedKeyRef.current);
 
@@ -446,7 +453,7 @@ export function JobLocationsMap({
       removeMarkerBindings(bindings);
       if (markerBindingsRef.current === bindings) markerBindingsRef.current = [];
     };
-  }, [groups, isSummary, mapReady]);
+  }, [groups, isSummary, mapReady, mode]);
 
   useEffect(() => {
     markerBindingsRef.current.forEach(({ key, element }) => {
@@ -465,7 +472,7 @@ export function JobLocationsMap({
             aria-label="Applications by country shaded map"
             className="absolute inset-0"
           />
-          {!mapReady && !mapError && groups.length > 0 && (
+          {!mapReady && !mapError && (groups.length > 0 || mode === "country") && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 text-sm text-muted-foreground backdrop-blur-[1px]">Loading country map…</div>
           )}
           {mapError && (
@@ -474,17 +481,18 @@ export function JobLocationsMap({
               <p className="max-w-sm text-sm text-muted-foreground">The country map could not be loaded. Your saved job locations are unchanged.</p>
             </div>
           )}
-          {groups.length === 0 && !mapError && (
+          {mode === "city" && groups.length === 0 && !mapError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 p-8 text-center">
               <MapPin className="h-8 w-8 text-muted-foreground" />
-              <p className="max-w-sm text-sm text-muted-foreground">No applications have enough country data to shade the map yet.</p>
+              <p className="max-w-sm text-sm text-muted-foreground">No applications have resolved city coordinates for this view.</p>
             </div>
           )}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          <span>Darker countries have more applications</span>
-          <span className="tabular-nums">{mappedApplicationCount} mapped application{mappedApplicationCount === 1 ? "" : "s"}</span>
+          <span>{mode === "country" ? "Darker countries have more applications" : "Marker size reflects applications by city"}</span>
+          <span className="tabular-nums">{displayedApplicationCount} mapped application{displayedApplicationCount === 1 ? "" : "s"}</span>
         </div>
+        {mode === "city" && activeGroup ? <LocationDetails group={activeGroup} /> : null}
       </div>
     );
   }

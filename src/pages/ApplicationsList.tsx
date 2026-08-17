@@ -44,6 +44,7 @@ import {
 import type { CurrentStatus, JobApplication } from "@/lib/types";
 import { CURRENT_STATUSES } from "@/lib/types";
 import { cn, formatDisplayDate } from "@/lib/utils";
+import { parseJobLocation } from "@/lib/geography";
 
 type DateFilterMode = "any" | "date" | "range" | "month" | "year";
 type ViewMode = "list" | "board";
@@ -81,6 +82,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const [pageSize, setPageSize] = useState(10);
   const activeStatus = searchParams.get("status") as CurrentStatus | null;
   const activeResponseStatus = searchParams.get("responseStatus");
+  const activeCountryCode = searchParams.get("country");
   const isAttachmentMode = pendingAttachments.length > 0;
   const { toast } = useToast();
   // Drawer links revalidate legacy and imported records before exposing a browser navigation target.
@@ -114,6 +116,8 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
     let list = applications;
     if (activeStatus) list = list.filter((application) => getEffectiveCurrentStatus(application) === activeStatus);
     if (activeResponseStatus) list = list.filter((application) => normalizeResponseStatus(application.responseStatus) === activeResponseStatus);
+    // Country links use ISO codes so filtering cannot confuse cities, aliases, or work modes with countries.
+    if (activeCountryCode) list = list.filter((application) => parseJobLocation(application).countryCode === activeCountryCode.toUpperCase());
     if (search) {
       const query = search.toLowerCase();
       list = list.filter((application) => [application.jobTitle, application.companyName, application.location, application.notes].some((field) => field.toLowerCase().includes(query)));
@@ -129,12 +133,12 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
       list = list.filter((application) => dateFilterMode === "year" ? application.dateApplied.startsWith(dateFilterValue) : dateFilterMode === "month" ? application.dateApplied.startsWith(`${dateFilterValue}-`) : application.dateApplied === dateFilterValue);
     }
     return [...list].sort((a, b) => sortAsc ? (a.dateApplied || "").localeCompare(b.dateApplied || "") : (b.dateApplied || "").localeCompare(a.dateApplied || ""));
-  }, [activeResponseStatus, activeStatus, applications, companyFilter, dateFilterEnd, dateFilterMode, dateFilterValue, search, sortAsc]);
+  }, [activeCountryCode, activeResponseStatus, activeStatus, applications, companyFilter, dateFilterEnd, dateFilterMode, dateFilterValue, search, sortAsc]);
 
   const filteredIds = useMemo(() => filtered.map((application) => application.id), [filtered]);
   const selectedFilteredIds = useMemo(() => filteredIds.filter((id) => selectedIds.has(id)), [filteredIds, selectedIds]);
   const allFilteredSelected = filteredIds.length > 0 && selectedFilteredIds.length === filteredIds.length;
-  const hasActiveFilters = Boolean(search || companyFilter.trim() || dateFilterValue || dateFilterEnd || activeStatus || activeResponseStatus);
+  const hasActiveFilters = Boolean(search || companyFilter.trim() || dateFilterValue || dateFilterEnd || activeStatus || activeResponseStatus || activeCountryCode);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pagedApplications = filtered.slice((Math.min(page, pageCount) - 1) * pageSize, Math.min(page, pageCount) * pageSize);
   const tableColumnCount = readOnly ? 6 : isAttachmentMode ? 7 : 8;

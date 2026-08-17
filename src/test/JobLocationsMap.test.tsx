@@ -254,10 +254,11 @@ describe("JobLocationsMap", () => {
     expect(londonMarker).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("renders summary mode as a static shaded world map without markers or controls", async () => {
+  it("renders summary mode as an interactive shaded world map without city markers", async () => {
+    const onCountrySelect = vi.fn();
     render(
       <MemoryRouter>
-        <JobLocationsMap applications={[mappedApplication, londonApplication]} variant="summary" />
+        <JobLocationsMap applications={[mappedApplication, londonApplication]} variant="summary" onCountrySelect={onCountrySelect} />
       </MemoryRouter>,
     );
 
@@ -271,19 +272,13 @@ describe("JobLocationsMap", () => {
       minZoom: -2,
       renderWorldCopies: false,
       attributionControl: false,
-      dragPan: false,
-      scrollZoom: false,
-      boxZoom: false,
-      doubleClickZoom: false,
-      keyboard: false,
-      touchZoomRotate: false,
     });
     expect(map.options.style).toEqual(expect.objectContaining({
       version: 8,
       layers: [expect.objectContaining({ id: "summary-map-background", type: "background" })],
     }));
     expect(map.options.style).not.toBe("https://tiles.openfreemap.org/styles/liberty");
-    expect(map.addControl).not.toHaveBeenCalled();
+    expect(map.addControl).toHaveBeenCalledOnce();
     expect(mapLibreMocks.markers).toHaveLength(0);
     await waitFor(() => expect(map.addSource).toHaveBeenCalledWith(
       "job-country-shading",
@@ -299,11 +294,14 @@ describe("JobLocationsMap", () => {
     expect(hoverCountry).toBeDefined();
     hoverCountry?.({
       lngLat: { lng: -100, lat: 60 },
-      features: [{ properties: { name: "Canada", applicationCount: 1 } }],
+      features: [{ properties: { name: "Canada", countryCode: "CA", flag: "🇨🇦", applicationCount: 1, percentage: 50 } }],
     });
-    expect(mapLibreMocks.popups[0]).toMatchObject({ text: "Canada", coordinates: { lng: -100, lat: 60 } });
+    expect(mapLibreMocks.popups[0]).toMatchObject({ text: "🇨🇦 Canada\n1 application · 50% of applications", coordinates: { lng: -100, lat: 60 } });
     expect(mapLibreMocks.popups[0].addTo).toHaveBeenCalledWith(map);
     expect(map.container.style.cursor).toBe("pointer");
+
+    mapLibreMocks.layerListeners.get("click:job-country-shading-fill")?.({ features: [{ properties: { countryCode: "CA" } }] });
+    expect(onCountrySelect).toHaveBeenCalledWith("CA");
 
     mapLibreMocks.layerListeners.get("mouseleave:job-country-shading-fill")?.({});
     expect(mapLibreMocks.popups[0].remove).toHaveBeenCalled();

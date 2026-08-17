@@ -1,6 +1,7 @@
 import { CURRENT_STATUSES, type ActivityLogEntry, type CurrentStatus, type JobApplication } from "./types";
 import { normalizeResponseStatus } from "./responseStatus";
 import { normalizeCompanyDomain } from "./companyLogos";
+import { normalizeApplicationGeography } from "./geography";
 
 const MAX_SHORT_TEXT_LENGTH = 200;
 const MAX_NOTES_LENGTH = 2000;
@@ -134,9 +135,8 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   };
 
   // Preserve optional workbook/app fields instead of silently dropping them during create/update sanitization.
-  const city = sanitizeSingleLineText(input.city);
-  const region = sanitizeSingleLineText(input.region);
-  const country = sanitizeSingleLineText(input.country);
+  // Normalize geography once at the persistence boundary so aliases and work modes cannot leak into country/city fields.
+  const geography = normalizeApplicationGeography(input);
   const jobLink = sanitizeExternalHttpUrl(input.jobLink);
   // Company branding overrides are normalized/validated by the logo service before being stored.
   const companyDomain = normalizeCompanyDomain(sanitizeSingleLineText(input.companyDomain, MAX_URL_LENGTH)) ?? "";
@@ -150,9 +150,12 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   const longitude = sanitizeFiniteNumber(input.longitude, -180, 180);
   const customFields = sanitizeCustomFields(input.customFields);
 
-  if (city) sanitized.city = city;
-  if (region) sanitized.region = region;
-  if (country) sanitized.country = country;
+  if (geography.city) sanitized.city = geography.city;
+  if (geography.region) sanitized.region = geography.region;
+  if (geography.country) sanitized.country = geography.country;
+  if (geography.countryCode) sanitized.countryCode = geography.countryCode;
+  if (geography.workMode) sanitized.workMode = geography.workMode;
+  sanitized.locationStatus = geography.locationStatus;
   if (jobLink) sanitized.jobLink = jobLink;
   if (companyDomain) sanitized.companyDomain = companyDomain;
   if (companyLogoUrl) sanitized.companyLogoUrl = companyLogoUrl;
@@ -162,8 +165,10 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   if (interviewDate) sanitized.interviewDate = interviewDate;
   if (daysSinceApplied !== undefined) sanitized.daysSinceApplied = daysSinceApplied;
   if (typeof input.coverLetterIncluded === "boolean") sanitized.coverLetterIncluded = input.coverLetterIncluded;
-  if (latitude !== undefined) sanitized.latitude = latitude;
-  if (longitude !== undefined) sanitized.longitude = longitude;
+  if (geography.latitude !== undefined) sanitized.latitude = geography.latitude;
+  else if (latitude !== undefined) sanitized.latitude = latitude;
+  if (geography.longitude !== undefined) sanitized.longitude = geography.longitude;
+  else if (longitude !== undefined) sanitized.longitude = longitude;
   if (customFields) sanitized.customFields = customFields;
 
   return sanitized;

@@ -15,6 +15,7 @@ import { addApplication as addLocalApplication, generateId, updateApplication as
 import type { CurrentStatus, JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { buildEditedApplicationWithStatusHistory, buildResponseStatusOptions, mapResponseStatusToCurrentStatus, syncEditedResponseStatus } from "@/lib/responseStatus";
+import { normalizeApplicationGeography } from "@/lib/geography";
 
 const schema = z.object({
   jobTitle: z.string().trim().min(1, "Required").max(200),
@@ -46,7 +47,7 @@ function getDefaultValues(existing?: JobApplication): FormData {
       companyName: existing.companyName,
       location: existing.location,
       country: existing.country ?? "",
-      workArrangement: existing.customFields?.["Work Arrangement"] ?? "",
+      workArrangement: existing.workMode ?? existing.customFields?.["Work Arrangement"] ?? "",
       salary: existing.salary ?? "",
       resumeUsed: existing.customFields?.["Resume Used"] ?? "",
       coverLetterUsed: existing.customFields?.["Cover Letter Used"] ?? "",
@@ -114,11 +115,12 @@ export default function ApplicationForm({
     setIsSaving(true);
 
     // Storage performs the final sanitisation pass; future AI/API calls must stay server-side with private keys off the Vite client.
-    const applicationInput: Omit<JobApplication, "id" | "activityLog"> = {
+    const applicationInput = normalizeApplicationGeography({
       jobTitle: data.jobTitle,
       companyName: data.companyName,
       location: data.location,
       country: data.country,
+      workMode: data.workArrangement as JobApplication["workMode"],
       salary: data.salary,
       tags: data.tags,
       recruiterContactName: data.recruiterContactName,
@@ -137,7 +139,7 @@ export default function ApplicationForm({
       dateApplied: data.dateApplied,
       notes: data.notes ?? "",
       followUpDate: data.followUpDate ?? "",
-    };
+    });
 
     try {
       if (existing) {
