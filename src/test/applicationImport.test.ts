@@ -125,6 +125,67 @@ describe("applyConfirmedApplicationImport", () => {
     expect(getLastImportMetadata()).toMatchObject({ fileName: "replacement.xlsx", rowCount: 1 });
   });
 
+  it("rejects duplicate replacement IDs before backup or persistence begins", async () => {
+    const current = [application()];
+    const imported = [
+      application({ id: "duplicate-id", companyName: "Apple" }),
+      application({ id: " duplicate-id ", companyName: "Microsoft" }),
+    ];
+    const plan = planApplicationImport(current, imported);
+    const persistBackup = vi.fn();
+    const persistMerge = vi.fn();
+    const persistReplacement = vi.fn();
+    saveApplications(current);
+
+    await expect(applyConfirmedApplicationImport({
+      currentApplications: current,
+      fileName: "duplicate-ids.xlsx",
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      plan,
+      mode: "replace",
+      persistBackup,
+      persistMerge,
+      persistReplacement,
+    })).rejects.toThrow("duplicate Application IDs");
+
+    // Validation precedes every import side effect, so the current dataset and breadcrumbs remain untouched.
+    expect(persistBackup).not.toHaveBeenCalled();
+    expect(persistMerge).not.toHaveBeenCalled();
+    expect(persistReplacement).not.toHaveBeenCalled();
+    expect(getApplications()).toEqual(current);
+    expect(getLatestImportBackup()).toBeNull();
+    expect(getLastImportMetadata()).toBeNull();
+  });
+
+  it("rejects invalid replacement path IDs before backup or persistence begins", async () => {
+    const current = [application()];
+    const imported = [application({ id: "folder/application", companyName: "Apple" })];
+    const plan = planApplicationImport(current, imported);
+    const persistBackup = vi.fn();
+    const persistMerge = vi.fn();
+    const persistReplacement = vi.fn();
+    saveApplications(current);
+
+    await expect(applyConfirmedApplicationImport({
+      currentApplications: current,
+      fileName: "invalid-id.xlsx",
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      plan,
+      mode: "replace",
+      persistBackup,
+      persistMerge,
+      persistReplacement,
+    })).rejects.toThrow("cannot be blank or contain '/'");
+
+    // A path-invalid row fails before the verified-backup transaction or local import breadcrumbs begin.
+    expect(persistBackup).not.toHaveBeenCalled();
+    expect(persistMerge).not.toHaveBeenCalled();
+    expect(persistReplacement).not.toHaveBeenCalled();
+    expect(getApplications()).toEqual(current);
+    expect(getLatestImportBackup()).toBeNull();
+    expect(getLastImportMetadata()).toBeNull();
+  });
+
   it("keeps the current dataset active when replacement persistence fails", async () => {
     const current = [application()];
     const imported = [application({ id: "apple-application", companyName: "Apple" })];

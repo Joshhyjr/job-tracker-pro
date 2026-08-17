@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { assertValidReplacementApplicationIds } from "@/lib/applicationMerge";
 import {
   createImportBackup,
   generateId,
@@ -125,6 +126,8 @@ export function useDemoApplications() {
     replaceApplications: (nextApplications: JobApplication[]) => runMutation(() => {
       // Replacement is explicit and cannot turn an invalid empty workbook into a silent demo wipe.
       if (nextApplications.length === 0) throw new Error("Cannot replace applications with an empty dataset.");
+      // Mirror the owner-cloud guard so direct demo callers cannot persist invalid or colliding row identities.
+      assertValidReplacementApplicationIds(nextApplications);
       commitApplications(nextApplications.map(normalizeDemoApplication));
     }),
     resetDemo: () => runMutation(async () => {

@@ -177,6 +177,29 @@ describe("replaceApplications", () => {
     expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
   });
 
+  it("rejects duplicate normalized IDs before reading or writing cloud records", async () => {
+    const incoming = [
+      application({ id: "duplicate-id", companyName: "Apple" }),
+      application({ id: " duplicate-id ", companyName: "Microsoft" }),
+    ];
+
+    await expect(replaceApplications("user-1", incoming)).rejects.toThrow("duplicate Application IDs");
+
+    // The repository remains fail-closed when a non-UI caller bypasses the import coordinator.
+    expect(firestoreMocks.getDocs).not.toHaveBeenCalled();
+    expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid document path IDs before reading or writing cloud records", async () => {
+    const incoming = [application({ id: "folder/application" })];
+
+    await expect(replaceApplications("user-1", incoming)).rejects.toThrow("cannot be blank or contain '/'");
+
+    // Validating the complete payload up front prevents an invalid later row from failing after earlier batch commits.
+    expect(firestoreMocks.getDocs).not.toHaveBeenCalled();
+    expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
+  });
+
   it("commits every incoming record before or with stale deletions", async () => {
     const committedBatches = mockBatchedReplacement(500);
     const incoming = Array.from({ length: 500 }, (_, index) => application({ id: `incoming-${index}` }));

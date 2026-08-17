@@ -23,6 +23,23 @@ function normalizeStableId(value: unknown): string {
   return String(value ?? "").normalize("NFKC").trim();
 }
 
+export function assertValidReplacementApplicationIds(applications: JobApplication[]): void {
+  const seenIds = new Set<string>();
+
+  for (const application of applications) {
+    const normalizedId = normalizeStableId(application.id);
+    // Firestore document IDs are single non-empty path segments; validating all rows first prevents partial batches.
+    if (!normalizedId || normalizedId.includes("/")) {
+      throw new Error("Replacement contains an invalid Application ID. Application IDs cannot be blank or contain '/'. Correct the workbook and try again.");
+    }
+    // Replacement writes use IDs as document paths, so a repeated normalized ID would overwrite an earlier row.
+    if (seenIds.has(normalizedId)) {
+      throw new Error("Replacement cannot contain duplicate Application IDs. Give each workbook row a unique Application ID and try again.");
+    }
+    seenIds.add(normalizedId);
+  }
+}
+
 function normalizeJobLink(value: unknown): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "";

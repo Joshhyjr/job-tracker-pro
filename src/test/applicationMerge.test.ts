@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planApplicationImport } from "@/lib/applicationMerge";
+import { assertValidReplacementApplicationIds, planApplicationImport } from "@/lib/applicationMerge";
 import type { JobApplication } from "@/lib/types";
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
@@ -101,5 +101,25 @@ describe("planApplicationImport", () => {
     expect(plan.updates).toHaveLength(1);
     expect(plan.updates[0].responseStatus).toBe("Interview");
     expect(plan.skipped).toHaveLength(1);
+  });
+
+  it("normalizes replacement IDs without folding Firestore-sensitive case", () => {
+    const unicodeDuplicate = [
+      application({ id: "stable-Ａ " }),
+      application({ id: "stable-A" }),
+    ];
+
+    // NFKC and trimming catch visually equivalent IDs, while different letter case remains a distinct document path.
+    expect(() => assertValidReplacementApplicationIds(unicodeDuplicate)).toThrow("duplicate Application IDs");
+    expect(() => assertValidReplacementApplicationIds([
+      application({ id: "stable-a" }),
+      application({ id: "stable-A" }),
+    ])).not.toThrow();
+  });
+
+  it("rejects IDs that cannot be Firestore document path segments", () => {
+    // Preflight validation must reject every invalid row before a later Firestore batch can fail partway through.
+    expect(() => assertValidReplacementApplicationIds([application({ id: " " })])).toThrow("cannot be blank or contain '/'");
+    expect(() => assertValidReplacementApplicationIds([application({ id: "folder/application" })])).toThrow("cannot be blank or contain '/'");
   });
 });

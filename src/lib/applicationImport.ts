@@ -1,4 +1,4 @@
-import type { ApplicationImportPlan } from "./applicationMerge";
+import { assertValidReplacementApplicationIds, type ApplicationImportPlan } from "./applicationMerge";
 import {
   markDemoSeeded,
   markSeeded,
@@ -40,6 +40,8 @@ export async function applyConfirmedApplicationImport({
   persistReplacement,
   storageScope = "owner",
 }: ApplyConfirmedImportOptions): Promise<ImportBackup> {
+  // Reject invalid or ambiguous replacement identities before backup or any cloud/browser state change.
+  if (mode === "replace") assertValidReplacementApplicationIds(result.applications);
   // Ordering is deliberate: a verified owner-cloud or demo-browser backup must exist before records can change.
   const backup = await persistBackup(currentApplications, fileName, mode);
   const nextApplications = mode === "replace" ? result.applications : plan.mergedApplications;

@@ -145,4 +145,26 @@ describe("useDemoApplications", () => {
     expect(getDemoApplications()).toMatchObject([{ companyName: "Apple" }]);
     expect(getApplications()).toMatchObject([{ companyName: "Private Company" }]);
   });
+
+  it("rejects duplicate replacement IDs without changing the demo dataset", async () => {
+    const current = application({ id: "current-job", companyName: "IBM" });
+    saveDemoApplications([current]);
+    markDemoSeeded();
+
+    const { result } = renderHook(() => useDemoApplications());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const beforeReplacement = result.current.applications;
+
+    await act(async () => {
+      await expect(result.current.replaceApplications([
+        application({ id: "duplicate-id", companyName: "Apple" }),
+        application({ id: " duplicate-id ", companyName: "Microsoft" }),
+      ])).rejects.toThrow("duplicate Application IDs");
+    });
+
+    // Direct hook callers receive the same protection as owner imports, with no local overwrite or row coupling.
+    expect(result.current.applications).toEqual(beforeReplacement);
+    expect(getDemoApplications()).toEqual(beforeReplacement);
+    expect(result.current.syncError).toContain("duplicate Application IDs");
+  });
 });

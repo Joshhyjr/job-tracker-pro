@@ -11,6 +11,7 @@ import {
   type DocumentData,
   type Unsubscribe,
 } from "firebase/firestore";
+import { assertValidReplacementApplicationIds } from "./applicationMerge";
 import { getFirestoreDatabase } from "./firebase";
 import { generateId, type ImportBackup } from "./storage";
 import type { JobApplication } from "./types";
@@ -171,6 +172,8 @@ async function commitOperations(
 export async function replaceApplications(userId: string, applications: JobApplication[]): Promise<void> {
   // Invalid workbooks can parse to zero rows; never turn that failure into an implicit full cloud deletion.
   if (applications.length === 0) throw new Error("Cannot replace applications with an empty dataset.");
+  // Defend the cloud boundary even if a future caller bypasses the import coordinator.
+  assertValidReplacementApplicationIds(applications);
 
   const existing = await getDocs(applicationCollection(userId));
   const now = new Date().toISOString();
