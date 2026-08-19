@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildQuickActionResponseStatuses,
+  buildResponseStatusBoardColumns,
   buildResponseStatusChangeApplication,
   buildEditedApplicationWithStatusHistory,
   buildResponseStatusOptions,
@@ -68,6 +69,19 @@ describe("computeStatusBreakdown", () => {
   it("defaults blank values to Applied", () => {
     const applications = [app(""), app(" "), app("")];
     expect(computeStatusBreakdown(applications)).toEqual([{ key: "Applied", label: "Applied", count: 3 }]);
+  });
+});
+
+describe("buildResponseStatusBoardColumns", () => {
+  it("keeps preferred targets and appends supported and observed stages once", () => {
+    const columns = buildResponseStatusBoardColumns(
+      [app("Applied"), app("On Hold"), app("custom review"), app("Custom Review")],
+      ["Applied", "On Hold", "Role Cancelled"],
+      ["Custom Review", "Offer"],
+    );
+
+    // A stable preferred order can lead the board without hiding zero-count defaults or imported stages.
+    expect(columns).toEqual(["Custom Review", "Offer", "Applied", "On Hold", "Role Cancelled"]);
   });
 });
 

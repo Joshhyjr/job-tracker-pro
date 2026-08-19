@@ -28,13 +28,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
 import {
+  buildResponseStatusBoardColumns,
   buildResponseStatusChangeApplication,
   buildStatusChangeApplication,
   getEffectiveCurrentStatus,
   getResponseStatusBadgeStyle,
   normalizeResponseStatus,
 } from "@/lib/responseStatus";
-import { generateId } from "@/lib/storage";
+import { generateId, getPreferredResponseStatusOrder } from "@/lib/storage";
 import { sanitizeExternalHttpUrl } from "@/lib/security";
 import {
   buildApplicationDocumentAttachment,
@@ -42,13 +43,14 @@ import {
   type DocumentAttachment,
 } from "@/lib/documentMatching";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
-import { CURRENT_STATUSES } from "@/lib/types";
+import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { parseJobLocation } from "@/lib/geography";
 
 type DateFilterMode = "any" | "date" | "range" | "month" | "year";
 type ViewMode = "list" | "board";
-const BOARD_COLUMNS = ["Applied", "Auto-reply received", "No Response", "Pre-screen call", "Assessment", "Interview", "Offer", "Rejected", "Withdrawn"];
+// Keep the familiar board order first; the shared builder appends every other supported or observed stage.
+const DEFAULT_BOARD_COLUMNS = ["Applied", "Auto-reply received", "No Response", "Pre-screen call", "Assessment", "Interview", "Offer", "Rejected", "Withdrawn", ...RESPONSE_STATUSES];
 
 interface ApplicationsListProps {
   applications: JobApplication[];
@@ -61,7 +63,7 @@ interface ApplicationsListProps {
   onAttachmentsComplete?: () => void;
 }
 
-export default function ApplicationsList({ applications, onSelect, onUpdate, onDelete, readOnly = false, pendingAttachments = [], onAttachmentsComplete }: ApplicationsListProps) {
+export default function ApplicationsList({ applications, onSelect, onUpdate, onDelete, isDemo = false, readOnly = false, pendingAttachments = [], onAttachmentsComplete }: ApplicationsListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [companyFilter, setCompanyFilter] = useState("");
@@ -136,6 +138,11 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   }, [activeCountryCode, activeResponseStatus, activeStatus, applications, companyFilter, dateFilterEnd, dateFilterMode, dateFilterValue, search, sortAsc]);
 
   const filteredIds = useMemo(() => filtered.map((application) => application.id), [filtered]);
+  const boardColumns = useMemo(() => {
+    // Use all records so filtering never makes imported custom columns jump in or out of the board layout.
+    const preferredOrder = isDemo ? [] : getPreferredResponseStatusOrder();
+    return buildResponseStatusBoardColumns(applications, DEFAULT_BOARD_COLUMNS, preferredOrder);
+  }, [applications, isDemo]);
   const selectedFilteredIds = useMemo(() => filteredIds.filter((id) => selectedIds.has(id)), [filteredIds, selectedIds]);
   const allFilteredSelected = filteredIds.length > 0 && selectedFilteredIds.length === filteredIds.length;
   const hasActiveFilters = Boolean(search || companyFilter.trim() || dateFilterValue || dateFilterEnd || activeStatus || activeResponseStatus || activeCountryCode);
@@ -323,9 +330,9 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
         </section>
       ) : (
         <section className="flex gap-3 overflow-x-auto pb-3" aria-label="Applications board">
-          {BOARD_COLUMNS.map((column) => {
+          {boardColumns.map((column) => {
             const columnApplications = filtered.filter((application) => currentResponseStatus(application) === column);
-            return <div key={column} role="group" aria-label={`${column} column`} className={cn("min-h-[420px] w-72 shrink-0 rounded-md border bg-muted/25 transition-colors", dropTarget === column && "border-primary bg-primary/5 ring-2 ring-primary/20")} onDragOver={(event) => { event.preventDefault(); setDropTarget(column); }} onDragLeave={() => setDropTarget(null)} onDrop={(event) => { event.preventDefault(); const application = applications.find((item) => item.id === draggedId); setDraggedId(null); setDropTarget(null); if (application) void moveApplication(application, column); }}><div className="flex items-center justify-between border-b px-3 py-2.5"><span className="text-xs font-bold">{column}</span><span className="rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{columnApplications.length}</span></div><div className="space-y-2 p-2">{columnApplications.map((application) => <article key={application.id} aria-label={`${application.jobTitle} application card`} draggable={!readOnly} onDragStart={() => setDraggedId(application.id)} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }} className={cn("app-panel cursor-pointer p-3 transition-all", draggedId === application.id && "scale-[1.02] opacity-60 shadow-lg")} onClick={() => openDrawer(application)}><div className="flex items-start gap-2"><GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{/* Board cards use the same logo service as the table so branding stays consistent. */}<CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} /><div className="min-w-0 flex-1"><h3 className="text-xs font-bold leading-5">{application.jobTitle}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">{application.companyName}</p></div><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Change status for ${application.jobTitle}`} onClick={(event) => event.stopPropagation()}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{BOARD_COLUMNS.map((status) => <DropdownMenuItem key={status} disabled={column === status} onClick={() => void moveApplication(application, status)}>{status}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div><div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span className="truncate">{application.location}</span><span className="shrink-0">{formatDisplayDate(application.dateApplied)}</span></div>{application.followUpDate && <p className="mt-2 flex items-center gap-1 text-[10px] text-amber-600"><CalendarDays className="h-3 w-3" />Follow up {formatDisplayDate(application.followUpDate)}</p>}{application.tags && <div className="mt-2 flex flex-wrap gap-1">{application.tags.split(",").slice(0, 3).map((tag) => <span key={tag} className="rounded bg-muted px-1.5 py-0.5 text-[9px]">{tag.trim()}</span>)}</div>}</article>)}</div></div>;
+            return <div key={column} role="group" aria-label={`${column} column`} className={cn("min-h-[420px] w-72 shrink-0 rounded-md border bg-muted/25 transition-colors", dropTarget === column && "border-primary bg-primary/5 ring-2 ring-primary/20")} onDragOver={(event) => { event.preventDefault(); setDropTarget(column); }} onDragLeave={() => setDropTarget(null)} onDrop={(event) => { event.preventDefault(); const application = applications.find((item) => item.id === draggedId); setDraggedId(null); setDropTarget(null); if (application) void moveApplication(application, column); }}><div className="flex items-center justify-between border-b px-3 py-2.5"><span className="text-xs font-bold">{column}</span><span className="rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{columnApplications.length}</span></div><div className="space-y-2 p-2">{columnApplications.map((application) => <article key={application.id} aria-label={`${application.jobTitle} application card`} draggable={!readOnly} onDragStart={() => setDraggedId(application.id)} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }} className={cn("app-panel cursor-pointer p-3 transition-all", draggedId === application.id && "scale-[1.02] opacity-60 shadow-lg")} onClick={() => openDrawer(application)}><div className="flex items-start gap-2"><GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{/* Board cards use the same logo service as the table so branding stays consistent. */}<CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} /><div className="min-w-0 flex-1"><h3 className="text-xs font-bold leading-5">{application.jobTitle}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">{application.companyName}</p></div><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Change status for ${application.jobTitle}`} onClick={(event) => event.stopPropagation()}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{boardColumns.map((status) => <DropdownMenuItem key={status} disabled={column === status} onClick={() => void moveApplication(application, status)}>{status}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div><div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span className="truncate">{application.location}</span><span className="shrink-0">{formatDisplayDate(application.dateApplied)}</span></div>{application.followUpDate && <p className="mt-2 flex items-center gap-1 text-[10px] text-amber-600"><CalendarDays className="h-3 w-3" />Follow up {formatDisplayDate(application.followUpDate)}</p>}{application.tags && <div className="mt-2 flex flex-wrap gap-1">{application.tags.split(",").slice(0, 3).map((tag) => <span key={tag} className="rounded bg-muted px-1.5 py-0.5 text-[9px]">{tag.trim()}</span>)}</div>}</article>)}</div></div>;
           })}
         </section>
       )}

@@ -51,6 +51,19 @@ export function normalizeResponseStatusList(rawList: string[]): string[] {
   return normalized;
 }
 
+export function buildResponseStatusBoardColumns(
+  applications: Array<Pick<JobApplication, "responseStatus">>,
+  defaults: string[],
+  preferredOrder: string[] = [],
+): string[] {
+  // Preferred and default targets stay stable, while observed stages guarantee that no stored application is orphaned from the board.
+  return normalizeResponseStatusList([
+    ...preferredOrder,
+    ...defaults,
+    ...applications.map((application) => application.responseStatus),
+  ]);
+}
+
 export function buildResponseStatusOptions(currentResponseStatus: string, defaults: string[]): string[] {
   const normalizedDefaults = normalizeResponseStatusList(defaults);
   const trimmedCurrent = String(currentResponseStatus ?? "").trim();

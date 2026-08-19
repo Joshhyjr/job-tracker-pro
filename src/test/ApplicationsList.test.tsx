@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationsList from "@/pages/ApplicationsList";
 import type { JobApplication } from "@/lib/types";
 
-const { toastMock } = vi.hoisted(() => ({ toastMock: vi.fn() }));
+const { getPreferredResponseStatusOrderMock, toastMock } = vi.hoisted(() => ({
+  getPreferredResponseStatusOrderMock: vi.fn(),
+  toastMock: vi.fn(),
+}));
 
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastMock }),
@@ -14,7 +17,7 @@ vi.mock("@/lib/storage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/storage")>("@/lib/storage");
   return {
     ...actual,
-    getPreferredResponseStatusOrder: () => [],
+    getPreferredResponseStatusOrder: getPreferredResponseStatusOrderMock,
   };
 });
 
@@ -62,6 +65,8 @@ function renderList(overrides: Partial<React.ComponentProps<typeof ApplicationsL
 
 describe("ApplicationsList", () => {
   beforeEach(() => {
+    getPreferredResponseStatusOrderMock.mockReset();
+    getPreferredResponseStatusOrderMock.mockReturnValue([]);
     toastMock.mockReset();
   });
 
@@ -291,6 +296,70 @@ describe("ApplicationsList", () => {
     await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ responseStatus: "Interview" })));
     expect(within(target).getByRole("article", { name: "Frontend Engineer application card" })).toBeInTheDocument();
     expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Acme Labs moved to Interview." }));
+  });
+
+  it("keeps supported and imported response stages visible on the board", () => {
+    const dynamicApplications = [
+      application({ id: "hold", jobTitle: "Held Role", responseStatus: "On Hold" }),
+      application({ id: "cancelled", jobTitle: "Cancelled Role", responseStatus: "Role Cancelled" }),
+      application({ id: "reply", jobTitle: "Reply Role", responseStatus: "Human reply received" }),
+      application({ id: "custom", jobTitle: "Custom Role", responseStatus: "Hiring Manager Review" }),
+    ];
+    renderList({ applications: dynamicApplications });
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+
+    // Every filtered application must have one board home, including workbook-defined stages.
+    expect(within(screen.getByRole("group", { name: "On Hold column" })).getByText("Held Role")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Role Cancelled column" })).getByText("Cancelled Role")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Human reply received column" })).getByText("Reply Role")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Hiring Manager Review column" })).getByText("Custom Role")).toBeInTheDocument();
+    expect(screen.getAllByRole("article")).toHaveLength(dynamicApplications.length);
+  });
+
+  it("moves a board card into an observed custom stage", async () => {
+    const onUpdate = vi.fn().mockImplementation(async (item: JobApplication) => item);
+    renderList({
+      onUpdate,
+      applications: [
+        application({ id: "source", jobTitle: "Source Role", responseStatus: "Applied" }),
+        application({ id: "custom", jobTitle: "Custom Role", responseStatus: "Hiring Manager Review" }),
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+
+    const card = screen.getByRole("article", { name: "Source Role application card" });
+    const target = screen.getByRole("group", { name: "Hiring Manager Review column" });
+    fireEvent.dragStart(card);
+    fireEvent.dragOver(target);
+    fireEvent.drop(target);
+
+    // Dynamic moves retain the exact response stage while using the existing coarse Applied status bucket.
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      currentStatus: "Applied",
+      responseStatus: "Hiring Manager Review",
+    })));
+    expect(within(target).getByRole("article", { name: "Source Role application card" })).toBeInTheDocument();
+  });
+
+  it("uses the owner workbook order for board columns", () => {
+    getPreferredResponseStatusOrderMock.mockReturnValue(["Hiring Manager Review", "Offer"]);
+    renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+
+    // Owner preferences lead the board even when a configured stage currently has no cards.
+    expect(screen.getAllByRole("group").slice(0, 2).map((group) => group.getAttribute("aria-label"))).toEqual([
+      "Hiring Manager Review column",
+      "Offer column",
+    ]);
+  });
+
+  it("does not expose owner workbook order in the public demo", () => {
+    getPreferredResponseStatusOrderMock.mockReturnValue(["Hiring Manager Review", "Offer"]);
+    renderList({ isDemo: true });
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+
+    // Demo columns come only from public defaults and demo records, never private owner preferences.
+    expect(screen.queryByRole("group", { name: "Hiring Manager Review column" })).not.toBeInTheDocument();
   });
 
   it("restores a board card when persistence fails", async () => {
