@@ -10,6 +10,7 @@ import {
 } from "@/lib/storage";
 import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeSingleLineText } from "@/lib/security";
 import type { JobApplication } from "@/lib/types";
+import { useMutationStatus } from "@/hooks/useMutationStatus";
 
 export async function loadInitialDemoApplications(): Promise<JobApplication[]> {
   const savedApplications = getDemoApplications();
@@ -44,8 +45,7 @@ export function useDemoApplications() {
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const applicationsRef = useRef<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [syncError, setSyncError] = useState("");
+  const { syncing, syncError, runMutation } = useMutationStatus("The demo workspace could not be updated.");
 
   const commitApplications = useCallback((nextApplications: JobApplication[]) => {
     // Keep the ref, visible state, and isolated demo storage aligned for rapid consecutive edits.
@@ -65,20 +65,6 @@ export function useDemoApplications() {
     return () => {
       active = false;
     };
-  }, []);
-
-  const runMutation = useCallback(async <T,>(mutation: () => T | Promise<T>): Promise<T> => {
-    setSyncing(true);
-    setSyncError("");
-    try {
-      return await mutation();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "The demo workspace could not be updated.";
-      setSyncError(message);
-      throw error;
-    } finally {
-      setSyncing(false);
-    }
   }, []);
 
   return {
