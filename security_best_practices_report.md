@@ -1,111 +1,103 @@
-# Weekly Security Audit — 2026-08-10
+# Weekly Security Audit — 2026-08-24
 
 ## Executive summary
 
-The live audit initially found **8 vulnerable dependency entries (6 high, 2 moderate), no critical advisories, and no high-confidence committed secrets**. All dependency advisories and verified application findings below are resolved in this branch; final full and production-only npm audits report **0 vulnerabilities**. Server-only credentials remain outside the Vite bundle, Firestore rules still restrict data to the verified owner, and CI already runs npm audit, dependency review, CodeQL, Gitleaks, and reproducible installs.
+The current full and production npm graphs contain **0 known vulnerabilities**, and registry-signature verification passed for every installed package. No high-confidence committed secret, unsafe client secret, new exploitable React sink, or API-boundary regression was found.
 
-Breaking maintenance upgrades unrelated to an advisory are intentionally deferred for compatibility testing.
+This run resolved five supply-chain and development-hardening gaps: GitHub Actions now use immutable commit pins, workflow token permissions are job-scoped, npm is enforced as the single lockfile path, Vite listens only on loopback by default, and CSP/header regression coverage is stronger. No Critical or High findings remain.
 
 ## Findings and fixes
 
-### SEC-2026-08-10-01 — Vulnerable dependency graph
-
-- **Severity:** High
-- **Status:** Resolved in this run
-- **Location:** `package.json` (`postcss`, `react-router-dom`, `vite`) and `package-lock.json`
-- **Evidence:** `npm audit --json` reported vulnerable `brace-expansion`, `fast-xml-parser`, `js-yaml`, `nanoid`, `postcss`, `react-router`, `react-router-dom`, and `undici`. The browser-relevant Router advisory includes [GHSA-jjmj-jmhj-qwj2](https://github.com/advisories/GHSA-jjmj-jmhj-qwj2); the direct PostCSS advisory includes [GHSA-r28c-9q8g-f849](https://github.com/advisories/GHSA-r28c-9q8g-f849).
-- **Impact:** The graph includes denial-of-service, information-disclosure, path-traversal, response-parsing, and open-redirect/XSS advisories.
-- **Fix:** Refreshed compatible transitive versions, set explicit safe floors for PostCSS and Vite, upgraded React Router DOM to 7.18.2, and removed the stale unsupported `bun.lock` so npm's audited lockfile is the single documented/CI source of truth.
-- **Mitigation:** Weekly npm audit, Dependabot, dependency review, and the lockfile remain enabled.
-- **False-positive notes:** Some vulnerable parser paths are not fed attacker input in this app, and the Router SSR advisory is not used by this SPA; the browser open-redirect advisory still applies.
-
-### SEC-2026-08-10-02 — API limits occur after unbounded Node request buffering
+### SEC-2026-08-24-01 — Mutable GitHub Action references
 
 - **Severity:** Medium
-- **Status:** Resolved in this run
-- **Location:** `api/contact.ts` (`toWebRequest`) and `api/ai-insights.ts` (`toWebRequest`)
-- **Evidence:** Both adapters collect every incoming chunk before the 8 KB or 16 KB core-handler checks run.
-- **Impact:** Oversized, unauthenticated, or unsupported requests can consume function memory before rejection.
-- **Fix:** Added one shared Node adapter that rejects oversized declared and chunked bodies while streaming and maps the typed failure to a no-store JSON `413` response.
-- **Mitigation:** Keep the existing core-handler byte checks as defense in depth.
-- **False-positive notes:** Vercel may impose a larger platform limit, but that does not enforce these application-specific caps before buffering.
+- **Status:** Resolved
+- **Location:** `.github/workflows/ci.yml:20-26`; `.github/workflows/security.yml:25-98`
+- **Evidence:** Every action previously used a mutable major reference such as `actions/checkout@v7` or `github/codeql-action/*@v4`.
+- **Impact:** A moved or compromised tag could replace code that CI executes with repository-token access.
+- **Fix:** Resolved the current official release refs live and pinned all 12 action uses to full 40-character commit SHAs, retaining release comments for review and Dependabot updates.
+- **Mitigation:** Dependabot continues to monitor the `github-actions` ecosystem weekly.
+- **False-positive notes:** The actions were established first-party/security vendors; this is supply-chain defense in depth, not evidence that a tag was compromised.
 
-### SEC-2026-08-10-03 — AI authentication work is not pre-throttled
-
-- **Severity:** Medium
-- **Status:** Resolved in this run
-- **Location:** `api/ai-insights.ts` (`handleAiInsightsRequest`)
-- **Evidence:** Firebase token verification runs before the existing authenticated-owner rate limiter.
-- **Impact:** Invalid-token traffic can repeatedly consume Firebase verification and function compute without reaching the 12-per-minute owner bucket.
-- **Fix:** Added a separate 60-per-minute pre-authentication IP bucket while preserving the existing 12-per-minute authenticated-owner limit.
-- **Mitigation:** The documented Vercel Firewall rules remain the distributed enforcement layer.
-- **False-positive notes:** In-memory buckets are per function instance and cannot replace the firewall.
-
-### SEC-2026-08-10-04 — Hosted AI receives unnecessary workbook metadata
-
-- **Severity:** Medium
-- **Status:** Resolved in this run
-- **Location:** `src/lib/aiInsights.ts` (`generateHostedAiInsights`) and `api/ai-insights.ts` (`parseSummary` / `buildGeminiRequest`)
-- **Evidence:** Exact workbook filenames, import timestamps, and custom-field header names are included in the summary forwarded to Gemini.
-- **Impact:** Filenames and headers can reveal client, immigration, salary, or other sensitive context that is not needed for recommendations.
-- **Fix:** Introduced a hosted-provider DTO that keeps only source type, row/warning counts, and numeric coverage; the server rebuilds the same allowlist before contacting Gemini.
-- **Mitigation:** Keep local metadata available to the UI and local Ollama flow without forwarding it to the hosted provider.
-- **False-positive notes:** Company, role, and location summaries remain intentionally included for tailored guidance; hosted summaries are minimized, not anonymous.
-
-### SEC-2026-08-10-05 — Imported job links permit active URL schemes
-
-- **Severity:** Medium
-- **Status:** Resolved in this run
-- **Location:** `src/lib/security.ts` (`sanitizeApplicationInput`) and `src/pages/ApplicationsList.tsx` (drawer job link)
-- **Evidence:** `jobLink` is stored as text and rendered directly as an anchor; React 18 preserves a `javascript:` href. The detail page separately validates HTTP(S), so protection is inconsistent.
-- **Impact:** A clicked imported link can attempt script execution or unsafe navigation wherever the Vercel CSP is absent or weakened.
-- **Fix:** Centralized an absolute HTTP(S)-only URL sanitizer and applied it to create, import, local/demo update persistence, and every clickable job-link sink.
-- **Mitigation:** Production CSP remains defense in depth, not the primary validator.
-- **False-positive notes:** Exploitation requires a malicious/tampered record and a user click.
-
-### SEC-2026-08-10-06 — Low-risk hardening regressions
+### SEC-2026-08-24-02 — Security workflow grants excess token permissions
 
 - **Severity:** Low
-- **Status:** Resolved in this run
-- **Location:** `src/components/ui/chart.tsx`, `src/lib/storage.ts`, `src/pages/Documents.tsx`, `.github/workflows/*.yml`, and `vercel.json`
-- **Evidence:** Chart identifiers/config keys enter generated CSS; IDs use `Math.random()` plus time; arbitrary `data:` MIME types receive a Preview action; CI uses Node 20 while `package.json` requires Node 22; CSP lacks `form-action`.
-- **Impact:** These gaps increase future CSS injection, collision/predictability, legacy active-content preview, runtime drift, and form-exfiltration risk.
-- **Fix:** Sanitized CSS identifiers/colors, adopted Web Crypto IDs, preserved every document while previewing only inert MIME types, aligned CI to Node 22, and added `form-action 'self'` with regression tests.
-- **Mitigation:** The chart helper currently has no untrusted call site, document previews already use `noreferrer`, and `frame-ancestors 'none'` already blocks framing.
-- **False-positive notes:** The document preview issue is defense in depth rather than a demonstrated same-origin XSS in modern browsers.
+- **Status:** Resolved
+- **Location:** `.github/workflows/security.yml:14-16`, `47-49`, and `65-67`
+- **Evidence:** `security-events: write` and `pull-requests: read` were granted workflow-wide even though only CodeQL and Dependency Review need them.
+- **Impact:** A compromised npm-audit or Gitleaks step would receive permissions unrelated to its job.
+- **Fix:** Kept only `contents: read` globally; Dependency Review gets read-only PR access and CodeQL gets `security-events: write` at their job boundaries.
+- **Mitigation:** GitHub's default token restrictions remain an additional boundary.
+- **False-positive notes:** No existing workflow misuse was found; the previous grants were broader than necessary.
 
-### SEC-2026-08-10-07 — API parsing and logging hardening
+### SEC-2026-08-24-03 — Unsupported secondary dependency lockfile
 
 - **Severity:** Low
-- **Status:** Resolved in this run
-- **Location:** `api/contact.ts` and `api/ai-insights.ts`
-- **Evidence:** `startsWith("application/json")` accepts lookalike media types, and raw provider error bodies are copied into retained logs.
-- **Impact:** Malformed content types bypass the intended gate, while provider diagnostics could echo contact or request data into logs.
-- **Fix:** Parse the MIME type exactly, log only status plus an allowlisted provider request identifier, and cancel unused provider bodies without decoding or retaining them.
-- **Mitigation:** JSON parsing, schema checks, fixed provider destinations, and sanitized client errors are already present.
-- **False-positive notes:** No current provider response was shown to contain a secret; the change removes reliance on that external behavior.
+- **Status:** Resolved
+- **Location:** `.gitignore:10-18`; `README.md:67-74`; removed `bun.lock`
+- **Evidence:** Both `package-lock.json` and a reintroduced `bun.lock` were tracked while CI, Dependabot, documentation, and live audits validate only npm.
+- **Impact:** Contributors or automation could install a dependency graph that security checks do not reproduce.
+- **Fix:** Removed `bun.lock`, ignored future bot-generated copies, documented npm as the single package manager, and changed installation guidance to reproducible `npm ci`.
+- **Mitigation:** CI already rejects package/lock drift through `npm ci`.
+- **False-positive notes:** The two lockfiles' 77 direct versions currently agreed; the risk was future unvalidated drift rather than a known vulnerable Bun resolution.
+
+### SEC-2026-08-24-04 — Development server exposed on every interface
+
+- **Severity:** Low
+- **Status:** Resolved
+- **Location:** `vite.config.ts:6-10`; `README.md:69-74`
+- **Evidence:** Vite used `host: "::"`, making the development app and source-serving endpoints reachable beyond the local machine when the network allowed it.
+- **Impact:** A local-network peer could inspect or interact with a developer's in-progress application.
+- **Fix:** Bound Vite to `127.0.0.1` by default and documented the explicit `--host 0.0.0.0` override for intentional trusted-LAN testing.
+- **Mitigation:** Vite host validation and local firewalls remain additional controls.
+- **False-positive notes:** Production deployment was never affected.
+
+### SEC-2026-08-24-05 — CSP regressions were only partially tested
+
+- **Severity:** Low
+- **Status:** Resolved
+- **Location:** `src/test/vercelCsp.test.ts:4-42`
+- **Evidence:** Existing tests checked required map/logo allowances and `form-action`, but would not catch a script wildcard, `unsafe-eval`, or removal of key framing/object/base restrictions.
+- **Impact:** A later configuration edit could silently weaken XSS or clickjacking defense in depth.
+- **Fix:** Added assertions for essential response headers, a strict script allowlist, `object-src 'none'`, `base-uri 'self'`, and `frame-ancestors 'none'`.
+- **Mitigation:** The production CSP already contains these controls; this change prevents silent regression.
+- **False-positive notes:** No current CSP bypass was found.
 
 ## Confirmed-safe controls
 
-- Only `.env.example` is tracked; real `.env` files and Firebase Admin downloads are ignored.
-- Gemini, Resend, and Firebase Admin credentials use server-only `process.env`; browser `VITE_*` values are limited to public Firebase configuration and the local Ollama model name.
-- Firestore denies unmatched paths and requires the verified allowlisted owner for application and recovery data.
-- API routes enforce exact browser origin, validated JSON shapes, fixed provider destinations, escaped email HTML, no-store responses, and endpoint rate limits.
-- npm is the only documented and CI package manager; `package-lock.json` is tracked with integrity hashes and clean `npm ci` reproduction.
-- No application `eval`, unsafe `postMessage`, service worker, public source maps, or unprotected new-tab links were found.
+- Only `.env.example` is tracked. Real env files and Firebase Admin downloads remain ignored; current and historical high-signal scans found placeholders but no credential-shaped value.
+- Gemini, Resend, and Firebase Admin credentials use server-only `process.env`. Browser `VITE_*` values are limited to public Firebase web configuration and the local Ollama model label.
+- API routes retain exact same-origin checks, bounded streaming bodies, exact JSON media types, fixed provider destinations, endpoint throttling, sanitized logs, and no-store JSON responses.
+- Hosted AI remains owner-token protected and rebuilds an allowlisted privacy-minimized DTO before contacting Gemini.
+- Firestore Rules remain deny-by-default and require the verified allowlisted owner.
+- HTTP(S)-only application URL validation, inert document-preview MIME allowlisting, sanitized chart CSS, safe new-tab relations, and Web Crypto IDs remain intact.
+- No application `eval`, unsafe `postMessage`, service worker, raw untrusted HTML path, credentialed dynamic-origin request, or unprotected new-tab link was found.
+- `package-lock.json` is unchanged, contains integrity hashes, and has no Git or local-file dependencies.
 
-## Accepted residual risks
+## Outdated packages
 
-- Complete document files remain JavaScript-readable in origin-scoped local storage. Replacing this with encrypted or authenticated file storage is an architectural product change; this run preserves existing documents and tightens preview behavior without migrating or deleting data.
-- Cloudflare Web Analytics is a third-party script on the shared portfolio/app origin and therefore has first-party script privilege. Removing analytics or separating the public portfolio and private app origins is a product/deployment decision; no current compromise was found.
-- `npm outdated` still reports non-security maintenance drift, including compatible Radix UI, Firebase 12, React Hook Form, TypeScript ESLint, Vitest, font, and Autoprefixer updates. Major upgrades such as React 19, Vite 8, Tailwind 4, Recharts 3, Zod 4, and Firebase Admin 14 are also available. These are deferred to dedicated compatibility work rather than mixed into an advisory patch.
+`npm outdated` reports maintenance drift, not a vulnerability. Dozens of compatible refreshes are available, including Firebase 12.1.0 → 12.18.0, React Query 5.101.0 → 5.102.3, React Hook Form 7.80.0 → 7.86.0, ESLint 9.39.4 → 9.39.5, Autoprefixer 10.5.0 → 10.5.4, TypeScript ESLint 8.61.1 → 8.68.0, and Vitest 3.2.6 → 3.2.7.
 
-## Verification results
+These non-advisory updates are deferred to a dedicated compatibility change. Major migrations—React 19, Vite 8, Vitest 4, Firebase Admin 14, Zod 4, Tailwind 4, Recharts 3, and MapLibre 6—should not be mixed into a security patch.
 
-- Node 22 clean install: `npm ci` passed and reproduced the npm lockfile with 0 vulnerabilities.
-- Dependency audits: full and production-only `npm audit` both passed with 0 total advisories.
-- TypeScript: app, API, Node, and root project checks passed.
-- Tests: 32 files / 209 tests passed; the 3 Firestore emulator tests remain skipped by the normal suite because rules were unchanged and no emulator was started.
-- ESLint: 0 errors and the same 7 pre-existing Fast Refresh warnings as the baseline.
-- Production build and JSON/YAML configuration parsing passed. Vite retains its existing large-chunk advisory.
-- `git diff --check` and an independent integrated security/regression review passed after its three findings were corrected.
+## Accepted residual risks and follow-ups
+
+- **Third-party analytics:** `index.html:30-31` loads Cloudflare Web Analytics on the same origin as the private app. Vendor compromise could access origin-readable data. Removing analytics, self-hosting an approved pinned asset, or separating portfolio and tracker origins requires a product/deployment decision.
+- **Device persistence:** Documents, Firebase auth, and Firestore offline cache remain on a trusted device after sign-out. A "forget this device" flow requires deliberate offline and data-loss design.
+- **Distributed abuse controls:** `docs/DEPLOYMENT.md:81-92` documents Vercel Firewall limits because in-memory function buckets are per instance. Verify the published firewall rules and provider spend alerts in Vercel.
+- **Firebase console controls:** The Firebase web key is correctly public; verify API restrictions and App Check settings in the Firebase/Google consoles without moving the key server-side.
+- **Legacy HTTP links:** External navigation still permits plain HTTP for compatibility. Prefer HTTPS when entering new links; tightening persisted legacy data should be a reviewed migration.
+- **Privacy disclosure:** The portfolio collects contact details and runs analytics while its Privacy/Terms footer links are placeholders. Publish factual policies or remove those affordances once the product wording is decided.
+
+## Verification
+
+- Reproducible install: `npm ci` installed 754 packages successfully. The local shell used Node 24.13.1 and correctly warned that the repository declares Node 22; workflows remain configured for Node 22.
+- Dependency audits: full and production-only `npm audit` both returned 0 across every severity (814 total / 475 production dependencies).
+- Provenance: all 754 installed packages have verified registry signatures; 166 also have verified attestations.
+- Tests: 34 files and 232 tests passed; the unchanged Firestore emulator file and its 3 tests were skipped by the normal suite.
+- TypeScript: app, API, and Node project checks passed with no diagnostics.
+- ESLint: 0 errors and the same 7 existing Fast Refresh warnings.
+- Build: the production Vite build passed with the existing large-chunk advisory.
+- Configuration: workflow YAML parsed successfully; all 12 action refs are immutable verified SHAs; permission-scope assertions passed.
+- Dev listener: Vite served HTTP 200 only on `127.0.0.1:5179`, then the temporary server was stopped.
+- Integrity: `npm ls --depth=0`, JSON/config checks, `git diff --check`, and package-lock identity checks passed.

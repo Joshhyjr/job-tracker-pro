@@ -17,13 +17,13 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # Trusted first-party actions stay on current Node 24-compatible majors.
+      # Immutable release SHAs prevent a mutable action tag from changing trusted CI code unexpectedly.
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Match package.json and the Node 22 production runtime.
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: npm

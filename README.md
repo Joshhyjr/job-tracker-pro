@@ -67,9 +67,11 @@ Private API keys, including `G_API_KEY`, must stay server-side only and must not
 ## Installation
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
+
+The repository uses npm and `package-lock.json` as its single reproducible dependency source. The development server binds to loopback by default; for intentional testing on a trusted LAN, run `npm run dev -- --host 0.0.0.0`.
 
 ## Authentication and cloud sync
 

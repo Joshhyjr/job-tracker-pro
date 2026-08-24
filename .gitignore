@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# npm/package-lock.json is the supported install path; ignore bot-generated secondary lockfiles.
+bun.lock
 *.local
 .env
 .env.*
