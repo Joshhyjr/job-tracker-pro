@@ -228,8 +228,10 @@ export function PortfolioEditor({ open, content, initialSection, usingFallback, 
             {safeDraft.projects.map((project, projectIndex) => (
               <section key={project.id} className="space-y-3 rounded-md border p-4" aria-label={`Edit ${project.title || `project ${projectIndex + 1}`}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Project {projectIndex + 1}</h3><OrderControls label={project.title || `project ${projectIndex + 1}`} index={projectIndex} total={safeDraft.projects.length} onMove={(direction) => setDraft((current) => ({ ...current, projects: moveItem(current.projects, projectIndex, direction) }))} onRemove={() => setDraft((current) => ({ ...current, projects: normalizeItemOrder(current.projects.filter((_, index) => index !== projectIndex)) }))} /></div>
-                <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+                {/* Status remains optional for projects that do not need an archive or case-study label. */}
+                <div className="grid gap-3 sm:grid-cols-[1fr_180px_180px]">
                   <Field label="Title"><Input value={project.title} placeholder="Project title" maxLength={80} onChange={(event) => updateProject(projectIndex, { title: event.target.value })} /></Field>
+                  <Field label="Status"><Input value={project.status ?? ""} placeholder="Optional" maxLength={32} onChange={(event) => updateProject(projectIndex, { status: event.target.value || undefined })} /></Field>
                   <Field label="Month"><Input type="month" value={project.date} onChange={(event) => updateProject(projectIndex, { date: event.target.value })} /></Field>
                 </div>
                 <Field label="Description"><Textarea value={project.description} placeholder="What did you build, analyze, or improve?" maxLength={500} onChange={(event) => updateProject(projectIndex, { description: event.target.value })} /></Field>
