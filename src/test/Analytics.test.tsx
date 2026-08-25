@@ -36,31 +36,31 @@ describe("Analytics", () => {
     expect(screen.getByText(/Using XLSX import: week-2.xlsx/)).toBeInTheDocument();
   });
 
-  it("replaces the location chart with monthly response rates", () => {
-    const applications = [
-      { ...app, id: "may-response", dateApplied: "2026-05-01", responseStatus: "Pre-screen call" },
-      { ...app, id: "may-no-response", dateApplied: "2026-05-10", responseStatus: "No Response" },
-      { ...app, id: "june-response", dateApplied: "2026-06-01", responseStatus: "Rejected" },
+  it("shows qualified volume and a mature-cohort funnel without a prediction score", () => {
+    const applications: JobApplication[] = [
+      { ...app, id: "june-interview", dateApplied: "2026-06-01", currentStatus: "Interview", responseStatus: "Interview", roleFit: "strong", resumeTailored: true },
+      { ...app, id: "june-no-response", dateApplied: "2026-06-10", currentStatus: "No Response", responseStatus: "No Response", roleFit: "moderate", resumeTailored: true },
+      { ...app, id: "july-rejected", dateApplied: "2026-07-01", currentStatus: "Rejected", responseStatus: "Rejected", roleFit: "stretch", resumeTailored: false },
     ];
     render(<Analytics applications={applications} />);
 
-    const responseCard = screen.getByText("Response Rate Over Time").closest(".app-panel");
-    expect(responseCard).not.toBeNull();
-    // The trend uses the same meaningful-response rule as the summary KPI.
-    const points = JSON.parse(within(responseCard as HTMLElement).getByTestId("analytics-line-chart").getAttribute("data-points") || "[]");
-    expect(points).toEqual([
-      { month: "May 2026", responseRate: 50 },
-      { month: "Jun 2026", responseRate: 100 },
-    ]);
-    expect(screen.queryByText("Applications by Location")).not.toBeInTheDocument();
-    // The chart and insight cards carry these measures without a duplicate summary row beneath them.
-    expect(screen.queryByRole("region", { name: "Conversion metrics" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Search health" })).toBeInTheDocument();
+    expect(screen.queryByText(/\/100/)).not.toBeInTheDocument();
+    const qualifiedCard = screen.getByText("Qualified Applications by Week").closest(".app-panel");
+    expect(qualifiedCard).not.toBeNull();
+    // The activity trend always provides a comparable thirteen-week window.
+    const points = JSON.parse(within(qualifiedCard as HTMLElement).getByTestId("analytics-line-chart").getAttribute("data-points") || "[]");
+    expect(points).toHaveLength(13);
+    const funnelCard = screen.getByText("Mature Cohort Funnel").closest(".app-panel");
+    expect(funnelCard).not.toBeNull();
+    expect(within(funnelCard as HTMLElement).getByText("Submitted")).toBeInTheDocument();
+    expect(within(funnelCard as HTMLElement).getByText("3/3")).toBeInTheDocument();
     const analyticsRegion = screen.getByRole("region", { name: "Job search analytics" });
-    // The visualization row now contains the two existing trends and one source-backed job-title ranking card.
+    // The visualization row contains activity, outcomes, and source-backed role context.
     expect(analyticsRegion.children).toHaveLength(3);
-    const titlesCard = screen.getByText("Job titles applied to most").closest(".app-panel");
+    const titlesCard = screen.getByText("Job Titles Applied to Most").closest(".app-panel");
     expect(titlesCard).not.toBeNull();
     expect(within(titlesCard as HTMLElement).getByText("Data Analyst")).toBeInTheDocument();
-    expect(within(titlesCard as HTMLElement).getByText("3 applications")).toBeInTheDocument();
+    expect(within(titlesCard as HTMLElement).getByLabelText("Data Analyst: 3 applications")).toBeInTheDocument();
   });
 });

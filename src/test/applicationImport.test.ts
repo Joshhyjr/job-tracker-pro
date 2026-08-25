@@ -11,6 +11,8 @@ import {
 } from "@/lib/storage";
 import type { JobApplication } from "@/lib/types";
 
+const noFieldPresence = { applicationFields: [], customFieldHeaders: [] };
+
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
   return {
     id: "ibm-application",
@@ -55,7 +57,7 @@ describe("applyConfirmedApplicationImport", () => {
     await applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "new-jobs.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: noFieldPresence },
       plan,
       persistBackup,
       persistMerge,
@@ -78,7 +80,7 @@ describe("applyConfirmedApplicationImport", () => {
     await expect(applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "new-jobs.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: noFieldPresence },
       plan,
       persistBackup: persistBrowserBackup(),
       persistMerge: async () => {
@@ -109,7 +111,7 @@ describe("applyConfirmedApplicationImport", () => {
     await applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "replacement.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: noFieldPresence },
       plan,
       mode: "replace",
       persistBackup,
@@ -134,7 +136,7 @@ describe("applyConfirmedApplicationImport", () => {
     await expect(applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "replacement.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: noFieldPresence },
       plan,
       mode: "replace",
       persistBackup: persistBrowserBackup(),
@@ -160,7 +162,7 @@ describe("applyConfirmedApplicationImport", () => {
     await applyConfirmedApplicationImport({
       currentApplications: demoCurrent,
       fileName: "demo-jobs.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: ["Interview"] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: ["Interview"], fieldPresence: noFieldPresence },
       plan,
       persistBackup: persistBrowserBackup("demo"),
       persistMerge: vi.fn().mockResolvedValue(undefined),
@@ -186,7 +188,7 @@ describe("applyConfirmedApplicationImport", () => {
     await applyConfirmedApplicationImport({
       currentApplications: demoCurrent,
       fileName: "demo-replacement.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: noFieldPresence },
       plan,
       mode: "replace",
       persistBackup: persistBrowserBackup("demo"),
@@ -212,7 +214,7 @@ describe("applyConfirmedApplicationImport", () => {
     await expect(applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "new-jobs.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: noFieldPresence },
       plan,
       mode: "replace",
       persistBackup: vi.fn().mockRejectedValue(new Error("Firestore backup unavailable")),

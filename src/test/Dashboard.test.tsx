@@ -29,10 +29,13 @@ describe("Dashboard", () => {
   it("shows the six monitoring metrics without dashboard AI recommendations", () => {
     render(<Dashboard applications={[application({ responseStatus: "Pre-screen call" }), application({ id: "app-2", responseStatus: "Rejected" })]} />);
 
-    // AI coaching belongs exclusively to the analytics route after the redesign.
-    expect(screen.getByText("Total Applications")).toBeInTheDocument();
-    expect(screen.getByText("Interviews")).toBeInTheDocument();
-    expect(screen.getByText("Rejections")).toBeInTheDocument();
+    // AI coaching belongs exclusively to analytics; the dashboard exposes operational measures.
+    expect(screen.getByText("Qualified This Week")).toBeInTheDocument();
+    expect(screen.getByText("Awaiting Human Response")).toBeInTheDocument();
+    expect(screen.getByText("Active Process")).toBeInTheDocument();
+    expect(screen.getByText("Stale 21+ Days")).toBeInTheDocument();
+    expect(screen.getByText("Follow-ups Due")).toBeInTheDocument();
+    expect(screen.getByText("Offers (90 Days)")).toBeInTheDocument();
     expect(screen.queryByText("Insights & Recommendations")).not.toBeInTheDocument();
   });
 

@@ -29,6 +29,14 @@ vi.mock("@/lib/storage", async () => {
   };
 });
 
+function selectRequiredQualityFields() {
+  // New applications must explicitly record both inputs used by the qualified-volume metric.
+  fireEvent.click(screen.getByLabelText("Role Fit"));
+  fireEvent.click(screen.getByRole("option", { name: "Strong" }));
+  fireEvent.click(screen.getByLabelText("Tailored Resume"));
+  fireEvent.click(screen.getByRole("option", { name: "Yes" }));
+}
+
 describe("ApplicationForm", () => {
   beforeEach(() => {
     addApplicationMock.mockReset();
@@ -43,6 +51,7 @@ describe("ApplicationForm", () => {
 
     fireEvent.change(screen.getByLabelText("Job Title"), { target: { value: "Platform Engineer" } });
     fireEvent.change(screen.getByLabelText("Company Name"), { target: { value: "Beacon Systems" } });
+    selectRequiredQualityFields();
     fireEvent.click(screen.getByRole("button", { name: "Add Application" }));
 
     // Fresh applications should land in the same Applied bucket shown by filters and analytics.
@@ -59,7 +68,7 @@ describe("ApplicationForm", () => {
   it("offers canonical response-status labels in the form select", () => {
     render(<ApplicationForm onSaved={vi.fn()} />);
 
-    fireEvent.click(screen.getAllByRole("combobox")[1]);
+    fireEvent.click(screen.getByLabelText("Response Status"));
 
     // Canonical labels keep the form options aligned with stored values and dashboard filters.
     expect(screen.getByRole("option", { name: "Applied" })).toBeInTheDocument();
@@ -84,7 +93,7 @@ describe("ApplicationForm", () => {
 
     render(<ApplicationForm existing={existing} onSaved={vi.fn()} />);
 
-    fireEvent.click(screen.getAllByRole("combobox")[1]);
+    fireEvent.click(screen.getByLabelText("Response Status"));
 
     // Editing an imported record should not hide the saved custom stage from the select menu.
     expect(screen.getByRole("option", { name: "Interview scheduled" })).toBeInTheDocument();
@@ -101,6 +110,7 @@ describe("ApplicationForm", () => {
 
     fireEvent.change(screen.getByLabelText("Job Title"), { target: { value: "Platform Engineer" } });
     fireEvent.change(screen.getByLabelText("Company Name"), { target: { value: "Beacon Systems" } });
+    selectRequiredQualityFields();
     const submitButton = screen.getByRole("button", { name: "Add Application" });
     const formElement = submitButton.closest("form");
     if (!formElement) throw new Error("Expected the submit button to belong to a form.");
@@ -148,6 +158,7 @@ describe("ApplicationForm", () => {
 
     fireEvent.change(screen.getByLabelText("Job Title"), { target: { value: "Platform Engineer" } });
     fireEvent.change(screen.getByLabelText("Company Name"), { target: { value: "Beacon Systems" } });
+    selectRequiredQualityFields();
     fireEvent.click(screen.getByRole("button", { name: "Add Application" }));
 
     await waitFor(() => {

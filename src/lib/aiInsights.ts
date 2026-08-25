@@ -1,14 +1,23 @@
-import { differenceInDays, isBefore, isValid, parseISO, startOfMonth, startOfWeek, subDays } from "date-fns";
+import { isBefore, isValid, parseISO, startOfMonth, startOfWeek, subDays } from "date-fns";
 import type { JobApplication } from "./types";
-import { isApplicationOverdue } from "./overdue";
 import type { LastImportMetadata } from "./storage";
-import { isInterviewPipelineResponseStatus, normalizeResponseStatus } from "./responseStatus";
+import { normalizeResponseStatus } from "./responseStatus";
+import { buildJobSearchMetrics, type MetricSignal } from "./jobSearchMetrics";
 
 export interface AiInsightSummary {
   totalApplications: number;
   appliedThisWeek: number;
   appliedLastWeek: number;
   appliedThisMonth: number;
+  qualifiedThisWeek: number;
+  recentQualifiedWeeklyMedian: number;
+  awaitingHumanResponseCount: number;
+  activeProcessCount: number;
+  matureCohortSize: number;
+  positiveProgressionCount: number;
+  positiveProgressionRate: number;
+  metricSignal: MetricSignal;
+  qualityCoverageCount: number;
   interviewCount: number;
   interviewRate: number;
   offerCount: number;
@@ -82,21 +91,16 @@ function topItems(map: Map<string, number>, limit = MAX_LIST_ITEMS): CountItem[]
     .map(([name, count]) => ({ name, count }));
 }
 
-function getRate(count: number, total: number): number {
-  return total > 0 ? Math.round((count / total) * 100) : 0;
-}
-
 function getImprovementSignals(summary: Omit<AiInsightSummary, "improvementSignals">): string[] {
   const signals: string[] = [];
 
   // These signals keep the model focused on coaching the search process, not inventing hidden context.
   if (summary.totalApplications === 0) signals.push("No applications are tracked yet, so recommendations should focus on getting started.");
-  if (summary.totalApplications > 0 && summary.interviewRate < 15) signals.push("Interview conversion is below 15%; review resume targeting and role fit.");
-  if (summary.staleNoResponseCount > 0) signals.push(`${summary.staleNoResponseCount} applications have had no response after 14+ days.`);
+  if (summary.metricSignal === "low-signal") signals.push("Conversion is still low-signal; avoid performance conclusions until the mature cohort and positive-event counts are larger.");
+  if (summary.staleNoResponseCount > 0) signals.push(`${summary.staleNoResponseCount} applications are still awaiting a human response after 21+ days.`);
   if (summary.overdueFollowUpCount > 0) signals.push(`${summary.overdueFollowUpCount} applications are currently due for follow-up.`);
-  if (summary.missingFollowUpDateCount > 0) signals.push(`${summary.missingFollowUpDateCount} follow-up-enabled applications are missing a follow-up date.`);
-  if (summary.appliedThisWeek < summary.appliedLastWeek) signals.push("Application pace is lower this week than last week.");
-  if (summary.offerRate === 0 && summary.totalApplications >= 5) signals.push("No offers are tracked yet across at least five applications.");
+  if (summary.qualityCoverageCount < summary.totalApplications) signals.push(`${summary.totalApplications - summary.qualityCoverageCount} applications are missing role-fit or tailored-resume tracking.`);
+  signals.push(`Qualified applications this week: ${summary.qualifiedThisWeek}; recent completed-week median: ${summary.recentQualifiedWeeklyMedian}.`);
   if (summary.dataSource.type === "xlsx-import") signals.push(`Recommendations should account for the latest imported workbook: ${summary.dataSource.fileName}.`);
   if (summary.spreadsheetCoverage.withSalary === 0 && summary.totalApplications > 0) signals.push("No salary fields are populated, so compensation targeting cannot be compared yet.");
   if (summary.spreadsheetCoverage.withLocation < summary.totalApplications) signals.push("Some applications are missing location data, which limits geographic insight quality.");
@@ -153,6 +157,7 @@ function buildSpreadsheetCoverage(applications: JobApplication[]): AiInsightSumm
 }
 
 export function buildAiInsightSummary(applications: JobApplication[], now = new Date(), importMetadata?: LastImportMetadata | null): AiInsightSummary {
+  const metrics = buildJobSearchMetrics(applications, now);
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
   const lastWeekStart = subDays(weekStart, 7);
   const monthStart = startOfMonth(now);
@@ -163,10 +168,6 @@ export function buildAiInsightSummary(applications: JobApplication[], now = new 
   let appliedThisWeek = 0;
   let appliedLastWeek = 0;
   let appliedThisMonth = 0;
-  let interviewCount = 0;
-  let offerCount = 0;
-  let staleNoResponseCount = 0;
-  let overdueFollowUpCount = 0;
   let missingFollowUpDateCount = 0;
 
   applications.forEach((application) => {
@@ -178,16 +179,12 @@ export function buildAiInsightSummary(applications: JobApplication[], now = new 
     increment(roleCounts, application.jobTitle);
     increment(locationCounts, application.location || application.country || application.city);
 
-    if (isInterviewPipelineResponseStatus(responseStatus)) interviewCount++;
-    if (responseStatus === "Offer") offerCount++;
     if (application.followUps && !application.followUpDate) missingFollowUpDateCount++;
-    if (isApplicationOverdue(application, now)) overdueFollowUpCount++;
 
     if (!appliedDate) return;
     if (!isBefore(appliedDate, weekStart)) appliedThisWeek++;
     else if (!isBefore(appliedDate, lastWeekStart)) appliedLastWeek++;
     if (!isBefore(appliedDate, monthStart)) appliedThisMonth++;
-    if (/no response/i.test(responseStatus) && differenceInDays(now, appliedDate) >= 14) staleNoResponseCount++;
   });
 
   const baseSummary = {
@@ -195,12 +192,21 @@ export function buildAiInsightSummary(applications: JobApplication[], now = new 
     appliedThisWeek,
     appliedLastWeek,
     appliedThisMonth,
-    interviewCount,
-    interviewRate: getRate(interviewCount, applications.length),
-    offerCount,
-    offerRate: getRate(offerCount, applications.length),
-    staleNoResponseCount,
-    overdueFollowUpCount,
+    qualifiedThisWeek: metrics.qualifiedThisWeek,
+    recentQualifiedWeeklyMedian: metrics.recentQualifiedWeeklyMedian,
+    awaitingHumanResponseCount: metrics.awaitingHumanResponse,
+    activeProcessCount: metrics.activeProcess,
+    matureCohortSize: metrics.cohort.size,
+    positiveProgressionCount: metrics.positiveProgression.count,
+    positiveProgressionRate: metrics.positiveProgression.rate,
+    metricSignal: metrics.positiveProgression.signal,
+    qualityCoverageCount: metrics.qualityCoverageCount,
+    interviewCount: metrics.interviews.count,
+    interviewRate: metrics.interviews.rate,
+    offerCount: metrics.offers.count,
+    offerRate: metrics.offers.rate,
+    staleNoResponseCount: metrics.stale,
+    overdueFollowUpCount: metrics.followUpsDue,
     missingFollowUpDateCount,
     statusBreakdown: topItems(statusCounts, 8).map(({ name, count }) => ({ status: name, count })),
     topCompanies: topItems(companyCounts),
@@ -263,6 +269,15 @@ export function buildHostedAiInsightSummary(summary: AiInsightSummary): HostedAi
     appliedThisWeek: summary.appliedThisWeek,
     appliedLastWeek: summary.appliedLastWeek,
     appliedThisMonth: summary.appliedThisMonth,
+    qualifiedThisWeek: summary.qualifiedThisWeek,
+    recentQualifiedWeeklyMedian: summary.recentQualifiedWeeklyMedian,
+    awaitingHumanResponseCount: summary.awaitingHumanResponseCount,
+    activeProcessCount: summary.activeProcessCount,
+    matureCohortSize: summary.matureCohortSize,
+    positiveProgressionCount: summary.positiveProgressionCount,
+    positiveProgressionRate: summary.positiveProgressionRate,
+    metricSignal: summary.metricSignal,
+    qualityCoverageCount: summary.qualityCoverageCount,
     interviewCount: summary.interviewCount,
     interviewRate: summary.interviewRate,
     offerCount: summary.offerCount,

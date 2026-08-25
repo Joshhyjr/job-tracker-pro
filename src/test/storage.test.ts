@@ -67,6 +67,14 @@ describe("mapRowsToApplications", () => {
     expect(application.id).toBe("stable-application-id");
   });
 
+  it("recognizes the current tracker APP ID header as stable identity", () => {
+    const [application] = mapRowsToApplications([{ "APP ID": "APP-042", "Job Title": "Data Analyst", Company: "Beacon" }]);
+
+    // The user's existing workbook IDs must survive imports so later partial merges update the intended record.
+    expect(application.id).toBe("APP-042");
+    expect(application.customFields?.["APP ID"]).toBeUndefined();
+  });
+
   it("reads Decision Status as the imported response status", () => {
     const applications = mapRowsToApplications([
       {
@@ -324,6 +332,45 @@ describe("mapRowsToApplications", () => {
     ]);
   });
 
+  it("maps workbook quality categories without inventing precision", () => {
+    const result = mapRowsToApplicationsWithValidation([
+      { Position: "Analyst", Employer: "A", "70% Match?": "Yes", "Tailored Resume?": "Yes" },
+      { Position: "Engineer", Employer: "B", "70% Match?": "Partial", "Tailored Resume?": "No" },
+      { Position: "Coordinator", Employer: "C", "70% Match?": "No", "Tailored Resume?": "General Resume" },
+      { Position: "Specialist", Employer: "D", "70% Match?": "Unknown", "Tailored Resume?": "Partial" },
+    ]);
+
+    // Legacy categories become transparent first-class fields; ambiguous values remain explicitly unrecorded.
+    expect(result.applications).toMatchObject([
+      { roleFit: "strong", resumeTailored: true },
+      { roleFit: "moderate", resumeTailored: false },
+      { roleFit: "stretch", resumeTailored: false },
+      {},
+    ]);
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining("unrecognized Role Fit value \"Unknown\""),
+      expect.stringContaining("unrecognized Tailored Resume value \"Partial\""),
+    ]));
+    expect(result.fieldPresence.applicationFields).toEqual(expect.arrayContaining(["roleFit", "resumeTailored"]));
+  });
+
+  it("preserves automatic seven-day follow-ups as audit data instead of commitments", () => {
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      Position: `Role ${index + 1}`,
+      Employer: `Company ${index + 1}`,
+      "Date Applied": `2026-07-${String(index + 1).padStart(2, "0")}`,
+      "Follow-up Date": `2026-07-${String(index + 8).padStart(2, "0")}`,
+      "Follow-up Status": "Not yet",
+    }));
+    const result = mapRowsToApplicationsWithValidation(rows);
+
+    // Template-generated reminders are retained for audit but never enter the intentional due queue.
+    expect(result.applications.every((application) => application.followUpDate === "")).toBe(true);
+    expect(result.applications[0].customFields).toMatchObject({ "Legacy Follow-up Date": "2026-07-08" });
+    expect(result.fieldPresence.applicationFields).not.toContain("followUpDate");
+    expect(result.warnings).toContain("Follow-up dates were ignored because at least 90% were automatic seven-day suggestions with no completed follow-ups. Original values were preserved as 'Legacy Follow-up Date'.");
+  });
+
   it("imports an XLSX template with reordered columns and extra fields", async () => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Applications");
@@ -357,6 +404,28 @@ describe("mapRowsToApplications", () => {
       warningCount: result.warnings.length,
     });
     expect(getLastImportMetadata()?.importedAt).toEqual(expect.any(String));
+  });
+
+  it("rehydrates structured status history from app workbook exports", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const applications = workbook.addWorksheet("Applications");
+    applications.addRow(["Application ID", "Job Title", "Company", "Response Status"]);
+    applications.addRow(["stable-history", "Data Analyst", "Beacon", "Rejected"]);
+    const history = workbook.addWorksheet("Activity History");
+    history.addRow(["Application ID", "Event ID", "Event Date", "Event Type", "From Status", "To Status", "Message"]);
+    history.addRow(["stable-history", "event-1", "2026-07-10T12:00:00.000Z", "status_change", "Interview", "Rejected", "Status changed from Interview to Rejected"]);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const file = new File([buffer], "history-export.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+    const result = await importApplicationsFromFile(file, { persistMetadata: false });
+
+    // Status events remain structured so later outcomes still retain the highest stage ever reached.
+    expect(result.applications[0].activityLog).toEqual([expect.objectContaining({
+      id: "event-1",
+      type: "status_change",
+      fromStatus: "Interview",
+      toStatus: "Rejected",
+    })]);
   });
 
   it("rejects workbooks that exceed the upload size limit", async () => {

@@ -1,4 +1,4 @@
-import { CURRENT_STATUSES, type ActivityLogEntry, type CurrentStatus, type JobApplication } from "./types";
+import { CURRENT_STATUSES, type ActivityLogEntry, type CurrentStatus, type JobApplication, type RoleFit } from "./types";
 import { normalizeResponseStatus } from "./responseStatus";
 import { normalizeCompanyDomain } from "./companyLogos";
 import { normalizeApplicationGeography } from "./geography";
@@ -80,6 +80,14 @@ export function sanitizeCurrentStatus(value: unknown): CurrentStatus {
   return (CURRENT_STATUSES as string[]).includes(status) ? (status as CurrentStatus) : "Applied";
 }
 
+function sanitizeRoleFit(value: unknown): RoleFit | undefined {
+  const normalized = sanitizeSingleLineText(value).toLowerCase();
+  if (["strong", "yes", "high"].includes(normalized)) return "strong";
+  if (["moderate", "partial", "medium"].includes(normalized)) return "moderate";
+  if (["stretch", "no", "low"].includes(normalized)) return "stretch";
+  return undefined;
+}
+
 function sanitizeFiniteNumber(value: unknown, min: number, max: number): number | undefined {
   if (value === "" || value == null) return undefined;
   const parsed = typeof value === "number" ? value : Number(String(value).trim());
@@ -149,6 +157,11 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   const latitude = sanitizeFiniteNumber(input.latitude, -90, 90);
   const longitude = sanitizeFiniteNumber(input.longitude, -180, 180);
   const customFields = sanitizeCustomFields(input.customFields);
+  const roleFit = sanitizeRoleFit(input.roleFit ?? input.customFields?.["Role Fit"] ?? input.customFields?.["70% Match?"]);
+  const legacyTailoredResume = sanitizeSingleLineText(input.customFields?.["Tailored Resume?"] ?? input.customFields?.["Tailored Resume"]).toLowerCase();
+  const resumeTailored = typeof input.resumeTailored === "boolean"
+    ? input.resumeTailored
+    : legacyTailoredResume === "yes" ? true : legacyTailoredResume === "no" || legacyTailoredResume === "general resume" ? false : undefined;
 
   if (geography.city) sanitized.city = geography.city;
   if (geography.region) sanitized.region = geography.region;
@@ -165,6 +178,8 @@ export function sanitizeApplicationInput(input: Partial<SanitizedApplicationInpu
   if (interviewDate) sanitized.interviewDate = interviewDate;
   if (daysSinceApplied !== undefined) sanitized.daysSinceApplied = daysSinceApplied;
   if (typeof input.coverLetterIncluded === "boolean") sanitized.coverLetterIncluded = input.coverLetterIncluded;
+  if (roleFit) sanitized.roleFit = roleFit;
+  if (resumeTailored !== undefined) sanitized.resumeTailored = resumeTailored;
   if (geography.latitude !== undefined) sanitized.latitude = geography.latitude;
   else if (latitude !== undefined) sanitized.latitude = latitude;
   if (geography.longitude !== undefined) sanitized.longitude = geography.longitude;

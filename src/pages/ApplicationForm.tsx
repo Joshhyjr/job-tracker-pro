@@ -28,6 +28,8 @@ const schema = z.object({
   coverLetterUsed: z.string().trim().max(200).optional(),
   tags: z.string().trim().max(500).optional(),
   recruiterContactName: z.string().trim().max(200).optional(),
+  roleFit: z.enum(["strong", "moderate", "stretch"]).optional(),
+  resumeTailored: z.enum(["yes", "no"]).optional(),
   jobLink: z.union([z.string().trim().url("Enter a valid URL").max(2048), z.literal("")]),
   currentStatus: z.enum(CURRENT_STATUSES as [CurrentStatus, ...CurrentStatus[]]),
   responseStatus: z.string().trim().min(1, "Required").max(200),
@@ -53,6 +55,8 @@ function getDefaultValues(existing?: JobApplication): FormData {
       coverLetterUsed: existing.customFields?.["Cover Letter Used"] ?? "",
       tags: existing.tags ?? "",
       recruiterContactName: existing.recruiterContactName ?? "",
+      roleFit: existing.roleFit,
+      resumeTailored: existing.resumeTailored === undefined ? undefined : existing.resumeTailored ? "yes" : "no",
       jobLink: existing.jobLink ?? "",
       currentStatus: existing.currentStatus,
       responseStatus: existing.responseStatus,
@@ -74,6 +78,8 @@ function getDefaultValues(existing?: JobApplication): FormData {
     coverLetterUsed: "",
     tags: "",
     recruiterContactName: "",
+    roleFit: undefined,
+    resumeTailored: undefined,
     jobLink: "",
     currentStatus: "Applied",
     // New applications start in the same canonical status bucket used across filters and analytics.
@@ -114,6 +120,15 @@ export default function ApplicationForm({
     submissionInFlight.current = true;
     setIsSaving(true);
 
+    if (!existing && (!data.roleFit || !data.resumeTailored)) {
+      // New rows must state both quality inputs; legacy records remain editable without a forced backfill.
+      if (!data.roleFit) form.setError("roleFit", { message: "Select a role-fit level" });
+      if (!data.resumeTailored) form.setError("resumeTailored", { message: "Select whether the resume was tailored" });
+      submissionInFlight.current = false;
+      setIsSaving(false);
+      return;
+    }
+
     // Storage performs the final sanitisation pass; future AI/API calls must stay server-side with private keys off the Vite client.
     const applicationInput = normalizeApplicationGeography({
       jobTitle: data.jobTitle,
@@ -124,6 +139,9 @@ export default function ApplicationForm({
       salary: data.salary,
       tags: data.tags,
       recruiterContactName: data.recruiterContactName,
+      // Explicit fit and tailoring inputs power qualified-volume metrics without inferring quality from volume.
+      roleFit: data.roleFit,
+      resumeTailored: data.resumeTailored === undefined ? undefined : data.resumeTailored === "yes",
       // Document names and work arrangement remain compatible with imported custom workbook columns.
       customFields: {
         ...(existing?.customFields || {}),
@@ -199,6 +217,12 @@ export default function ApplicationForm({
                 )} />
                 <FormField control={form.control} name="salary" render={({ field }) => (
                   <FormItem><FormLabel>Salary</FormLabel><FormControl><Input placeholder="$70,000–$85,000" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="roleFit" render={({ field }) => (
+                  <FormItem><FormLabel>Role Fit</FormLabel><Select value={field.value ?? ""} onValueChange={field.onChange}><FormControl><SelectTrigger><SelectValue placeholder="Select fit" /></SelectTrigger></FormControl><SelectContent><SelectItem value="strong">Strong</SelectItem><SelectItem value="moderate">Moderate</SelectItem><SelectItem value="stretch">Stretch</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="resumeTailored" render={({ field }) => (
+                  <FormItem><FormLabel>Tailored Resume</FormLabel><Select value={field.value ?? ""} onValueChange={field.onChange}><FormControl><SelectTrigger><SelectValue placeholder="Select an answer" /></SelectTrigger></FormControl><SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="jobLink" render={({ field }) => (
                   <FormItem><FormLabel>Job Link</FormLabel><FormControl><Input type="url" placeholder="https://example.com/jobs/role" {...field} /></FormControl><FormMessage /></FormItem>

@@ -34,3 +34,10 @@ dist-ssr
 tmp/
 __pycache__/
 *.py[cod]
+
+# Workbook sheet renders are temporary visual-verification artifacts.
+outputs/**/previews/
+outputs/**/final-previews/
+
+# Keep the cleaned private job-application workbook local.
+outputs/job-search-metrics/Job_Applications_Cleaned.xlsx

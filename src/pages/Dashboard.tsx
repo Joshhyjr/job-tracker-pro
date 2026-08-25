@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { compareDesc, format, isBefore, isValid, parseISO, startOfMonth, startOfWeek } from "date-fns";
+import { compareDesc, format, isValid, parseISO } from "date-fns";
 import {
   BarChart3,
   BellRing,
-  BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -14,8 +13,8 @@ import {
   
   PhoneCall,
   Plus,
+  Target,
   Upload,
-  XCircle,
 } from "lucide-react";
 import { CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import ExcelDropZone from "@/components/ExcelDropZone";
@@ -23,13 +22,11 @@ import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import type { JobApplication } from "@/lib/types";
 import { exportCSV, exportXLSX } from "@/lib/export";
-import { isApplicationOverdue } from "@/lib/overdue";
 import {
   computeStatusBreakdown,
   getResponseStatusColor,
-  isInterviewPipelineResponseStatus,
-  normalizeResponseStatus,
 } from "@/lib/responseStatus";
+import { buildJobSearchMetrics } from "@/lib/jobSearchMetrics";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
 import { formatDisplayDate } from "@/lib/utils";
 import { CompanyLogo } from "@/components/CompanyLogo";
@@ -52,30 +49,15 @@ export default function Dashboard({
   const [showImport, setShowImport] = useState(false);
   const [chartRange, setChartRange] = useState<"3" | "6" | "12" | "all">("6");
   const now = useMemo(() => new Date(), []);
-  const weekStart = useMemo(() => startOfWeek(now, { weekStartsOn: 1 }), [now]);
-  const monthStart = useMemo(() => startOfMonth(now), [now]);
-
-  const metrics = useMemo(() => {
-    const thisWeek = applications.filter((application) => {
-      const date = safeDate(application.dateApplied);
-      return date ? !isBefore(date, weekStart) : false;
-    }).length;
-    const thisMonth = applications.filter((application) => {
-      const date = safeDate(application.dateApplied);
-      return date ? !isBefore(date, monthStart) : false;
-    }).length;
-    const followedUp = applications.filter((application) => application.followUps).length;
-    const interviews = applications.filter((application) => isInterviewPipelineResponseStatus(application.responseStatus)).length;
-    const rejections = applications.filter((application) => normalizeResponseStatus(application.responseStatus) === "Rejected").length;
-    return [
-      { label: "Total Applications", value: applications.length, icon: BriefcaseBusiness, tone: "text-blue-600 bg-blue-50 dark:bg-blue-950/50" },
-      { label: "This Week", value: thisWeek, icon: CalendarDays, tone: "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/50" },
-      { label: "This Month", value: thisMonth, icon: Clock3, tone: "text-violet-600 bg-violet-50 dark:bg-violet-950/50" },
-      { label: "Followed Up", value: followedUp, icon: CheckCircle2, tone: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50" },
-      { label: "Interviews", value: interviews, icon: PhoneCall, tone: "text-amber-600 bg-amber-50 dark:bg-amber-950/50" },
-      { label: "Rejections", value: rejections, icon: XCircle, tone: "text-red-600 bg-red-50 dark:bg-red-950/50" },
-    ];
-  }, [applications, monthStart, weekStart]);
+  const searchMetrics = useMemo(() => buildJobSearchMetrics(applications, now), [applications, now]);
+  const metrics = [
+    { label: "Qualified This Week", value: searchMetrics.qualifiedThisWeek, icon: Target, tone: "text-blue-600 bg-blue-50 dark:bg-blue-950/50" },
+    { label: "Awaiting Human Response", value: searchMetrics.awaitingHumanResponse, icon: BellRing, tone: "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/50" },
+    { label: "Active Process", value: searchMetrics.activeProcess, icon: PhoneCall, tone: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50" },
+    { label: "Stale 21+ Days", value: searchMetrics.stale, icon: Clock3, tone: "text-amber-600 bg-amber-50 dark:bg-amber-950/50" },
+    { label: "Follow-ups Due", value: searchMetrics.followUpsDue, icon: CalendarDays, tone: "text-violet-600 bg-violet-50 dark:bg-violet-950/50" },
+    { label: "Offers (90 Days)", value: searchMetrics.offersLast90Days, icon: CheckCircle2, tone: "text-teal-600 bg-teal-50 dark:bg-teal-950/50" },
+  ];
 
   const statusData = useMemo(() => {
     const items = computeStatusBreakdown(applications, isDemo ? [] : getPreferredResponseStatusOrder());
@@ -113,9 +95,10 @@ export default function Dashboard({
   }, [applications]);
 
   const upcomingFollowUps = useMemo(() => applications
-    .filter((application) => Boolean(application.followUpDate) || isApplicationOverdue(application, now))
+    // Only explicit dates belong in the queue; age-based suggestions are not confirmed follow-up commitments.
+    .filter((application) => Boolean(application.followUpDate) && !application.followUps)
     .sort((a, b) => (a.followUpDate || "9999").localeCompare(b.followUpDate || "9999"))
-    .slice(0, 5), [applications, now]);
+    .slice(0, 5), [applications]);
 
   return (
     <div className="space-y-5">
@@ -147,6 +130,9 @@ export default function Dashboard({
           </div>
         ))}
       </section>
+      <p className="text-[10px] text-muted-foreground">
+        Recent qualified pace: {searchMetrics.recentQualifiedWeeklyMedian} per completed week · Mature cohort: {searchMetrics.cohort.size} applications from {formatDisplayDate(searchMetrics.cohort.start)} to {formatDisplayDate(searchMetrics.cohort.end)} · {searchMetrics.totalApplications} total · {searchMetrics.rejections} rejected
+      </p>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="app-panel overflow-hidden" aria-labelledby="monthly-heading">

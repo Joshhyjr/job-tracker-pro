@@ -18,6 +18,15 @@ interface AiInsightSummary {
   appliedThisWeek: number;
   appliedLastWeek: number;
   appliedThisMonth: number;
+  qualifiedThisWeek: number;
+  recentQualifiedWeeklyMedian: number;
+  awaitingHumanResponseCount: number;
+  activeProcessCount: number;
+  matureCohortSize: number;
+  positiveProgressionCount: number;
+  positiveProgressionRate: number;
+  metricSignal: "low-signal" | "established";
+  qualityCoverageCount: number;
   interviewCount: number;
   interviewRate: number;
   offerCount: number;
@@ -149,6 +158,14 @@ function parseSummary(value: unknown): AiInsightSummary | null {
     "appliedThisWeek",
     "appliedLastWeek",
     "appliedThisMonth",
+    "qualifiedThisWeek",
+    "recentQualifiedWeeklyMedian",
+    "awaitingHumanResponseCount",
+    "activeProcessCount",
+    "matureCohortSize",
+    "positiveProgressionCount",
+    "positiveProgressionRate",
+    "qualityCoverageCount",
     "interviewCount",
     "interviewRate",
     "offerCount",
@@ -167,7 +184,8 @@ function parseSummary(value: unknown): AiInsightSummary | null {
   const dataSource = parseDataSource(value.dataSource);
   const spreadsheetCoverage = parseSpreadsheetCoverage(value.spreadsheetCoverage);
   const recentMomentum = value.recentMomentum;
-  if (!statusBreakdown || !topCompanies || !topRoles || !topLocations || !dataSource || !spreadsheetCoverage || !["up", "down", "flat"].includes(String(recentMomentum))) return null;
+  const metricSignal = value.metricSignal;
+  if (!statusBreakdown || !topCompanies || !topRoles || !topLocations || !dataSource || !spreadsheetCoverage || !["up", "down", "flat"].includes(String(recentMomentum)) || !["low-signal", "established"].includes(String(metricSignal))) return null;
 
   // Rebuilding the object from allowed fields drops extra client properties before Gemini receives the summary.
   return {
@@ -179,6 +197,7 @@ function parseSummary(value: unknown): AiInsightSummary | null {
     dataSource,
     spreadsheetCoverage,
     recentMomentum: recentMomentum as AiInsightSummary["recentMomentum"],
+    metricSignal: metricSignal as AiInsightSummary["metricSignal"],
   };
 }
 

@@ -82,16 +82,16 @@ describe("buildAiInsightSummary", () => {
     expect(summary.staleNoResponseCount).toBe(1);
     expect(summary.missingFollowUpDateCount).toBe(1);
     expect(summary.improvementSignals).toEqual(expect.arrayContaining([
-      "1 applications have had no response after 14+ days.",
-      "1 follow-up-enabled applications are missing a follow-up date.",
+      "1 applications are still awaiting a human response after 21+ days.",
+      "Conversion is still low-signal; avoid performance conclusions until the mature cohort and positive-event counts are larger.",
     ]));
   });
 
   it("summarizes mixed statuses and overdue follow-ups", () => {
     const summary = buildAiInsightSummary([
-      application({ responseStatus: "Interview", dateApplied: "2026-05-28", followUps: true, followUpDate: "2026-06-01" }),
-      application({ currentStatus: "No Response", responseStatus: "No Response", dateApplied: "2026-05-20", companyName: "Beta", followUps: true }),
-      application({ responseStatus: "Offer", dateApplied: "2026-06-02", companyName: "Beta", location: "Toronto" }),
+      application({ currentStatus: "Interview", responseStatus: "Interview", dateApplied: "2026-04-20", followUps: false, followUpDate: "2026-06-01" }),
+      application({ currentStatus: "No Response", responseStatus: "No Response", dateApplied: "2026-04-21", companyName: "Beta", followUps: true }),
+      application({ currentStatus: "Offer", responseStatus: "Offer", dateApplied: "2026-04-22", companyName: "Beta", location: "Toronto" }),
     ], now);
 
     expect(summary.interviewCount).toBe(2);
@@ -105,13 +105,14 @@ describe("buildAiInsightSummary", () => {
 
   it("recognizes high-response datasets without low conversion warnings", () => {
     const summary = buildAiInsightSummary([
-      application({ responseStatus: "Pre-screen call", dateApplied: "2026-06-01" }),
-      application({ responseStatus: "Assessment", dateApplied: "2026-05-25" }),
-      application({ responseStatus: "Offer", dateApplied: "2026-05-24" }),
-      application({ responseStatus: "Applied", dateApplied: "2026-05-23" }),
+      application({ currentStatus: "Pre-screen call", responseStatus: "Pre-screen call", dateApplied: "2026-04-01" }),
+      application({ currentStatus: "Assessment", responseStatus: "Assessment", dateApplied: "2026-04-02" }),
+      application({ currentStatus: "Offer", responseStatus: "Offer", dateApplied: "2026-04-03" }),
+      application({ currentStatus: "Applied", responseStatus: "Applied", dateApplied: "2026-04-04" }),
     ], now);
 
-    expect(summary.interviewRate).toBe(75);
+    // Pre-screens and assessments are positive progress, but only interviews/offers count here.
+    expect(summary.interviewRate).toBe(25);
     expect(summary.offerRate).toBe(25);
     expect(summary.improvementSignals.some((signal) => signal.includes("Interview conversion is below"))).toBe(false);
   });

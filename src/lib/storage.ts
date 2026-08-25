@@ -1,4 +1,4 @@
-import type { JobApplication, CurrentStatus } from "./types";
+import type { ApplicationImportFieldPresence, JobApplication, CurrentStatus, RoleFit } from "./types";
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from "./browserStorage";
 import { isSupportedExcelWorkbook } from "./excelFile";
 import { loadExcelJs } from "./exceljs";
@@ -51,6 +51,8 @@ type ImportField =
   | "salary"
   | "daysSinceApplied"
   | "coverLetterIncluded"
+  | "roleFit"
+  | "resumeTailored"
   | "recruiterContactName"
   | "interviewDate"
   | "tags";
@@ -64,6 +66,7 @@ type ColumnMapping = {
 type RowsParseResult = {
   applications: JobApplication[];
   warnings: string[];
+  fieldPresence: ApplicationImportFieldPresence;
 };
 
 type ExcelCellValue = import("exceljs").CellValue;
@@ -90,6 +93,7 @@ export interface WorkbookImportResult {
   applications: JobApplication[];
   warnings: string[];
   preferredResponseStatusOrder: string[];
+  fieldPresence: ApplicationImportFieldPresence;
 }
 
 const REQUIRED_IMPORT_FIELDS: ImportField[] = ["jobTitle", "companyName"];
@@ -117,6 +121,8 @@ const FIELD_LABELS: Record<ImportField, string> = {
   salary: "Salary",
   daysSinceApplied: "Days Since Applied",
   coverLetterIncluded: "Cover Letter Included",
+  roleFit: "Role Fit",
+  resumeTailored: "Tailored Resume",
   recruiterContactName: "Recruiter/Contact Name",
   interviewDate: "Interview Date",
   tags: "Tags",
@@ -124,7 +130,7 @@ const FIELD_LABELS: Record<ImportField, string> = {
 
 // Header aliases let user-created templates keep their own language while mapping into stable app fields.
 const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
-  id: ["Application ID", "Application Id", "Record ID", "Record Id", "Job Application ID"],
+  id: ["Application ID", "Application Id", "APP ID", "Record ID", "Record Id", "Job Application ID"],
   jobTitle: ["Job Title", "Position", "Position Title", "Role", "Title", "Job Role", "Job Name", "Opening", "Opportunity"],
   companyName: ["Company Name", "Company", "Organization", "Organisation", "Employer", "Company/Employer", "Hiring Company"],
   location: ["Location", "Job Location", "Office Location", "Work Location"],
@@ -147,6 +153,8 @@ const FIELD_HEADER_ALIASES: Record<ImportField, string[]> = {
   salary: ["Salary", "Compensation", "Pay", "Salary Range", "Compensation Range", "Rate"],
   daysSinceApplied: ["Days Since Applied", "Days Applied", "Days Since Application", "Days Outstanding"],
   coverLetterIncluded: ["Cover Letter Included", "Cover Letter", "Cover Letter Sent", "Cover Letter Submitted"],
+  roleFit: ["Role Fit", "70% Match?", "70 Percent Match?", "Match Level"],
+  resumeTailored: ["Tailored Resume", "Tailored Resume?", "Resume Tailored", "Resume Tailored?"],
   recruiterContactName: ["Recruiter/Contact Name", "Recruiter", "Contact", "Contact Name", "Recruiter Name", "Hiring Manager"],
   interviewDate: ["Interview Date", "Next Interview", "Screen Date", "Phone Screen Date", "Interview Scheduled"],
   tags: ["Tags", "Tag", "Labels", "Custom Tags", "Notes/Tags", "Notes Tags", "Notes or Tags", "Custom Notes or Tags"],
@@ -321,9 +329,46 @@ function getCellHyperlinkTarget(value: ExcelCellValue): string {
 function parseBooleanFlag(value: unknown): boolean | undefined {
   const normalized = normalizeHeaderName(value);
   if (!normalized) return undefined;
-  if (["yes", "y", "true", "1", "included", "sent", "submitted"].includes(normalized)) return true;
+  if (["yes", "y", "true", "1", "included", "sent", "submitted", "completed", "done"].includes(normalized)) return true;
   if (["no", "n", "false", "0", "not included", "none"].includes(normalized)) return false;
   return undefined;
+}
+
+function parseRoleFit(value: unknown): RoleFit | undefined {
+  const normalized = normalizeHeaderName(value);
+  if (["strong", "yes", "high"].includes(normalized)) return "strong";
+  if (["moderate", "partial", "medium"].includes(normalized)) return "moderate";
+  if (["stretch", "no", "low"].includes(normalized)) return "stretch";
+  return undefined;
+}
+
+function getHeaderByNormalizedName(headers: string[], target: string): string | undefined {
+  return headers.find((header) => normalizeHeaderName(header) === target);
+}
+
+function isLegacySevenDayFollowUpTemplate(rows: Record<string, unknown>[], headers: string[], mapping: ColumnMapping): boolean {
+  const followUpHeader = mapping.byField.followUpDate;
+  const appliedHeader = mapping.byField.dateApplied;
+  if (!followUpHeader || !appliedHeader) return false;
+  const followUpStatusHeader = getHeaderByNormalizedName(headers, "follow up status");
+  const populatedRows = rows.filter((row) => hasMeaningfulValue(row[followUpHeader]) && hasMeaningfulValue(row[appliedHeader]));
+  if (populatedRows.length < 10) return false;
+
+  const exactSevenDayRows = populatedRows.filter((row) => {
+    const applied = parseISODateForComparison(parseExcelDate(row[appliedHeader]));
+    const followUp = parseISODateForComparison(parseExcelDate(row[followUpHeader]));
+    return Boolean(applied && followUp && Math.round((followUp.getTime() - applied.getTime()) / 86_400_000) === 7);
+  }).length;
+  const hasCompletedFollowUp = Boolean(followUpStatusHeader && rows.some((row) => parseBooleanFlag(row[followUpStatusHeader]) === true));
+
+  // A near-universal +7-day formula without any completed state is a template suggestion, not confirmed user intent.
+  return !hasCompletedFollowUp && exactSevenDayRows / populatedRows.length >= 0.9;
+}
+
+function parseISODateForComparison(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function parseDaysSinceApplied(value: unknown): number | undefined {
@@ -430,11 +475,37 @@ function extractResponseStatusOrderFromListSheet(sheet?: ExcelWorksheet): string
   return normalizeResponseStatusList(statuses);
 }
 
+function extractActivityHistory(sheet?: ExcelWorksheet): Map<string, JobApplication["activityLog"]> {
+  const activityByApplication = new Map<string, JobApplication["activityLog"]>();
+  if (!sheet) return activityByApplication;
+
+  const rows = worksheetToRows(sheet);
+  rows.forEach((row) => {
+    const entryByHeader = new Map(Object.entries(row).map(([header, value]) => [normalizeHeaderName(header), value]));
+    const applicationId = sanitizeSingleLineText(entryByHeader.get("application id"));
+    if (!applicationId) return;
+    const [entry] = sanitizeActivityLog([{
+      id: entryByHeader.get("event id"),
+      date: entryByHeader.get("event date"),
+      type: entryByHeader.get("event type"),
+      fromStatus: entryByHeader.get("from status"),
+      toStatus: entryByHeader.get("to status"),
+      message: entryByHeader.get("message"),
+    }]);
+    if (!entry) return;
+    // Event-grain rows are grouped by stable application ID before they rejoin the application snapshot.
+    activityByApplication.set(applicationId, [...(activityByApplication.get(applicationId) ?? []), entry]);
+  });
+
+  return activityByApplication;
+}
+
 type WorkbookParseResult = {
   applications: JobApplication[];
   preferredOrder: string[];
   missingResponseStatusColumn: boolean;
   warnings: string[];
+  fieldPresence: ApplicationImportFieldPresence;
 };
 
 function parseWorkbook(wb: ExcelWorkbook): WorkbookParseResult {
@@ -447,6 +518,7 @@ function parseWorkbook(wb: ExcelWorkbook): WorkbookParseResult {
   }
 
   const listsSheet = wb.getWorksheet("Lists");
+  const activityByApplication = extractActivityHistory(wb.getWorksheet("Activity History"));
   const rows = worksheetToRows(applicationsSheet);
   const matrix = worksheetToMatrix(applicationsSheet);
   const headers = (matrix[0] ?? []).map((value) => String(value ?? ""));
@@ -456,10 +528,15 @@ function parseWorkbook(wb: ExcelWorkbook): WorkbookParseResult {
   const missingResponseStatusColumn = !mapping.byField.responseStatus;
 
   return {
-    applications: parsedRows.applications,
+    // Snapshot-only workbooks retain an empty history; app exports rehydrate every structured event.
+    applications: parsedRows.applications.map((application) => ({
+      ...application,
+      activityLog: activityByApplication.get(application.id) ?? [],
+    })),
     preferredOrder,
     missingResponseStatusColumn,
     warnings: parsedRows.warnings,
+    fieldPresence: parsedRows.fieldPresence,
   };
 }
 
@@ -562,7 +639,12 @@ export async function importApplicationsFromFile(
     ? ["Missing 'Response Status' column in 'Applications' sheet. Defaulting all response statuses to Applied."]
     : [];
   warnings.push(...parsed.warnings);
-  const result = { applications: parsed.applications, warnings, preferredResponseStatusOrder: parsed.preferredOrder };
+  const result = {
+    applications: parsed.applications,
+    warnings,
+    preferredResponseStatusOrder: parsed.preferredOrder,
+    fieldPresence: parsed.fieldPresence,
+  };
   if (persistMetadata) persistWorkbookImport(file.name, result);
   return result;
 }
@@ -570,10 +652,14 @@ export async function importApplicationsFromFile(
 export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown>[], headers = getHeadersFromRows(rows)): RowsParseResult {
   const mapping = createColumnMapping(headers);
   const warnings = [...mapping.warnings];
+  const ignoreLegacyFollowUpDates = isLegacySevenDayFollowUpTemplate(rows, headers, mapping);
   const missingColumns = REQUIRED_IMPORT_FIELDS.filter((field) => !mapping.byField[field]);
 
   if (missingColumns.length > 0) {
     warnings.push(`Missing required column(s): ${joinFieldLabels(missingColumns)}. Rows without those values were skipped.`);
+  }
+  if (ignoreLegacyFollowUpDates) {
+    warnings.push("Follow-up dates were ignored because at least 90% were automatic seven-day suggestions with no completed follow-ups. Original values were preserved as 'Legacy Follow-up Date'.");
   }
 
   const applications: JobApplication[] = [];
@@ -590,6 +676,10 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
     const responseStatus = mapResponseStatus(getMappedCell(row, mapping, "responseStatus"));
     const rawCurrentStatus = getMappedCell(row, mapping, "currentStatus");
     const coverLetterIncluded = parseBooleanFlag(getMappedCell(row, mapping, "coverLetterIncluded"));
+    const rawRoleFit = getMappedCell(row, mapping, "roleFit");
+    const roleFit = parseRoleFit(rawRoleFit);
+    const rawResumeTailored = getMappedCell(row, mapping, "resumeTailored");
+    const resumeTailored = parseBooleanFlag(rawResumeTailored) ?? (normalizeHeaderName(rawResumeTailored) === "general resume" ? false : undefined);
     const daysSinceApplied = parseDaysSinceApplied(getMappedCell(row, mapping, "daysSinceApplied"));
     const latitude = parseGeographicCoordinate(getMappedCell(row, mapping, "latitude"), -90, 90);
     const longitude = parseGeographicCoordinate(getMappedCell(row, mapping, "longitude"), -180, 180);
@@ -597,7 +687,11 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
     const region = sanitizeSingleLineText(getMappedCell(row, mapping, "region"));
     const country = sanitizeSingleLineText(getMappedCell(row, mapping, "country"));
     const location = sanitizeSingleLineText(getMappedCell(row, mapping, "location")) || [city, region, country].filter(Boolean).join(", ");
-    const customFields = getCustomFields(row, mapping);
+    const customFields = getCustomFields(row, mapping) ?? {};
+    const importedFollowUpDate = sanitizeDateInput(parseExcelDate(getMappedCell(row, mapping, "followUpDate")));
+    if (ignoreLegacyFollowUpDates && importedFollowUpDate) customFields["Legacy Follow-up Date"] = importedFollowUpDate;
+    if (hasMeaningfulValue(rawRoleFit) && !roleFit) warnings.push(`Row ${index + 2} has an unrecognized Role Fit value "${sanitizeSingleLineText(rawRoleFit)}"; leaving it unrecorded.`);
+    if (hasMeaningfulValue(rawResumeTailored) && resumeTailored === undefined) warnings.push(`Row ${index + 2} has an unrecognized Tailored Resume value "${sanitizeSingleLineText(rawResumeTailored)}"; leaving it unrecorded.`);
 
     // Build the stable application shape first, then hydrate optional fields from flexible templates.
     const application: JobApplication = {
@@ -611,7 +705,7 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
       followUps: parseBooleanFlag(getMappedCell(row, mapping, "followUps")) ?? false,
       dateApplied: sanitizeDateInput(parseExcelDate(getMappedCell(row, mapping, "dateApplied"))),
       notes: sanitizeMultilineText(getMappedCell(row, mapping, "notes")),
-      followUpDate: sanitizeDateInput(parseExcelDate(getMappedCell(row, mapping, "followUpDate"))),
+      followUpDate: ignoreLegacyFollowUpDates ? "" : importedFollowUpDate,
       activityLog: [],
     };
 
@@ -623,13 +717,15 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
 
     if (daysSinceApplied !== undefined) application.daysSinceApplied = daysSinceApplied;
     if (coverLetterIncluded !== undefined) application.coverLetterIncluded = coverLetterIncluded;
+    if (roleFit) application.roleFit = roleFit;
+    if (resumeTailored !== undefined) application.resumeTailored = resumeTailored;
     // Parsed geography is optional enrichment; the legacy location string remains the table's source of truth.
     if (city) application.city = city;
     if (region) application.region = region;
     if (country) application.country = country;
     if (latitude !== undefined) application.latitude = latitude;
     if (longitude !== undefined) application.longitude = longitude;
-    if (customFields) application.customFields = customFields;
+    if (Object.keys(customFields).length > 0) application.customFields = customFields;
 
     // Imported geography is enriched only when the parser can resolve it confidently; ambiguous rows stay reviewable.
     applications.push(normalizeApplicationGeography({
@@ -639,7 +735,14 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
     }));
   });
 
-  return { applications, warnings };
+  // Keep schema provenance separate from parsed values so omitted workbook columns cannot erase owner-managed data.
+  const applicationFields = Object.keys(mapping.byField)
+    .filter((field): field is Exclude<ImportField, "id"> => field !== "id")
+    .filter((field) => field !== "locationStatus" && !(ignoreLegacyFollowUpDates && field === "followUpDate"));
+  const customFieldHeaders = headers.filter((header) => normalizeHeaderName(header) && !mapping.knownHeaders.has(header));
+  if (ignoreLegacyFollowUpDates) customFieldHeaders.push("Legacy Follow-up Date");
+
+  return { applications, warnings, fieldPresence: { applicationFields, customFieldHeaders } };
 }
 
 // Maps raw Excel rows to our JobApplication data structure, preserving the existing public helper signature.

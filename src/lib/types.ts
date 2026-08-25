@@ -6,6 +6,7 @@ export const CURRENT_STATUSES: CurrentStatus[] = ["Applied", "No Response", "Pre
 // Geographic metadata uses stable ISO/work-mode values while legacy location text remains display-compatible.
 export type WorkMode = "Remote" | "Hybrid" | "On-site";
 export type LocationStatus = "resolved" | "needs_review" | "work_mode_only";
+export type RoleFit = "strong" | "moderate" | "stretch";
 
 // Keep form-select options aligned with the app's canonical response-status labels so
 // new records and edits do not drift away from the values used by filters and charts.
@@ -66,12 +67,21 @@ export interface JobApplication {
   salary?: string;
   daysSinceApplied?: number;
   coverLetterIncluded?: boolean;
+  /** Explicit targeting inputs keep qualified-application metrics separate from raw volume. */
+  roleFit?: RoleFit;
+  resumeTailored?: boolean;
   recruiterContactName?: string;
   interviewDate?: string;
   tags?: string;
   /** Unknown spreadsheet columns are preserved here using their original header names. */
   customFields?: Record<string, string>;
   activityLog: ActivityLogEntry[];
+}
+
+/** Workbook merge provenance keeps omitted columns from being mistaken for intentional blank values. */
+export interface ApplicationImportFieldPresence {
+  applicationFields: Array<Exclude<keyof JobApplication, "id" | "createdAt" | "updatedAt" | "activityLog" | "customFields">>;
+  customFieldHeaders: string[];
 }
 
 // Badge classes keyed by CurrentStatus for the legacy status badge

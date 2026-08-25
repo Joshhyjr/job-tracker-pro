@@ -102,4 +102,50 @@ describe("planApplicationImport", () => {
     expect(plan.updates[0].responseStatus).toBe("Interview");
     expect(plan.skipped).toHaveLength(1);
   });
+
+  it("updates only quality fields present in a partial stable-ID workbook", () => {
+    const existing = application({
+      id: "stable-quality",
+      roleFit: "moderate",
+      resumeTailored: true,
+      notes: "Keep this owner note",
+      customFields: { Portfolio: "Keep", Priority: "Medium" },
+    });
+    const imported = application({
+      id: "stable-quality",
+      roleFit: "strong",
+      resumeTailored: false,
+      notes: "Parser default must not overwrite",
+      customFields: { Priority: "High" },
+    });
+
+    const plan = planApplicationImport([existing], [imported], {
+      applicationFields: ["roleFit", "resumeTailored"],
+      customFieldHeaders: ["Priority"],
+    });
+
+    // Field presence keeps omitted workbook columns from erasing owner-managed application data.
+    expect(plan.updates[0]).toMatchObject({
+      roleFit: "strong",
+      resumeTailored: false,
+      notes: "Keep this owner note",
+      customFields: { Portfolio: "Keep", Priority: "High" },
+    });
+  });
+
+  it("restores missing workbook history without replacing owner events", () => {
+    const existing = application({
+      id: "stable-history",
+      activityLog: [{ id: "owner-event", date: "2026-08-10T12:00:00.000Z", type: "note", message: "Owner note" }],
+    });
+    const imported = application({
+      id: "stable-history",
+      activityLog: [{ id: "backup-event", date: "2026-08-01T12:00:00.000Z", type: "status_change", message: "Reached interview", fromStatus: "Applied", toStatus: "Interview" }],
+    });
+
+    const plan = planApplicationImport([existing], [imported], { applicationFields: [], customFieldHeaders: [] });
+
+    // Stable-ID backups can fill history gaps while the owner's same-ID event remains authoritative.
+    expect(plan.updates[0].activityLog.map((entry) => entry.id)).toEqual(["owner-event", "backup-event"]);
+  });
 });

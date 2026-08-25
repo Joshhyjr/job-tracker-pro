@@ -34,6 +34,8 @@ function toRows(apps: JobApplication[]) {
     Salary: a.salary ?? "",
     "Days Since Applied": a.daysSinceApplied ?? "",
     "Cover Letter Included": a.coverLetterIncluded == null ? "" : a.coverLetterIncluded ? "Yes" : "No",
+    "Role Fit": a.roleFit ? `${a.roleFit.charAt(0).toUpperCase()}${a.roleFit.slice(1)}` : "",
+    "Tailored Resume": a.resumeTailored == null ? "" : a.resumeTailored ? "Yes" : "No",
     "Recruiter/Contact Name": a.recruiterContactName ?? "",
     "Interview Date": a.interviewDate ?? "",
     Tags: a.tags ?? "",
@@ -66,6 +68,8 @@ function getExportHeaders(rows: ReturnType<typeof toRows>) {
     "Salary",
     "Days Since Applied",
     "Cover Letter Included",
+    "Role Fit",
+    "Tailored Resume",
     "Recruiter/Contact Name",
     "Interview Date",
     "Tags",
@@ -95,6 +99,24 @@ export async function exportXLSX(apps: JobApplication[]) {
 
   worksheet.addRow(headers.map(neutralizeSpreadsheetFormula));
   rows.forEach((row) => worksheet.addRow(headers.map((header) => neutralizeSpreadsheetFormula(row[header as keyof typeof row]))));
+
+  const activityWorksheet = workbook.addWorksheet("Activity History");
+  const activityHeaders = ["Application ID", "Event ID", "Event Date", "Event Type", "From Status", "To Status", "Message"];
+  activityWorksheet.addRow(activityHeaders);
+  apps.forEach((application) => {
+    application.activityLog.forEach((entry) => {
+      // A separate event-grain sheet keeps every stage transition auditable after an XLSX backup.
+      activityWorksheet.addRow([
+        application.id,
+        entry.id,
+        entry.date,
+        entry.type,
+        entry.fromStatus ?? "",
+        entry.toStatus ?? "",
+        entry.message,
+      ].map(neutralizeSpreadsheetFormula));
+    });
+  });
 
   const buffer = await workbook.xlsx.writeBuffer();
   download(buffer, "job-applications.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

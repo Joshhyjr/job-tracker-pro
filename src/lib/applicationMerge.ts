@@ -1,4 +1,5 @@
-import type { JobApplication } from "./types";
+import type { ApplicationImportFieldPresence, JobApplication } from "./types";
+import { normalizeApplicationGeography } from "./geography";
 
 export type ApplicationImportMatch = "stable-id" | "company-role-date" | "company-role-link" | "company-role-location" | "undated-company-role";
 
@@ -62,23 +63,83 @@ function importFields(application: JobApplication) {
   return fields;
 }
 
-function updateStableApplication(existing: JobApplication, imported: JobApplication): JobApplication {
+function mergeActivityHistory(existing: JobApplication, imported: JobApplication): JobApplication["activityLog"] {
+  const byId = new Map(imported.activityLog.map((entry) => [entry.id, entry]));
+  // Existing owner history wins on duplicate IDs while genuinely missing backup events are restored.
+  existing.activityLog.forEach((entry) => byId.set(entry.id, entry));
+  return Array.from(byId.values()).sort((left, right) => right.date.localeCompare(left.date));
+}
+
+const GEOGRAPHY_FIELDS = new Set<keyof JobApplication>([
+  "location", "city", "region", "country", "countryCode", "latitude", "longitude", "workMode", "locationStatus",
+]);
+
+function updateStableApplication(
+  existing: JobApplication,
+  imported: JobApplication,
+  fieldPresence?: ApplicationImportFieldPresence,
+): JobApplication {
   // An explicit stable-ID match may update spreadsheet fields without replacing owner history.
+  if (!fieldPresence) {
+    return {
+      ...existing,
+      ...importFields(imported),
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: existing.updatedAt,
+      activityLog: mergeActivityHistory(existing, imported),
+    };
+  }
+
+  const fieldsToApply = new Set<keyof JobApplication>(fieldPresence.applicationFields);
+  // Response status owns the coarse tracker status unless the workbook explicitly supplies both columns.
+  if (fieldsToApply.has("responseStatus") && !fieldsToApply.has("currentStatus")) fieldsToApply.add("currentStatus");
+
+  let updated: JobApplication = { ...existing };
+  const mutableUpdated = updated as unknown as Record<string, unknown>;
+  const importedRecord = imported as unknown as Record<string, unknown>;
+  fieldsToApply.forEach((field) => {
+    const value = importedRecord[field];
+    if (value === undefined) delete mutableUpdated[field];
+    else mutableUpdated[field] = value;
+  });
+
+  if (fieldPresence.customFieldHeaders.length > 0) {
+    const customFields = { ...(existing.customFields ?? {}) };
+    fieldPresence.customFieldHeaders.forEach((header) => {
+      const value = imported.customFields?.[header];
+      // Present blanks clear only their own custom column; omitted custom fields remain owner-controlled.
+      if (value === undefined) delete customFields[header];
+      else customFields[header] = value;
+    });
+    if (Object.keys(customFields).length > 0) updated.customFields = customFields;
+    else delete updated.customFields;
+  }
+
+  if ([...fieldsToApply].some((field) => GEOGRAPHY_FIELDS.has(field))) {
+    // Reconcile derived geography only when a workbook actually changes a geography input.
+    updated = normalizeApplicationGeography(updated);
+  }
+
   return {
-    ...existing,
-    ...importFields(imported),
+    ...updated,
     id: existing.id,
     createdAt: existing.createdAt,
     updatedAt: existing.updatedAt,
-    activityLog: existing.activityLog,
+    activityLog: mergeActivityHistory(existing, imported),
   };
 }
 
 function applicationFieldsEqual(left: JobApplication, right: JobApplication): boolean {
-  return JSON.stringify(importFields(left)) === JSON.stringify(importFields(right));
+  return JSON.stringify(importFields(left)) === JSON.stringify(importFields(right))
+    && JSON.stringify(left.activityLog) === JSON.stringify(right.activityLog);
 }
 
-export function planApplicationImport(existingApplications: JobApplication[], importedApplications: JobApplication[]): ApplicationImportPlan {
+export function planApplicationImport(
+  existingApplications: JobApplication[],
+  importedApplications: JobApplication[],
+  fieldPresence?: ApplicationImportFieldPresence,
+): ApplicationImportPlan {
   const additions: JobApplication[] = [];
   const updates: JobApplication[] = [];
   const skipped: ApplicationImportPlan["skipped"] = [];
@@ -101,7 +162,7 @@ export function planApplicationImport(existingApplications: JobApplication[], im
     }
 
     if (matchedKey.match === "stable-id" && initialIds.has(existing.id) && !updatedIds.has(existing.id)) {
-      const updated = updateStableApplication(existing, imported);
+      const updated = updateStableApplication(existing, imported, fieldPresence);
       if (!applicationFieldsEqual(existing, updated)) {
         updates.push(updated);
         updatedIds.add(existing.id);
