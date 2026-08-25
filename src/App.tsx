@@ -36,6 +36,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { User } from "firebase/auth";
+import { SentryRoutes } from "@/instrument";
 
 const queryClient = new QueryClient();
 
@@ -275,14 +276,15 @@ function AppContent() {
   const isPortfolio = location.pathname === "/" || location.pathname === "";
 
   return isPortfolio ? (
-    <Routes>
+    // Only the top-level route set is wrapped; nested route sets inherit the active Sentry navigation span.
+    <SentryRoutes>
       <Route path="/" element={<Portfolio />} />
-    </Routes>
+    </SentryRoutes>
   ) : (
-    <Routes>
+    <SentryRoutes>
       <Route path="/app/*" element={<PublicJobTracker />} />
       <Route path="*" element={<NotFound />} />
-    </Routes>
+    </SentryRoutes>
   );
 }
 
