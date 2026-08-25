@@ -10,6 +10,158 @@ service cloud.firestore {
         && request.auth.token.email_verified == true;
     }
 
+    function isApprovedPortfolioOwner() {
+      // Portfolio documents are public, but publishing still requires the verified email allowlist.
+      return request.auth != null
+        && request.auth.token.email == 'joshuakivaria@gmail.com'
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function isValidPortfolioLink(link) {
+      return link is map
+        && link.keys().hasOnly(['label', 'href'])
+        && link.label is string
+        && link.label.size() > 0
+        && link.label.size() <= 40
+        && link.href is string
+        && link.href.size() > 0
+        && link.href.size() <= 2048
+        && (link.href.matches('^https://.+$') || link.href.matches('^/[^/].*$'));
+    }
+
+    function isValidHttpsUrl(value) {
+      return value is string && value.size() > 0 && value.size() <= 2048 && value.matches('^https://.+$');
+    }
+
+    function hasValidPortfolioOrder(documentId, content, maximum) {
+      return documentId.matches('^[A-Za-z0-9_-]{1,80}$')
+        && content.order is int
+        && content.order >= 0
+        && content.order < maximum;
+    }
+
+    function hasValidPortfolioLinks(links) {
+      // The fixed upper bound lets rules validate every nested link before accepting a write.
+      return links is list
+        && links.size() > 0
+        && links.size() <= 3
+        && isValidPortfolioLink(links[0])
+        && (links.size() < 2 || isValidPortfolioLink(links[1]))
+        && (links.size() < 3 || isValidPortfolioLink(links[2]));
+    }
+
+    function isValidPortfolioProject(projectId) {
+      let project = request.resource.data;
+      return hasValidPortfolioOrder(projectId, project, 20)
+        && project.keys().hasOnly(['title', 'description', 'date', 'status', 'links', 'order'])
+        && project.keys().hasAll(['title', 'description', 'date', 'links', 'order'])
+        && project.title is string
+        && project.title.size() > 0
+        && project.title.size() <= 80
+        && project.description is string
+        && project.description.size() > 0
+        && project.description.size() <= 500
+        && project.date is string
+        && project.date.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+        && (!('status' in project) || (project.status is string && project.status.size() <= 32))
+        && hasValidPortfolioLinks(project.links);
+    }
+
+    function isValidPortfolioProfile() {
+      let profile = request.resource.data;
+      return profile.keys().hasOnly(['name', 'headline', 'quote', 'location', 'about', 'greeting', 'introduction', 'statusPrompt', 'wallPost', 'wallDate', 'wallLikes', 'linkedinHref', 'githubHref'])
+        && profile.keys().hasAll(['name', 'headline', 'quote', 'location', 'about', 'greeting', 'introduction', 'statusPrompt', 'wallPost', 'wallDate', 'wallLikes', 'linkedinHref', 'githubHref'])
+        && profile.name is string && profile.name.size() > 0 && profile.name.size() <= 80
+        && profile.headline is string && profile.headline.size() > 0 && profile.headline.size() <= 160
+        && profile.quote is string && profile.quote.size() > 0 && profile.quote.size() <= 240
+        && profile.location is string && profile.location.size() > 0 && profile.location.size() <= 120
+        && profile.about is string && profile.about.size() > 0 && profile.about.size() <= 1000
+        && profile.greeting is string && profile.greeting.size() > 0 && profile.greeting.size() <= 80
+        && profile.introduction is string && profile.introduction.size() > 0 && profile.introduction.size() <= 600
+        && profile.statusPrompt is string && profile.statusPrompt.size() > 0 && profile.statusPrompt.size() <= 120
+        && profile.wallPost is string && profile.wallPost.size() > 0 && profile.wallPost.size() <= 1000
+        && profile.wallDate is string && profile.wallDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$')
+        && profile.wallLikes is string && profile.wallLikes.size() > 0 && profile.wallLikes.size() <= 120
+        && isValidHttpsUrl(profile.linkedinHref)
+        && isValidHttpsUrl(profile.githubHref);
+    }
+
+    function isValidPortfolioInterest(interestId) {
+      let interest = request.resource.data;
+      return hasValidPortfolioOrder(interestId, interest, 12)
+        && interest.keys().hasOnly(['text', 'order'])
+        && interest.keys().hasAll(['text', 'order'])
+        && interest.text is string && interest.text.size() > 0 && interest.text.size() <= 80;
+    }
+
+    function isValidPortfolioActivity(activityId) {
+      let activity = request.resource.data;
+      return hasValidPortfolioOrder(activityId, activity, 12)
+        && activity.keys().hasOnly(['prefix', 'highlight', 'suffix', 'order'])
+        && activity.keys().hasAll(['prefix', 'highlight', 'suffix', 'order'])
+        && activity.prefix is string && activity.prefix.size() > 0 && activity.prefix.size() <= 160
+        && activity.highlight is string && activity.highlight.size() > 0 && activity.highlight.size() <= 80
+        && activity.suffix is string && activity.suffix.size() <= 120;
+    }
+
+    function isValidPortfolioSkill(skillId) {
+      let skill = request.resource.data;
+      return hasValidPortfolioOrder(skillId, skill, 12)
+        && skill.keys().hasOnly(['name', 'tools', 'evidence', 'order'])
+        && skill.keys().hasAll(['name', 'tools', 'evidence', 'order'])
+        && skill.name is string && skill.name.size() > 0 && skill.name.size() <= 80
+        && skill.tools is string && skill.tools.size() > 0 && skill.tools.size() <= 240
+        && skill.evidence is string && skill.evidence.size() > 0 && skill.evidence.size() <= 400;
+    }
+
+    function isValidPortfolioCertification(certificationId) {
+      let certification = request.resource.data;
+      return hasValidPortfolioOrder(certificationId, certification, 12)
+        && certification.keys().hasOnly(['code', 'title', 'issued', 'href', 'order'])
+        && certification.keys().hasAll(['code', 'title', 'issued', 'href', 'order'])
+        && certification.code is string && certification.code.size() > 0 && certification.code.size() <= 12
+        && certification.title is string && certification.title.size() > 0 && certification.title.size() <= 160
+        && certification.issued is string && certification.issued.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+        && isValidHttpsUrl(certification.href);
+    }
+
+    match /portfolioContent/{documentId} {
+      allow read: if true;
+      allow create, update: if documentId == 'profile' && isApprovedPortfolioOwner() && isValidPortfolioProfile();
+      allow delete: if false;
+    }
+
+    match /portfolioInterests/{interestId} {
+      allow read: if true;
+      allow create, update: if isApprovedPortfolioOwner() && isValidPortfolioInterest(interestId);
+      allow delete: if isApprovedPortfolioOwner();
+    }
+
+    match /portfolioActivities/{activityId} {
+      allow read: if true;
+      allow create, update: if isApprovedPortfolioOwner() && isValidPortfolioActivity(activityId);
+      allow delete: if isApprovedPortfolioOwner();
+    }
+
+    match /portfolioProjects/{projectId} {
+      allow read: if true;
+      allow create, update: if isApprovedPortfolioOwner() && isValidPortfolioProject(projectId);
+      allow delete: if isApprovedPortfolioOwner();
+    }
+
+    match /portfolioSkills/{skillId} {
+      allow read: if true;
+      allow create, update: if isApprovedPortfolioOwner() && isValidPortfolioSkill(skillId);
+      allow delete: if isApprovedPortfolioOwner();
+    }
+
+    match /portfolioCertifications/{certificationId} {
+      allow read: if true;
+      allow create, update: if isApprovedPortfolioOwner() && isValidPortfolioCertification(certificationId);
+      allow delete: if isApprovedPortfolioOwner();
+    }
+
     match /users/{userId}/applications/{applicationId} {
       allow read, create, update, delete: if isApprovedOwner(userId);
     }

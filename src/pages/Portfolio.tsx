@@ -1,11 +1,26 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   Search, Bell, Home, User, Folder, FileText, MapPin,
   Github, Linkedin, ThumbsUp, MessageSquare, Share2, Award, Briefcase,
-  Camera, StickyNote, Users, Download, ExternalLink, Plus, Send,
+  Camera, StickyNote, Users, Download, ExternalLink, Plus, Send, LogIn, LogOut, Pencil,
 } from "lucide-react";
 import avatarImg from "@/assets/joshua-avatar.png";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  FALLBACK_PORTFOLIO_CONTENT,
+  formatPortfolioDateTime,
+  formatPortfolioMonth,
+  resolvePortfolioContent,
+  type PortfolioPageContent,
+} from "@/lib/portfolioContent";
+import { loadPortfolioContent, savePortfolioContent } from "@/lib/portfolioRepository";
+import type { PortfolioEditSection } from "@/components/PortfolioEditor";
+
+// The editor and dialog libraries stay out of the public visitor bundle until an owner session exists.
+const PortfolioEditor = lazy(() => import("@/components/PortfolioEditor").then((module) => ({
+  default: module.PortfolioEditor,
+})));
 
 /* ──────────────────────────────────────────────────────────────
    Joshua Kivaria — Retro Social Profile Portfolio
@@ -17,14 +32,14 @@ import avatarImg from "@/assets/joshua-avatar.png";
 // Small reusable card shell with optional header strip + "Edit" affordance.
 function RetroCard({
   title,
-  edit,
   hint,
+  onEdit,
   children,
   className = "",
 }: {
   title?: string;
-  edit?: string; // placeholder action label (e.g. "Edit", "See All")
   hint?: string; // non-interactive guidance for contained widgets
+  onEdit?: () => void;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -33,8 +48,11 @@ function RetroCard({
       {title && (
         <header className="retro-card-header">
           <span className="uppercase tracking-wide">{title}</span>
-          {edit && <a href="#" className="retro-link text-[11px] font-normal">{edit}</a>}
-          {!edit && hint && <span className="text-[10px] font-normal normal-case text-[hsl(var(--retro-muted))]">{hint}</span>}
+          {onEdit ? (
+            <button type="button" onClick={onEdit} className="retro-link inline-flex items-center gap-1 text-[11px] font-normal normal-case"><Pencil className="h-3 w-3" /> Edit</button>
+          ) : hint ? (
+            <span className="text-[10px] font-normal normal-case text-[hsl(var(--retro-muted))]">{hint}</span>
+          ) : null}
         </header>
       )}
       <div className="p-3">{children}</div>
@@ -43,12 +61,12 @@ function RetroCard({
 }
 
 // Animated avatar — gentle floating speech bubble + waving hand emoji overlay.
-function AnimatedAvatar({ size = 96 }: { size?: number }) {
+function AnimatedAvatar({ name, size = 96 }: { name: string; size?: number }) {
   return (
     <div className="relative inline-block" style={{ width: size, height: size }}>
       <img
         src={avatarImg}
-        alt="Illustrated avatar of Joshua Kivaria"
+        alt={`Illustrated avatar of ${name}`}
         width={size}
         height={size}
         className="rounded-sm border border-[hsl(var(--retro-border))] bg-white object-cover"
@@ -67,7 +85,21 @@ function AnimatedAvatar({ size = 96 }: { size?: number }) {
 }
 
 // Top navigation bar — slim navy header with logo, search, links, notification.
-function TopNav() {
+function TopNav({
+  profileName,
+  signedIn,
+  authLoading,
+  onEdit,
+  onSignIn,
+  onSignOut,
+}: {
+  profileName: string;
+  signedIn: boolean;
+  authLoading: boolean;
+  onEdit: () => void;
+  onSignIn: () => Promise<void>;
+  onSignOut: () => Promise<void>;
+}) {
   return (
     <nav className="retro-nav sticky top-0 z-40 w-full">
       <div className="mx-auto flex max-w-[1100px] items-center gap-3 px-3 py-1.5">
@@ -95,7 +127,7 @@ function TopNav() {
           <Search className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
           <input
             type="search"
-            placeholder="Search Joshua's portfolio"
+            placeholder={`Search ${profileName}'s portfolio`}
             className="w-full bg-transparent px-2 py-1 text-[12px] text-[hsl(var(--retro-text))] outline-none placeholder:text-[hsl(var(--retro-muted))]"
           />
         </div>
@@ -114,13 +146,28 @@ function TopNav() {
             </li>
           ))}
         </ul>
+        {/* Authentication controls are separate from public navigation and reveal editing only to the approved account. */}
+        {signedIn ? (
+          <div className="ml-auto flex items-center gap-1 md:ml-1">
+            <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-sm bg-white/15 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/25">
+              <Pencil className="h-3 w-3" /> Edit page
+            </button>
+            <button type="button" aria-label="Sign out" onClick={onSignOut} className="rounded-sm p-1 text-white/90 hover:bg-white/10">
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button type="button" disabled={authLoading} onClick={onSignIn} className="ml-auto inline-flex items-center gap-1 rounded-sm bg-white/15 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/25 disabled:opacity-60 md:ml-1">
+            <LogIn className="h-3 w-3" /> Owner sign in
+          </button>
+        )}
       </div>
     </nav>
   );
 }
 
 // Left sidebar — profile mini-card, sidebar nav, about, friends/network.
-function LeftSidebar() {
+function LeftSidebar({ content, onEdit }: { content: PortfolioPageContent; onEdit?: (section: PortfolioEditSection) => void }) {
   // Profile sidebar nav items use the retro labels but link to in-page anchors.
   const sidebarNav = [
     { label: "Wall", href: "#wall" },
@@ -130,21 +177,12 @@ function LeftSidebar() {
    // { label: "Friends / Network", href: "#network" },
   ];
 
-  // Personal interests add a little life beyond the professional portfolio.
-  const interests = [
-    "🚗 F1",
-    "🎧 Music",
-    "⚽ Football",
-    "🎬 Movies & Series",
-    "🛠️ Building things for fun",
-  ];
-
   return (
     <aside className="space-y-3">
       {/* Profile photo card */}
       <section className="retro-card overflow-hidden">
         <div className="flex flex-col items-center gap-2 p-3">
-          <AnimatedAvatar size={150} />
+          <AnimatedAvatar name={content.profile.name} size={150} />
         </div>
         <ul className="border-t border-[hsl(var(--retro-border))] text-[12px]">
           {sidebarNav.map((item) => (
@@ -162,23 +200,21 @@ function LeftSidebar() {
       </section>
 
       {/* About Me */}
-      <RetroCard title="About Me" edit="Edit">
+      <RetroCard title="About Me" onEdit={onEdit ? () => onEdit("about") : undefined}>
         <p className="text-[12px] leading-relaxed text-[hsl(var(--retro-text))]">
-          I built this space to share my journey across data analytics, technical support
-          &amp; the few times I&apos;ve tinkered with software development. Here you&apos;ll
-          find the projects I&apos;ve built, tools I&apos;m learning &amp; what experience I bring.
+          {content.profile.about}
         </p>
       </RetroCard>
 
       {/* A quick glimpse of Joshua's interests away from work. */}
-      <RetroCard title="Outside the Terminal">
+      <RetroCard title="Outside the Terminal" onEdit={onEdit ? () => onEdit("about") : undefined}>
         <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px] text-[hsl(var(--retro-text))]">
-          {interests.map((interest, index) => (
+          {content.interests.map((interest, index) => (
             <li
-              key={interest}
-              className={index === interests.length - 1 ? "col-span-2" : undefined}
+              key={interest.id}
+              className={index === content.interests.length - 1 ? "col-span-2" : undefined}
             >
-              {interest}
+              {interest.text}
             </li>
           ))}
         </ul>
@@ -188,98 +224,11 @@ function LeftSidebar() {
 }
 
 // Center column — profile header, status composer, recent activity, projects, wall.
-function CenterColumn() {
+function CenterColumn({ content, onEdit }: { content: PortfolioPageContent; onEdit?: (section: PortfolioEditSection) => void }) {
   const tabs = ["Wall", "About", "Skills", "Projects", "Resume"];
   const [activeTab, setActiveTab] = useState("Wall");
-
-  // Recent activity feed entries (retro social style).
-  const activity = [
-    { text: "Joshua updated his project:", link: "Job Tracker" },
-    { text: "Joshua added", link: "Python, SQL, and React", suffix: "to his skills" },
-    { text: "Joshua is now connected to", link: "GitHub" },
-    { text: "Joshua uploaded his", link: "resume" },
-  ];
-
-  // Featured projects use repository-grounded descriptions, live destinations, and transparent source labels.
-  const projects = [
-    {
-      title: "COVID-19 Analysis with SQL Server",
-      date: "Aug 2026",
-      desc: "Explores reported cases, deaths, population, and vaccination data with SQL joins, window functions, CTEs, and a reusable view.",
-      links: [
-        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Covid_19_Analysis_SQL" },
-        { label: "Tableau Dashboard", href: "https://public.tableau.com/views/Covid_19_Dashboard_17871610459780/Dashboard1" },
-      ],
-      preview: "/project-screenshots/covid-19-sql-analysis.svg",
-      previewAlt: "COVID-19 SQL analysis preview with database tables and a vaccination trend chart",
-    },
-    {
-      title: "Movie Industry Analysis",
-      date: "Aug 2026",
-      desc: "Examines how production budgets and audience interest relate to worldwide gross revenue using Python, regression plots, and Pearson correlations.",
-      links: [
-        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Movie-Industry-Analysis" },
-      ],
-      preview: "/project-screenshots/movie-industry-analysis.svg",
-      previewAlt: "Movie industry analysis preview with a budget versus gross revenue scatter plot",
-    },
-    {
-      title: "Quantium Retail Analytics",
-      date: "Aug 2026",
-      status: "Forage case study",
-      desc: "Segments chip customers and evaluates three retail trial stores against matched controls in a documented adaptation of Quantium's Forage simulation.",
-      links: [
-        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Quantium-Retail-Analytics" },
-      ],
-      preview: "/project-screenshots/quantium-retail-analytics.svg",
-      previewAlt: "Retail analytics preview comparing sales for three trial and control stores",
-    },
-    {
-      title: "Job Tracker",
-      date: "Jun 2026",
-      desc: "Track applications, manage follow-ups, and get AI-powered insights.",
-      to: "/app",
-      links: [
-        { label: "View Project", href: "/app" },
-        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/job-tracker-pro" },
-        { label: "Live Demo", href: "/app" },
-      ],
-      preview: "/project-screenshots/job-tracker.png",
-      previewAlt: "Job Tracker dashboard with application totals and status charts",
-    },
-    {
-      title: "FAO Hand-in-Hand Platform",
-      date: "Dec 2025",
-      desc: "Geospatial data platform for sustainable development and data visualization.",
-      links: [
-        { label: "View Platform", href: "https://data.apps.fao.org/?lang=en" },
-      ],
-      preview: "/project-screenshots/fao-hand-in-hand.png",
-      previewAlt: "FAO Hand-in-Hand geospatial platform showing its map interface",
-    },
-    {
-      title: "Grocery Deals Finder",
-      date: "Oct 2025",
-      desc: "Search grocery deals across stores, filter by budget, and export results.",
-      links: [
-        { label: "Live Demo", href: "https://joshhyjr.github.io/Grocerydealsfinder/" },
-        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Grocerydealsfinder" },
-      ],
-      preview: "/project-screenshots/grocery-deals-finder.png",
-      previewAlt: "Grocery Deals Finder landing page with its budget and grocery list form",
-    },
-    {
-      title: "Spam Detection Model",
-      date: "Aug 2025",
-      status: "Archived",
-      desc: "Machine learning model using NLP and TF-IDF to classify spam messages.",
-      links: [
-        { label: "View Archived Repo", href: "https://github.com/Joshhyjr/SpamFilter" },
-      ],
-      preview: "/project-screenshots/spam-detection-model.svg",
-      previewAlt: "Spam detection model preview classifying messages as safe or spam",
-    },
-  ];
+  // Keep the render boundary safe if Fast Refresh supplies state from an older module shape.
+  const projects = Array.isArray(content.projects) ? content.projects : FALLBACK_PORTFOLIO_CONTENT.projects;
 
   return (
     <section id="profile" className="space-y-3">
@@ -288,18 +237,18 @@ function CenterColumn() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-bold text-[22px] leading-tight text-[hsl(var(--retro-navy))]">
-              Joshua Kivaria
+              {content.profile.name}
             </h1>
             {/* Concise role summary reflects Joshua's analytical and hands-on strengths. */}
             <p className="mt-0.5 text-[12px] text-[hsl(var(--retro-muted))]">
-              Data Analyst · Tech Support Problem-Solver · Builder
+              {content.profile.headline}
             </p>
             <p className="mt-1 text-[12px] italic text-[hsl(var(--retro-text))]">
-              “I’ve got 99 problems, but messy data won’t be one.”
+              “{content.profile.quote}”
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[hsl(var(--retro-muted))]">
-              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Halifax, Nova Scotia, Canada</span>
-              <a className="retro-link inline-flex items-center gap-1" href="#about"><User className="h-3 w-3" /> Edit My Profile</a>
+              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> {content.profile.location}</span>
+              {onEdit ? <button type="button" className="retro-link inline-flex items-center gap-1" onClick={() => onEdit("profile")}><User className="h-3 w-3" /> Edit profile</button> : null}
             </div>
           </div>
           {/* Keep the primary project and resume actions visible near the profile heading. */}
@@ -356,7 +305,7 @@ function CenterColumn() {
         >
           <input
             type="text"
-            placeholder="What am I building next?"
+            placeholder={content.profile.statusPrompt}
             className="w-full rounded-sm border border-[hsl(var(--retro-border))] bg-white px-2 py-1.5 text-[12px] outline-none focus:border-[hsl(var(--retro-link))]"
           />
           <div className="mt-2 flex items-center justify-between">
@@ -378,16 +327,17 @@ function CenterColumn() {
 
         {/* Recent activity feed */}
         <div className="mt-4">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-[hsl(var(--retro-muted))]">
-            Recent Activity
+          <div className="flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-wide text-[hsl(var(--retro-muted))]">
+            <span>Recent Activity</span>
+            {onEdit ? <button type="button" className="retro-link inline-flex items-center gap-1 font-normal normal-case" onClick={() => onEdit("activity")}><Pencil className="h-3 w-3" /> Edit</button> : null}
           </div>
           <ul className="mt-1.5 space-y-1 text-[12px]">
-            {activity.map((a, i) => (
-              <li key={i} className="flex items-start gap-1.5">
+            {content.activities.map((activity) => (
+              <li key={activity.id} className="flex items-start gap-1.5">
                 <span className="mt-0.5 inline-block h-1.5 w-1.5 flex-none rounded-full bg-[hsl(var(--retro-link))]" />
                 <span>
-                  {a.text} <a href="#" className="retro-link font-semibold">{a.link}</a>
-                  {"suffix" in a ? ` ${a.suffix}` : "."}
+                  {activity.prefix} <span className="retro-link font-semibold">{activity.highlight}</span>
+                  {activity.suffix ? ` ${activity.suffix}` : "."}
                 </span>
               </li>
             ))}
@@ -396,7 +346,7 @@ function CenterColumn() {
       </section>
 
       {/* Featured projects */}
-      <RetroCard title="Featured Projects" hint="Scroll to explore ↓">
+      <RetroCard title="Featured Projects" hint="Scroll to explore ↓" onEdit={onEdit ? () => onEdit("projects") : undefined}>
         <ul
           id="projects"
           aria-label="Featured projects"
@@ -405,16 +355,22 @@ function CenterColumn() {
           className="retro-projects-scroll divide-y divide-[hsl(var(--retro-border))] pr-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--retro-link))]"
         >
           {projects.map((p) => (
-            <li key={p.title} className="flex flex-col gap-3 py-3 first:pt-1 last:pb-1 sm:flex-row">
-              {/* Real project captures make each item immediately recognizable. */}
-              <div className="aspect-video w-full flex-none overflow-hidden rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] shadow-sm sm:w-40">
-                <img
-                  src={p.preview}
-                  alt={p.previewAlt}
-                  loading="lazy"
-                  className="h-full w-full object-cover object-top transition-transform duration-200 hover:scale-[1.02]"
-                />
-              </div>
+            <li key={p.id} className="flex flex-col gap-3 py-3 first:pt-1 last:pb-1 sm:flex-row">
+              {/* New cloud projects remain presentable without accepting arbitrary remote image sources. */}
+              {p.preview ? (
+                <div className="aspect-video w-full flex-none overflow-hidden rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] shadow-sm sm:w-40">
+                  <img
+                    src={p.preview}
+                    alt={p.previewAlt ?? ""}
+                    loading="lazy"
+                    className="h-full w-full object-cover object-top transition-transform duration-200 hover:scale-[1.02]"
+                  />
+                </div>
+              ) : (
+                <div aria-hidden="true" className="flex aspect-video w-full flex-none items-center justify-center rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--retro-muted))] sm:w-40">
+                  Project
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -425,15 +381,15 @@ function CenterColumn() {
                       </span>
                     ) : null}
                   </div>
-                  <span className="shrink-0 whitespace-nowrap text-[11px] text-[hsl(var(--retro-muted))]">{p.date}</span>
+                  <span className="shrink-0 whitespace-nowrap text-[11px] text-[hsl(var(--retro-muted))]">{formatPortfolioMonth(p.date)}</span>
                 </div>
-                <p className="mt-0.5 text-[12px] text-[hsl(var(--retro-text))]">{p.desc}</p>
+                <p className="mt-0.5 text-[12px] text-[hsl(var(--retro-text))]">{p.description}</p>
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px]">
-                  {p.links.map((l) =>
+                  {(Array.isArray(p.links) ? p.links : []).map((l, linkIndex) =>
                     l.href.startsWith("/") ? (
-                      <Link key={l.label} to={l.href} className="retro-link">{l.label}</Link>
+                      <Link key={`${p.id}-link-${linkIndex}`} to={l.href} className="retro-link">{l.label}</Link>
                     ) : (
-                      <a key={l.label} href={l.href} className="retro-link" target="_blank" rel="noreferrer">
+                      <a key={`${p.id}-link-${linkIndex}`} href={l.href} className="retro-link" target="_blank" rel="noreferrer">
                         {l.label}
                       </a>
                     ),
@@ -446,7 +402,7 @@ function CenterColumn() {
       </RetroCard>
 
       {/* Wall — classic profile post */}
-      <RetroCard title="Wall">
+      <RetroCard title="Wall" onEdit={onEdit ? () => onEdit("activity") : undefined}>
         <div id="wall" className="flex gap-2.5">
           <img
             src={avatarImg}
@@ -458,19 +414,16 @@ function CenterColumn() {
           />
           <div className="flex-1">
             <div className="text-[12px]">
-              <a href="#" className="retro-link font-bold">Joshua Kivaria</a>{" "}
+              <span className="retro-link font-bold">{content.profile.name}</span>{" "}
               {/* Keep the wall current with active professional-development work. */}
-              <span>
-                Just shipped a new update to Job Tracker! 🚀 Making the job search more organized and smarter.
-                I&apos;m currently learning Power BI &amp; Tableau to build even stronger dashboards and data stories.
-              </span>
+              <span>{content.profile.wallPost}</span>
             </div>
-            <div className="mt-1 text-[11px] text-[hsl(var(--retro-muted))]">June 22, 2026 at 9:45 PM</div>
+            <div className="mt-1 text-[11px] text-[hsl(var(--retro-muted))]">{formatPortfolioDateTime(content.profile.wallDate)}</div>
             <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-[hsl(var(--retro-link))]">
               <button className="inline-flex items-center gap-1 hover:underline"><ThumbsUp className="h-3 w-3" /> Like</button>
               <button className="inline-flex items-center gap-1 hover:underline"><MessageSquare className="h-3 w-3" /> Comment</button>
               <button className="inline-flex items-center gap-1 hover:underline"><Share2 className="h-3 w-3" /> Share</button>
-              <span className="ml-auto text-[hsl(var(--retro-muted))]">24 others like this.</span>
+              <span className="ml-auto text-[hsl(var(--retro-muted))]">{content.profile.wallLikes}</span>
             </div>
             <input
               type="text"
@@ -484,70 +437,8 @@ function CenterColumn() {
   );
 }
 
-// Skills are paired with concrete evidence so proficiency claims stay specific and interview-ready.
-const skillsWithEvidence = [
-  {
-    name: "Data Analysis",
-    tools: "Python · pandas · NumPy · Matplotlib",
-    evidence: "IBM OPOR Data Analyst role (Experis) and Quantium simulation (Forage)",
-  },
-  {
-    name: "Decision Support",
-    tools: "Excel · data storytelling · recommendations",
-    evidence: "BCG Data for Decision Makers simulation (Forage)",
-  },
-  {
-    name: "SQL & Reporting",
-    tools: "SQL · Tableau · dashboards · data cleaning",
-    evidence: "StFX and Digital Nova Scotia data analytics training",
-  },
-  {
-    name: "Technical Support",
-    tools: "Troubleshooting · Active Directory · Azure · documentation",
-    evidence: "End User Support Technician role at Saint Mary's University",
-  },
-  {
-    name: "Frontend Development",
-    tools: "React · TypeScript · Vite · Git/GitHub",
-    evidence: "Job Tracker and Grocery Deals Finder",
-  },
-  {
-    name: "Data Validation",
-    tools: "Dataset review · quality checks · geospatial platforms",
-    evidence: "FAO Hand-in-Hand Platform internship",
-  },
-];
-
-// Certification metadata includes verification links already used by the prior portfolio design.
-const certifications = [
-  {
-    code: "QNT",
-    title: "Quantium – Data Analytics Job Simulation",
-    issued: "Jun 2026",
-    href: "https://www.theforage.com/completion-certificates/32A6DqtsbF7LbKdcq/NkaC7knWtjSbi6aYv_32A6DqtsbF7LbKdcq_6a145487df290a68a05f2ebf_1780413335511_completion_certificate.pdf",
-  },
-  {
-    code: "BCG",
-    title: "BCG – Data for Decision Makers",
-    issued: "Jun 2026",
-    href: "https://www.theforage.com/completion-certificates/SKZxezskWgmFjRvj9/Pchc5rEGyCeozqY5Z_SKZxezskWgmFjRvj9_6a145487df290a68a05f2ebf_1780397819988_completion_certificate.pdf",
-  },
-  {
-    code: "IBM",
-    title: "Enterprise Data Science in Practice",
-    issued: "Jan 2026",
-    href: "https://www.credly.com/badges/3d60d852-cac5-4c2b-95bc-690f71193c8e/public_url",
-  },
-  {
-    code: "STFX",
-    title: "Data Analytics – Digital Nova Scotia",
-    issued: "Jun 2025",
-    href: "https://learner.mycreds.ca/badges/public/assertion/XRXdtqsZRLy-ORfRRz8KMA",
-  },
-];
-
 // Right column — welcome box (with animated avatar host), skills, certs, contact.
-function RightSidebar() {
+function RightSidebar({ content, onEdit }: { content: PortfolioPageContent; onEdit?: (section: PortfolioEditSection) => void }) {
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactMessage, setContactMessage] = useState("");
@@ -589,30 +480,29 @@ function RightSidebar() {
   return (
     <aside className="space-y-3">
       {/* Personal introduction frames the portfolio around Joshua's multidisciplinary journey. */}
-      <RetroCard title="Hello World" edit="Edit">
+      <RetroCard title="Hello World" onEdit={onEdit ? () => onEdit("about") : undefined}>
         <div className="flex items-start gap-3">
-          <AnimatedAvatar size={64} />
+          <AnimatedAvatar name={content.profile.name} size={64} />
           <div className="relative flex-1">
             <div
               className="retro-bubble relative rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(45_95%_94%)] p-2 text-[12px] leading-snug"
             >
               {/* Bubble arrow pointing back at the avatar */}
               <span className="absolute -left-1.5 top-3 h-3 w-3 rotate-45 border-b border-l border-[hsl(var(--retro-border))] bg-[hsl(45_95%_94%)]" />
-              Hello world, 👋
+              {content.profile.greeting}
             </div>
             <p className="mt-1.5 text-[12px] leading-relaxed">
-              Welcome to JK.space — part portfolio, part digital scrapbook, and part proof
-              that I&apos;m always learning, building, and improving.
+              {content.profile.introduction}
             </p>
           </div>
         </div>
       </RetroCard>
 
       {/* Evidence-backed skills replace arbitrary percentage ratings with tools and proof of use. */}
-      <RetroCard title="Skills + Evidence" edit="View Projects">
+      <RetroCard title="Skills + Evidence" onEdit={onEdit ? () => onEdit("skills") : undefined}>
         <ul id="skills" className="divide-y divide-[hsl(var(--retro-border))]">
-          {skillsWithEvidence.map((s) => (
-            <li key={s.name} className="py-2 first:pt-0 last:pb-0">
+          {content.skills.map((s) => (
+            <li key={s.id} className="py-2 first:pt-0 last:pb-0">
               <div className="text-[12px] font-semibold text-[hsl(var(--retro-text))]">{s.name}</div>
               <div className="mt-0.5 text-[11px] leading-snug text-[hsl(var(--retro-muted))]">
                 {s.tools}
@@ -626,10 +516,10 @@ function RightSidebar() {
       </RetroCard>
 
       {/* Certifications widget */}
-      <RetroCard title="Certifications" edit="See All">
+      <RetroCard title="Certifications" onEdit={onEdit ? () => onEdit("certifications") : undefined}>
         <ul className="space-y-2 text-[12px]">
-          {certifications.map((c) => (
-            <li key={c.title} className="flex items-start gap-2">
+          {content.certifications.map((c) => (
+            <li key={c.id} className="flex items-start gap-2">
               <div className="flex h-8 w-10 flex-none items-center justify-center rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] text-[10px] font-bold text-[hsl(var(--retro-navy))]">
                 {c.code}
               </div>
@@ -642,7 +532,7 @@ function RightSidebar() {
                 >
                   {c.title}
                 </a>
-                <div className="text-[10px] text-[hsl(var(--retro-muted))]">Issued: {c.issued}</div>
+                <div className="text-[10px] text-[hsl(var(--retro-muted))]">Issued: {formatPortfolioMonth(c.issued)}</div>
               </div>
             </li>
           ))}
@@ -650,7 +540,7 @@ function RightSidebar() {
       </RetroCard>
 
       {/* Contact form sends through the server endpoint instead of exposing a personal email address. */}
-      <RetroCard title="Contact Me">
+      <RetroCard title="Contact Me" onEdit={onEdit ? () => onEdit("profile") : undefined}>
         <form id="contact" onSubmit={handleContactSubmit} className="space-y-2">
           <div>
             <label htmlFor="contact-name" className="text-[11px] font-semibold">Name</label>
@@ -709,13 +599,13 @@ function RightSidebar() {
         <ul className="mt-3 space-y-1.5 border-t border-[hsl(var(--retro-border))] pt-3 text-[12px]">
           <li className="flex items-center gap-1.5">
             <Linkedin className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link" href="https://www.linkedin.com/in/joshua-kivaria/" target="_blank" rel="noreferrer">
+            <a className="retro-link" href={content.profile.linkedinHref} target="_blank" rel="noreferrer">
               LinkedIn
             </a>
           </li>
           <li className="flex items-center gap-1.5">
             <Github className="h-3.5 w-3.5 text-[hsl(var(--retro-muted))]" />
-            <a className="retro-link" href="https://github.com/Joshhyjr" target="_blank" rel="noreferrer">
+            <a className="retro-link" href={content.profile.githubHref} target="_blank" rel="noreferrer">
               GitHub
             </a>
           </li>
@@ -751,6 +641,14 @@ function RetroFooter() {
 }
 
 export default function Portfolio() {
+  const { user, loading: authLoading, error: authError, signInWithGoogle, signOut } = useAuth();
+  const [content, setContent] = useState<PortfolioPageContent>(FALLBACK_PORTFOLIO_CONTENT);
+  const [usingFallback, setUsingFallback] = useState(true);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorSection, setEditorSection] = useState<PortfolioEditSection>("profile");
+  // HMR may retain state created before a newly editable content branch existed.
+  const safeContent = resolvePortfolioContent(content);
+
   // Light-mode body for this page — force-remove `dark` class while mounted so
   // next-themes (system default) can't repaint the retro layout in dark tokens.
   useEffect(() => {
@@ -760,15 +658,63 @@ export default function Portfolio() {
     return () => { if (hadDark) root.classList.add("dark"); };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    loadPortfolioContent()
+      .then((cloudContent) => {
+        if (!active || !cloudContent) return;
+        setContent(cloudContent);
+        setUsingFallback(false);
+      })
+      .catch((error) => {
+        // Public visitors keep the complete static portfolio if Firebase is unavailable or returns invalid data.
+        console.warn("[portfolio] Using checked-in fallback content", error);
+      });
+    return () => { active = false; };
+  }, []);
+
+  function openEditor(section: PortfolioEditSection) {
+    setEditorSection(section);
+    setEditorOpen(true);
+  }
+
+  async function handleSave(nextContent: PortfolioPageContent) {
+    const savedContent = await savePortfolioContent(nextContent);
+    setContent(savedContent);
+    setUsingFallback(false);
+  }
+
   return (
     <div id="top" className="retro min-h-screen">
-      <TopNav />
+      <TopNav
+        profileName={safeContent.profile.name}
+        signedIn={Boolean(user)}
+        authLoading={authLoading}
+        onEdit={() => openEditor("profile")}
+        onSignIn={signInWithGoogle}
+        onSignOut={signOut}
+      />
+      {authError ? (
+        <div role="alert" className="mx-auto max-w-[1100px] px-3 pt-3 text-[11px] text-red-700">{authError}</div>
+      ) : null}
       <main className="mx-auto grid max-w-[1100px] gap-3 px-3 py-3 lg:grid-cols-[220px_1fr_260px]">
-        <LeftSidebar />
-        <CenterColumn />
-        <RightSidebar />
+        <LeftSidebar content={safeContent} onEdit={user ? openEditor : undefined} />
+        <CenterColumn content={safeContent} onEdit={user ? openEditor : undefined} />
+        <RightSidebar content={safeContent} onEdit={user ? openEditor : undefined} />
       </main>
       <RetroFooter />
+      {user ? (
+        <Suspense fallback={null}>
+          <PortfolioEditor
+            open={editorOpen}
+            content={safeContent}
+            initialSection={editorSection}
+            usingFallback={usingFallback}
+            onOpenChange={setEditorOpen}
+            onSave={handleSave}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }
