@@ -18,11 +18,13 @@ import avatarImg from "@/assets/joshua-avatar.png";
 function RetroCard({
   title,
   edit,
+  hint,
   children,
   className = "",
 }: {
   title?: string;
   edit?: string; // placeholder action label (e.g. "Edit", "See All")
+  hint?: string; // non-interactive guidance for contained widgets
   children: React.ReactNode;
   className?: string;
 }) {
@@ -32,6 +34,7 @@ function RetroCard({
         <header className="retro-card-header">
           <span className="uppercase tracking-wide">{title}</span>
           {edit && <a href="#" className="retro-link text-[11px] font-normal">{edit}</a>}
+          {!edit && hint && <span className="text-[10px] font-normal normal-case text-[hsl(var(--retro-muted))]">{hint}</span>}
         </header>
       )}
       <div className="p-3">{children}</div>
@@ -197,8 +200,40 @@ function CenterColumn() {
     { text: "Joshua uploaded his", link: "resume" },
   ];
 
-  // Featured projects use live destinations where available and clearly label archived work.
+  // Featured projects use repository-grounded descriptions, live destinations, and transparent source labels.
   const projects = [
+    {
+      title: "COVID-19 Analysis with SQL Server",
+      date: "Aug 2026",
+      desc: "Explores reported cases, deaths, population, and vaccination data with SQL joins, window functions, CTEs, and a reusable view.",
+      links: [
+        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Covid_19_Analysis_SQL" },
+        { label: "Tableau Dashboard", href: "https://public.tableau.com/views/Covid_19_Dashboard_17871610459780/Dashboard1" },
+      ],
+      preview: "/project-screenshots/covid-19-sql-analysis.svg",
+      previewAlt: "COVID-19 SQL analysis preview with database tables and a vaccination trend chart",
+    },
+    {
+      title: "Movie Industry Analysis",
+      date: "Aug 2026",
+      desc: "Examines how production budgets and audience interest relate to worldwide gross revenue using Python, regression plots, and Pearson correlations.",
+      links: [
+        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Movie-Industry-Analysis" },
+      ],
+      preview: "/project-screenshots/movie-industry-analysis.svg",
+      previewAlt: "Movie industry analysis preview with a budget versus gross revenue scatter plot",
+    },
+    {
+      title: "Quantium Retail Analytics",
+      date: "Aug 2026",
+      status: "Forage case study",
+      desc: "Segments chip customers and evaluates three retail trial stores against matched controls in a documented adaptation of Quantium's Forage simulation.",
+      links: [
+        { label: "GitHub Repo", href: "https://github.com/Joshhyjr/Quantium-Retail-Analytics" },
+      ],
+      preview: "/project-screenshots/quantium-retail-analytics.svg",
+      previewAlt: "Retail analytics preview comparing sales for three trial and control stores",
+    },
     {
       title: "Job Tracker",
       date: "Jun 2026",
@@ -361,8 +396,14 @@ function CenterColumn() {
       </section>
 
       {/* Featured projects */}
-      <RetroCard title="Featured Projects" edit="See All">
-        <ul id="projects" className="divide-y divide-[hsl(var(--retro-border))]">
+      <RetroCard title="Featured Projects" hint="Scroll to explore ↓">
+        <ul
+          id="projects"
+          aria-label="Featured projects"
+          tabIndex={0}
+          // The viewport-aware panel keeps the expanded project collection from lengthening the whole page.
+          className="retro-projects-scroll divide-y divide-[hsl(var(--retro-border))] pr-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--retro-link))]"
+        >
           {projects.map((p) => (
             <li key={p.title} className="flex flex-col gap-3 py-3 first:pt-1 last:pb-1 sm:flex-row">
               {/* Real project captures make each item immediately recognizable. */}
@@ -384,7 +425,7 @@ function CenterColumn() {
                       </span>
                     ) : null}
                   </div>
-                  <span className="text-[11px] text-[hsl(var(--retro-muted))]">{p.date}</span>
+                  <span className="shrink-0 whitespace-nowrap text-[11px] text-[hsl(var(--retro-muted))]">{p.date}</span>
                 </div>
                 <p className="mt-0.5 text-[12px] text-[hsl(var(--retro-text))]">{p.desc}</p>
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px]">

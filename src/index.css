@@ -347,6 +347,35 @@
     justify-content: space-between;
   }
 
+  /* Keep the project collection contained while sizing its scroll window to the active device height. */
+  .retro-projects-scroll {
+    max-height: clamp(24rem, 68dvh, 42rem);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--retro-border)) hsl(var(--retro-soft));
+    scroll-snap-type: y proximity;
+  }
+
+  .retro-projects-scroll > li {
+    scroll-snap-align: start;
+  }
+
+  .retro-projects-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .retro-projects-scroll::-webkit-scrollbar-track {
+    background: hsl(var(--retro-soft));
+  }
+
+  .retro-projects-scroll::-webkit-scrollbar-thumb {
+    border: 2px solid hsl(var(--retro-soft));
+    border-radius: 999px;
+    background: hsl(var(--retro-border));
+  }
+
   .retro-link { color: hsl(var(--retro-link)); text-decoration: none; }
   .retro-link:hover { color: hsl(var(--retro-link-hover)); text-decoration: underline; }
 
