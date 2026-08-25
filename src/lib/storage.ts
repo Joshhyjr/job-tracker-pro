@@ -1,4 +1,4 @@
-import type { JobApplication, CurrentStatus } from "./types";
+import type { ApplicationImportFieldPresence, JobApplication, CurrentStatus } from "./types";
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from "./browserStorage";
 import { isSupportedExcelWorkbook } from "./excelFile";
 import { loadExcelJs } from "./exceljs";
@@ -64,6 +64,7 @@ type ColumnMapping = {
 type RowsParseResult = {
   applications: JobApplication[];
   warnings: string[];
+  fieldPresence: ApplicationImportFieldPresence;
 };
 
 type ExcelCellValue = import("exceljs").CellValue;
@@ -90,6 +91,7 @@ export interface WorkbookImportResult {
   applications: JobApplication[];
   warnings: string[];
   preferredResponseStatusOrder: string[];
+  fieldPresence: ApplicationImportFieldPresence;
 }
 
 const REQUIRED_IMPORT_FIELDS: ImportField[] = ["jobTitle", "companyName"];
@@ -435,6 +437,7 @@ type WorkbookParseResult = {
   preferredOrder: string[];
   missingResponseStatusColumn: boolean;
   warnings: string[];
+  fieldPresence: ApplicationImportFieldPresence;
 };
 
 function parseWorkbook(wb: ExcelWorkbook): WorkbookParseResult {
@@ -460,6 +463,7 @@ function parseWorkbook(wb: ExcelWorkbook): WorkbookParseResult {
     preferredOrder,
     missingResponseStatusColumn,
     warnings: parsedRows.warnings,
+    fieldPresence: parsedRows.fieldPresence,
   };
 }
 
@@ -562,7 +566,12 @@ export async function importApplicationsFromFile(
     ? ["Missing 'Response Status' column in 'Applications' sheet. Defaulting all response statuses to Applied."]
     : [];
   warnings.push(...parsed.warnings);
-  const result = { applications: parsed.applications, warnings, preferredResponseStatusOrder: parsed.preferredOrder };
+  const result = {
+    applications: parsed.applications,
+    warnings,
+    preferredResponseStatusOrder: parsed.preferredOrder,
+    fieldPresence: parsed.fieldPresence,
+  };
   if (persistMetadata) persistWorkbookImport(file.name, result);
   return result;
 }
@@ -639,7 +648,14 @@ export function mapRowsToApplicationsWithValidation(rows: Record<string, unknown
     }));
   });
 
-  return { applications, warnings };
+  // Preserve the workbook schema separately from parsed values so merge mode can distinguish omitted columns from blank cells.
+  const applicationFields = Object.keys(mapping.byField)
+    .filter((field): field is Exclude<ImportField, "id"> => field !== "id")
+    // Location status is derived by the geography normalizer rather than copied from an untrusted workbook cell.
+    .filter((field) => field !== "locationStatus");
+  const customFieldHeaders = headers.filter((header) => normalizeHeaderName(header) && !mapping.knownHeaders.has(header));
+
+  return { applications, warnings, fieldPresence: { applicationFields, customFieldHeaders } };
 }
 
 // Maps raw Excel rows to our JobApplication data structure, preserving the existing public helper signature.

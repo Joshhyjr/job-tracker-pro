@@ -113,7 +113,10 @@ function JobTrackerShell({
   const [isApplyingImport, setIsApplyingImport] = useState(false);
   // Recompute against live owner state so a realtime change while the dialog is open cannot be omitted.
   const pendingPlan = useMemo(
-    () => pendingImport ? planApplicationImport(applications, pendingImport.result.applications) : null,
+    // Workbook schema provenance prevents omitted columns from clearing fields during stable-ID merges.
+    () => pendingImport
+      ? planApplicationImport(applications, pendingImport.result.applications, pendingImport.result.fieldPresence)
+      : null,
     [applications, pendingImport],
   );
 

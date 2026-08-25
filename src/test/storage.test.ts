@@ -349,6 +349,11 @@ describe("mapRowsToApplications", () => {
         "Custom Priority": "High",
       },
     });
+    // The parser returns column provenance for safe partial stable-ID merges.
+    expect(result.fieldPresence).toEqual({
+      applicationFields: ["salary", "companyName", "jobTitle", "coverLetterIncluded", "followUpDate", "jobLink"],
+      customFieldHeaders: ["Custom Priority"],
+    });
     expect(result.warnings).toContain("Missing 'Response Status' column in 'Applications' sheet. Defaulting all response statuses to Applied.");
     // Import metadata helps the app resume from saved rows without keeping a copy of the XLSX file.
     expect(getLastImportMetadata()).toMatchObject({

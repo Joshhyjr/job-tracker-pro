@@ -74,6 +74,12 @@ export interface JobApplication {
   activityLog: ActivityLogEntry[];
 }
 
+/** Workbook merge provenance keeps omitted columns from being mistaken for intentional blank values. */
+export interface ApplicationImportFieldPresence {
+  applicationFields: Array<Exclude<keyof JobApplication, "id" | "createdAt" | "updatedAt" | "activityLog" | "customFields">>;
+  customFieldHeaders: string[];
+}
+
 // Badge classes keyed by CurrentStatus for the legacy status badge
 export const STATUS_BADGE_CLASSES: Record<CurrentStatus, string> = {
   Applied: "bg-[hsl(var(--status-applied)/0.12)] text-[hsl(var(--status-applied))] border-[hsl(var(--status-applied)/0.2)]",

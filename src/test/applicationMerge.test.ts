@@ -65,6 +65,66 @@ describe("planApplicationImport", () => {
     expect(plan.mergedApplications).toEqual(plan.updates);
   });
 
+  it("preserves fields omitted from a partial stable-ID workbook", () => {
+    const existing = application({
+      id: "stable-1",
+      responseStatus: "Applied",
+      notes: "Keep owner note",
+      followUpDate: "2026-08-20",
+      jobLink: "https://jobs.example/platform",
+      city: "Halifax",
+      country: "Canada",
+      countryCode: "CA",
+      customFields: { Portfolio: "Keep portfolio", Referral: "Keep referral" },
+    });
+    const imported = application({
+      id: "stable-1",
+      responseStatus: "Interview",
+      currentStatus: "Interview",
+      notes: "",
+      followUpDate: "",
+      customFields: { Portfolio: "Updated portfolio" },
+    });
+
+    const plan = planApplicationImport([existing], [imported], {
+      applicationFields: ["jobTitle", "companyName", "responseStatus"],
+      customFieldHeaders: ["Portfolio"],
+    });
+
+    // Only workbook columns participate in the update; omitted owner data remains intact.
+    expect(plan.updates[0]).toMatchObject({
+      responseStatus: "Interview",
+      currentStatus: "Interview",
+      notes: "Keep owner note",
+      followUpDate: "2026-08-20",
+      jobLink: "https://jobs.example/platform",
+      city: "Halifax",
+      country: "Canada",
+      countryCode: "CA",
+      customFields: { Portfolio: "Updated portfolio", Referral: "Keep referral" },
+    });
+  });
+
+  it("clears present blank fields without clearing omitted fields", () => {
+    const existing = application({
+      id: "stable-1",
+      notes: "Clear this note",
+      followUpDate: "2026-08-20",
+      jobLink: "https://jobs.example/clear-this",
+      customFields: { Portfolio: "Clear this", Referral: "Keep this" },
+    });
+    const imported = application({ id: "stable-1", notes: "", followUpDate: "", customFields: undefined });
+
+    const plan = planApplicationImport([existing], [imported], {
+      applicationFields: ["jobTitle", "companyName", "notes", "jobLink"],
+      customFieldHeaders: ["Portfolio"],
+    });
+
+    // Blank cells still express intentional clearing, but only for columns included in the workbook.
+    expect(plan.updates[0]).toMatchObject({ notes: "", followUpDate: "2026-08-20", customFields: { Referral: "Keep this" } });
+    expect(plan.updates[0]).not.toHaveProperty("jobLink");
+  });
+
   it("uses a normalized job link carefully when an application date is missing", () => {
     const existing = application({ dateApplied: "", jobLink: "https://jobs.example/role?utm_source=email", location: "" });
     const samePosting = application({ id: "generated-2", dateApplied: "", jobLink: "https://jobs.example/role", location: "" });

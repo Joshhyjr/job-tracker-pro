@@ -55,7 +55,7 @@ describe("applyConfirmedApplicationImport", () => {
     await applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "new-jobs.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: { applicationFields: [], customFieldHeaders: [] } },
       plan,
       persistBackup,
       persistMerge,
@@ -78,7 +78,7 @@ describe("applyConfirmedApplicationImport", () => {
     await expect(applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "new-jobs.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: { applicationFields: [], customFieldHeaders: [] } },
       plan,
       persistBackup: persistBrowserBackup(),
       persistMerge: async () => {
@@ -109,7 +109,7 @@ describe("applyConfirmedApplicationImport", () => {
     await applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "replacement.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: { applicationFields: [], customFieldHeaders: [] } },
       plan,
       mode: "replace",
       persistBackup,
@@ -134,7 +134,7 @@ describe("applyConfirmedApplicationImport", () => {
     await expect(applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "replacement.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: { applicationFields: [], customFieldHeaders: [] } },
       plan,
       mode: "replace",
       persistBackup: persistBrowserBackup(),
@@ -160,7 +160,7 @@ describe("applyConfirmedApplicationImport", () => {
     await applyConfirmedApplicationImport({
       currentApplications: demoCurrent,
       fileName: "demo-jobs.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: ["Interview"] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: ["Interview"], fieldPresence: { applicationFields: [], customFieldHeaders: [] } },
       plan,
       persistBackup: persistBrowserBackup("demo"),
       persistMerge: vi.fn().mockResolvedValue(undefined),
@@ -186,7 +186,7 @@ describe("applyConfirmedApplicationImport", () => {
     await applyConfirmedApplicationImport({
       currentApplications: demoCurrent,
       fileName: "demo-replacement.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: { applicationFields: [], customFieldHeaders: [] } },
       plan,
       mode: "replace",
       persistBackup: persistBrowserBackup("demo"),
@@ -212,7 +212,7 @@ describe("applyConfirmedApplicationImport", () => {
     await expect(applyConfirmedApplicationImport({
       currentApplications: current,
       fileName: "new-jobs.xlsx",
-      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [] },
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: { applicationFields: [], customFieldHeaders: [] } },
       plan,
       mode: "replace",
       persistBackup: vi.fn().mockRejectedValue(new Error("Firestore backup unavailable")),
