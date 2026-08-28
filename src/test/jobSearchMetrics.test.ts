@@ -85,4 +85,20 @@ describe("jobSearchMetrics", () => {
     expect(isIntentionallyDueForFollowUp(application({ followUpDate: "2026-08-24", followUps: true }), NOW)).toBe(false);
     expect(isIntentionallyDueForFollowUp(application({ followUpDate: "2026-08-24", responseStatus: "Rejected", currentStatus: "Rejected" }), NOW)).toBe(false);
   });
+
+  it("honors current-status-only workbook rows when response status falls back to Applied", () => {
+    const metrics = buildJobSearchMetrics([
+      application({ id: "assessment", currentStatus: "Assessment", responseStatus: "Applied" }),
+      application({ id: "rejected", currentStatus: "Rejected", responseStatus: "Applied", followUpDate: "2026-08-20" }),
+      application({ id: "withdrawn", currentStatus: "Withdrawn", responseStatus: "Applied", followUpDate: "2026-08-20" }),
+    ], NOW);
+
+    // Current Status is authoritative when an imported workbook has no Response Status column.
+    expect(metrics.activeProcess).toBe(1);
+    expect(metrics.awaitingHumanResponse).toBe(0);
+    expect(metrics.stale).toBe(0);
+    expect(metrics.followUpsDue).toBe(0);
+    expect(metrics.rejections).toBe(1);
+    expect(metrics.unclassifiedStatusCount).toBe(0);
+  });
 });

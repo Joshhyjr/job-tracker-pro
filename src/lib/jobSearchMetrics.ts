@@ -91,6 +91,12 @@ function normalizeMetricStatus(raw: string | null | undefined): string {
   return normalized.toLowerCase() === "final interview" ? "Final Interview" : normalized;
 }
 
+function getCurrentMetricStatus(application: Pick<JobApplication, "currentStatus" | "responseStatus">): string {
+  const responseStatus = normalizeMetricStatus(application.responseStatus);
+  // Current-status-only workbooks receive Applied as a response fallback, so retain their meaningful imported stage.
+  return responseStatus === "Applied" ? normalizeMetricStatus(application.currentStatus) : responseStatus;
+}
+
 export function getApplicationStages(application: JobApplication): Set<string> {
   const stages = new Set<string>();
   const addStage = (value: string | null | undefined) => {
@@ -129,7 +135,7 @@ export function hasReachedOffer(application: JobApplication): boolean {
 
 export function isIntentionallyDueForFollowUp(application: JobApplication, now = new Date()): boolean {
   if (!application.followUpDate || application.followUps) return false;
-  if (TERMINAL_CURRENT_STATUSES.has(normalizeMetricStatus(application.responseStatus))) return false;
+  if (TERMINAL_CURRENT_STATUSES.has(getCurrentMetricStatus(application))) return false;
   const dueDate = parseApplicationDate(application.followUpDate);
   return Boolean(dueDate && !isBefore(startOfDay(now), dueDate));
 }
@@ -190,7 +196,7 @@ export function buildJobSearchMetrics(applications: JobApplication[], now = new 
   let unclassifiedStatusCount = 0;
 
   datedApplications.forEach(({ application, age }) => {
-    const currentStatus = normalizeMetricStatus(application.responseStatus);
+    const currentStatus = getCurrentMetricStatus(application);
     if (AWAITING_HUMAN_STATUSES.has(currentStatus)) {
       if (age >= MATURE_COHORT_MIN_DAYS) stale++;
       else awaitingHumanResponse++;
@@ -217,7 +223,7 @@ export function buildJobSearchMetrics(applications: JobApplication[], now = new 
     followUpsDue: applications.filter((application) => isIntentionallyDueForFollowUp(application, today)).length,
     offersLast90Days: offerWindowCount,
     totalApplications: applications.length,
-    rejections: applications.filter((application) => normalizeMetricStatus(application.responseStatus) === "Rejected").length,
+    rejections: applications.filter((application) => getCurrentMetricStatus(application) === "Rejected").length,
     invalidOrFutureDateCount,
     unclassifiedStatusCount,
     qualityCoverageCount: applications.filter((application) => application.roleFit !== undefined && application.resumeTailored !== undefined).length,
