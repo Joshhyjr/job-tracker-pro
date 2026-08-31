@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationsList from "@/pages/ApplicationsList";
@@ -63,6 +64,65 @@ function renderList(overrides: Partial<React.ComponentProps<typeof ApplicationsL
 describe("ApplicationsList", () => {
   beforeEach(() => {
     toastMock.mockReset();
+  });
+
+  it("changes the displayed response status directly and records its history", async () => {
+    const existing = application({ responseStatus: "Auto-reply received", notes: "Keep my notes" });
+    const { onUpdate } = renderList({ applications: [existing] });
+    const control = screen.getByRole("combobox", { name: "Change status for Frontend Engineer at Acme" });
+    fireEvent.click(control);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.change(control, { target: { value: "Human reply received" } });
+
+    // The visible label and canonical bucket update together without losing other application fields.
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      responseStatus: "Human reply received", currentStatus: "Applied", notes: "Keep my notes",
+      activityLog: [expect.objectContaining({ fromStatus: "Auto-reply received", toStatus: "Human reply received" })],
+    })));
+    expect(control).toHaveValue("Human reply received");
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+    expect(within(screen.getByRole("group", { name: "Human reply received column" })).getByRole("article")).toBeInTheDocument();
+  });
+
+  it("blocks repeat changes while saving and restores the label on failure", async () => {
+    let rejectSave!: (reason: Error) => void;
+    const onUpdate = vi.fn(() => new Promise<JobApplication>((_, reject) => { rejectSave = reject; }));
+    renderList({ applications: [application()], onUpdate });
+    const control = screen.getByRole("combobox", { name: "Change status for Frontend Engineer at Acme" });
+    fireEvent.change(control, { target: { value: "Interview" } });
+    expect(control).toBeDisabled();
+    fireEvent.change(control, { target: { value: "Offer" } });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    await act(async () => rejectSave(new Error("offline")));
+    expect(control).toHaveValue("Applied");
+    expect(control).toBeEnabled();
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Move not saved" }));
+  });
+
+  it("keeps inline status editing unavailable in read-only and attachment modes", () => {
+    renderList({ readOnly: true });
+    expect(screen.queryByRole("combobox", { name: /Change status/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Board view" }));
+    const card = screen.getByRole("article", { name: "Frontend Engineer application card" });
+    fireEvent.dragStart(card);
+    fireEvent.drop(screen.getByRole("group", { name: "Interview column" }));
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps undo and drawer history current after an inline save", async () => {
+    function StatefulList() {
+      const [items, setItems] = useState([application()]);
+      return <ApplicationsList applications={items} onSelect={vi.fn()} onDelete={vi.fn()} onUpdate={async (updated) => { setItems([updated]); return updated; }} />;
+    }
+    render(<MemoryRouter><StatefulList /></MemoryRouter>);
+    fireEvent.change(screen.getByRole("combobox", { name: /Change status/ }), { target: { value: "Interview" } });
+    await waitFor(() => expect(toastMock).toHaveBeenCalled());
+    const undo = toastMock.mock.calls[0][0].action;
+    await act(async () => undo.props.onClick());
+    expect(screen.getByRole("combobox", { name: /Change status/ })).toHaveValue("Applied");
+    fireEvent.click(screen.getByText("Frontend Engineer"));
+    expect(screen.getByText("Status changed from Interview to Applied")).toBeInTheDocument();
+    expect(screen.getByText("Status changed from Applied to Interview")).toBeInTheDocument();
   });
 
   it("filters country links by normalized ISO code", () => {
@@ -223,6 +283,7 @@ describe("ApplicationsList", () => {
     })));
     expect(screen.queryByRole("button", { name: "Select all" })).not.toBeInTheDocument();
     expect(onAttachmentsComplete).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("combobox", { name: /Change status/ })).not.toBeInTheDocument();
   });
 
   it("keeps an existing document when manual attachment would overwrite it", () => {

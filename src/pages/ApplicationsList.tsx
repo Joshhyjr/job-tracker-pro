@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowUpDown,
@@ -16,6 +16,7 @@ import {
   Upload,
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
+import { ResponseStatusSelect } from "@/components/ResponseStatusSelect";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -29,12 +30,11 @@ import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
 import {
   buildResponseStatusChangeApplication,
-  buildStatusChangeApplication,
   getEffectiveCurrentStatus,
-  getResponseStatusBadgeStyle,
   normalizeResponseStatus,
+  normalizeResponseStatusList,
 } from "@/lib/responseStatus";
-import { generateId } from "@/lib/storage";
+import { generateId, getPreferredResponseStatusOrder } from "@/lib/storage";
 import { sanitizeExternalHttpUrl } from "@/lib/security";
 import {
   buildApplicationDocumentAttachment,
@@ -42,7 +42,7 @@ import {
   type DocumentAttachment,
 } from "@/lib/documentMatching";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
-import { CURRENT_STATUSES } from "@/lib/types";
+import { CURRENT_STATUSES, RESPONSE_STATUSES } from "@/lib/types";
 import { cn, formatDisplayDate } from "@/lib/utils";
 import { parseJobLocation } from "@/lib/geography";
 
@@ -61,7 +61,7 @@ interface ApplicationsListProps {
   onAttachmentsComplete?: () => void;
 }
 
-export default function ApplicationsList({ applications, onSelect, onUpdate, onDelete, readOnly = false, pendingAttachments = [], onAttachmentsComplete }: ApplicationsListProps) {
+export default function ApplicationsList({ applications, onSelect, onUpdate, onDelete, isDemo = false, readOnly = false, pendingAttachments = [], onAttachmentsComplete }: ApplicationsListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [companyFilter, setCompanyFilter] = useState("");
@@ -78,6 +78,17 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, string>>({});
+  const pendingStatusIds = useRef(new Set<string>());
+  const moveApplicationRef = useRef(moveApplication);
+  // Toast actions can outlive a render, so undo must use the latest dataset and save guards.
+  moveApplicationRef.current = moveApplication;
+  const [savingStatusIds, setSavingStatusIds] = useState<Set<string>>(() => new Set());
+  // Imported stages stay selectable and visible on the board after an inline change.
+  const statusOptions = useMemo(() => normalizeResponseStatusList([
+    ...(isDemo ? [] : getPreferredResponseStatusOrder()), ...RESPONSE_STATUSES, "Withdrawn",
+    ...applications.map((application) => application.responseStatus),
+  ]), [applications, isDemo]);
+  const boardColumns = normalizeResponseStatusList([...BOARD_COLUMNS, ...statusOptions, ...Object.values(optimisticStatuses)]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const activeStatus = searchParams.get("status") as CurrentStatus | null;
@@ -141,7 +152,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const hasActiveFilters = Boolean(search || companyFilter.trim() || dateFilterValue || dateFilterEnd || activeStatus || activeResponseStatus || activeCountryCode);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pagedApplications = filtered.slice((Math.min(page, pageCount) - 1) * pageSize, Math.min(page, pageCount) * pageSize);
-  const tableColumnCount = readOnly ? 6 : isAttachmentMode ? 7 : 8;
+  const tableColumnCount = readOnly ? 6 : 7;
 
   function currentResponseStatus(application: JobApplication) {
     return optimisticStatuses[application.id] || normalizeResponseStatus(application.responseStatus);
@@ -191,12 +202,6 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
     toast(failures ? { title: "Some applications were not deleted", description: `${deleted.length} deleted, ${failures} failed. The failed applications remain selected so you can retry.`, variant: "destructive" } : { title: "Applications deleted", description: `${deleted.length} application${deleted.length === 1 ? "" : "s"} deleted.` });
   }
 
-  async function handleChangeStatus(application: JobApplication, status: CurrentStatus) {
-    const updated = buildStatusChangeApplication(application, status, generateId(), new Date().toISOString());
-    try { await onUpdate(updated); toast({ title: "Status Updated", description: `Marked as ${status}` }); }
-    catch { toast({ title: "Sync failed", description: "The status was not saved. Please retry.", variant: "destructive" }); }
-  }
-
   async function handleAttachDocuments(application: JobApplication) {
     if (!isAttachmentMode || attachingApplicationId) return;
     const selectionError = getDocumentSelectionError(pendingAttachments);
@@ -233,21 +238,32 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   }
 
   async function moveApplication(application: JobApplication, responseStatus: string, offerUndo = true) {
-    const previousStatus = currentResponseStatus(application);
+    // A per-record guard prevents rapid edits from saving stale status history out of order.
+    if (readOnly || isAttachmentMode || pendingStatusIds.current.has(application.id)) return;
+    const latest = applications.find((item) => item.id === application.id);
+    // A lingering undo toast must never recreate a record deleted after the status change.
+    if (!latest) return;
+    const previousStatus = currentResponseStatus(latest);
     if (previousStatus === responseStatus) return;
-    const updated = buildResponseStatusChangeApplication(application, responseStatus, generateId(), new Date().toISOString());
-    // Optimistic state gives drag-and-drop immediate lift/drop feedback while persistence completes.
+    const updated = buildResponseStatusChangeApplication(latest, responseStatus, generateId(), new Date().toISOString());
+    pendingStatusIds.current.add(application.id);
+    setSavingStatusIds(new Set(pendingStatusIds.current));
+    // The list and board share immediate feedback, failure rollback, and structured status history.
     setOptimisticStatuses((current) => ({ ...current, [application.id]: responseStatus }));
     try {
-      await onUpdate(updated);
+      const persisted = await onUpdate(updated);
+      setSelectedApplication((current) => current?.id === persisted.id ? persisted : current);
       toast({
         title: `${application.companyName} moved to ${responseStatus}.`,
         description: "The status was saved.",
-        action: offerUndo ? <ToastAction altText={`Undo move to ${responseStatus}`} onClick={() => void moveApplication(updated, previousStatus, false)}>Undo</ToastAction> : undefined,
+        action: offerUndo ? <ToastAction altText={`Undo move to ${responseStatus}`} onClick={() => void moveApplicationRef.current(updated, previousStatus, false)}>Undo</ToastAction> : undefined,
       });
     } catch {
       setOptimisticStatuses((current) => { const next = { ...current }; delete next[application.id]; return next; });
       toast({ title: "Move not saved", description: `${application.companyName} was restored to ${previousStatus}.`, variant: "destructive" });
+    } finally {
+      pendingStatusIds.current.delete(application.id);
+      setSavingStatusIds(new Set(pendingStatusIds.current));
     }
   }
 
@@ -298,7 +314,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden lg:table-cell">Follow-up</TableHead>
                   <TableHead><button type="button" className="flex items-center gap-1" onClick={() => setSortAsc((current) => !current)}>Date Applied <ArrowUpDown className="h-3 w-3" /></button></TableHead>
-                  {!readOnly && <TableHead className={isAttachmentMode ? "w-28" : "w-10"}><span className="sr-only">{isAttachmentMode ? "Attach" : "Actions"}</span></TableHead>}
+                  {!readOnly && isAttachmentMode && <TableHead className="w-28"><span className="sr-only">Attach</span></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -310,10 +326,10 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
                     <TableCell className="min-w-48 font-semibold">{application.jobTitle}</TableCell>
                     <TableCell><span className="flex min-w-32 items-center gap-2"><CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} /><span className="truncate">{application.companyName}</span></span></TableCell>
                     <TableCell className="hidden md:table-cell">{application.location}</TableCell>
-                    <TableCell><span className="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={getResponseStatusBadgeStyle(currentResponseStatus(application))}>{currentResponseStatus(application)}</span></TableCell>
+                    <TableCell className="whitespace-nowrap"><ResponseStatusSelect status={currentResponseStatus(application)} options={statusOptions} label={`Change status for ${application.jobTitle} at ${application.companyName}`} disabled={savingStatusIds.has(application.id)} readOnly={readOnly || isAttachmentMode} onChange={(status) => void moveApplication(application, status)} /></TableCell>
                     <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{application.followUpDate ? formatDisplayDate(application.followUpDate) : application.followUps ? "Completed" : "—"}</TableCell>
                     <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDisplayDate(application.dateApplied)}</TableCell>
-                    {!readOnly && <TableCell onClick={(event) => event.stopPropagation()}>{isAttachmentMode ? <Button size="sm" disabled={Boolean(attachingApplicationId)} onClick={() => void handleAttachDocuments(application)}>{attachingApplicationId === application.id ? "Attaching..." : "Attach here"}</Button> : <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${application.jobTitle}`}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{CURRENT_STATUSES.map((status) => <DropdownMenuItem key={status} disabled={getEffectiveCurrentStatus(application) === status} onClick={() => void handleChangeStatus(application, status)}>{status}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}</TableCell>}
+                    {!readOnly && isAttachmentMode && <TableCell onClick={(event) => event.stopPropagation()}><Button size="sm" disabled={Boolean(attachingApplicationId)} onClick={() => void handleAttachDocuments(application)}>{attachingApplicationId === application.id ? "Attaching..." : "Attach here"}</Button></TableCell>}
                   </TableRow>
                 ))}
               </TableBody>
@@ -323,16 +339,16 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
         </section>
       ) : (
         <section className="flex gap-3 overflow-x-auto pb-3" aria-label="Applications board">
-          {BOARD_COLUMNS.map((column) => {
+          {boardColumns.map((column) => {
             const columnApplications = filtered.filter((application) => currentResponseStatus(application) === column);
-            return <div key={column} role="group" aria-label={`${column} column`} className={cn("min-h-[420px] w-72 shrink-0 rounded-md border bg-muted/25 transition-colors", dropTarget === column && "border-primary bg-primary/5 ring-2 ring-primary/20")} onDragOver={(event) => { event.preventDefault(); setDropTarget(column); }} onDragLeave={() => setDropTarget(null)} onDrop={(event) => { event.preventDefault(); const application = applications.find((item) => item.id === draggedId); setDraggedId(null); setDropTarget(null); if (application) void moveApplication(application, column); }}><div className="flex items-center justify-between border-b px-3 py-2.5"><span className="text-xs font-bold">{column}</span><span className="rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{columnApplications.length}</span></div><div className="space-y-2 p-2">{columnApplications.map((application) => <article key={application.id} aria-label={`${application.jobTitle} application card`} draggable={!readOnly} onDragStart={() => setDraggedId(application.id)} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }} className={cn("app-panel cursor-pointer p-3 transition-all", draggedId === application.id && "scale-[1.02] opacity-60 shadow-lg")} onClick={() => openDrawer(application)}><div className="flex items-start gap-2"><GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{/* Board cards use the same logo service as the table so branding stays consistent. */}<CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} /><div className="min-w-0 flex-1"><h3 className="text-xs font-bold leading-5">{application.jobTitle}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">{application.companyName}</p></div><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Change status for ${application.jobTitle}`} onClick={(event) => event.stopPropagation()}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{BOARD_COLUMNS.map((status) => <DropdownMenuItem key={status} disabled={column === status} onClick={() => void moveApplication(application, status)}>{status}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div><div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span className="truncate">{application.location}</span><span className="shrink-0">{formatDisplayDate(application.dateApplied)}</span></div>{application.followUpDate && <p className="mt-2 flex items-center gap-1 text-[10px] text-amber-600"><CalendarDays className="h-3 w-3" />Follow up {formatDisplayDate(application.followUpDate)}</p>}{application.tags && <div className="mt-2 flex flex-wrap gap-1">{application.tags.split(",").slice(0, 3).map((tag) => <span key={tag} className="rounded bg-muted px-1.5 py-0.5 text-[9px]">{tag.trim()}</span>)}</div>}</article>)}</div></div>;
+            return <div key={column} role="group" aria-label={`${column} column`} className={cn("min-h-[420px] w-72 shrink-0 rounded-md border bg-muted/25 transition-colors", dropTarget === column && "border-primary bg-primary/5 ring-2 ring-primary/20")} onDragOver={(event) => { event.preventDefault(); setDropTarget(column); }} onDragLeave={() => setDropTarget(null)} onDrop={(event) => { event.preventDefault(); const application = applications.find((item) => item.id === draggedId); setDraggedId(null); setDropTarget(null); if (application) void moveApplication(application, column); }}><div className="flex items-center justify-between border-b px-3 py-2.5"><span className="text-xs font-bold">{column}</span><span className="rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{columnApplications.length}</span></div><div className="space-y-2 p-2">{columnApplications.map((application) => <article key={application.id} aria-label={`${application.jobTitle} application card`} draggable={!readOnly && !savingStatusIds.has(application.id)} onDragStart={() => setDraggedId(application.id)} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }} className={cn("app-panel cursor-pointer p-3 transition-all", draggedId === application.id && "scale-[1.02] opacity-60 shadow-lg")} onClick={() => openDrawer(application)}><div className="flex items-start gap-2"><GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />{/* Board cards use the same logo service as the table so branding stays consistent. */}<CompanyLogo companyName={application.companyName} jobLink={application.jobLink} companyDomain={application.companyDomain} companyLogoUrl={application.companyLogoUrl} /><div className="min-w-0 flex-1"><h3 className="text-xs font-bold leading-5">{application.jobTitle}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">{application.companyName}</p></div><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Change status for ${application.jobTitle}`} onClick={(event) => event.stopPropagation()}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{boardColumns.map((status) => <DropdownMenuItem key={status} disabled={readOnly || savingStatusIds.has(application.id) || column === status} onClick={(event) => { event.stopPropagation(); void moveApplication(application, status); }}>{status}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div><div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span className="truncate">{application.location}</span><span className="shrink-0">{formatDisplayDate(application.dateApplied)}</span></div>{application.followUpDate && <p className="mt-2 flex items-center gap-1 text-[10px] text-amber-600"><CalendarDays className="h-3 w-3" />Follow up {formatDisplayDate(application.followUpDate)}</p>}{application.tags && <div className="mt-2 flex flex-wrap gap-1">{application.tags.split(",").slice(0, 3).map((tag) => <span key={tag} className="rounded bg-muted px-1.5 py-0.5 text-[9px]">{tag.trim()}</span>)}</div>}</article>)}</div></div>;
           })}
         </section>
       )}
 
       <Sheet open={Boolean(selectedApplication)} onOpenChange={(open) => { if (!open) setSelectedApplication(null); }}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
-          {selectedApplication && <><SheetHeader className="border-b pb-4 pr-8"><SheetTitle>{selectedApplication.jobTitle}</SheetTitle><SheetDescription>{selectedApplication.companyName} · {selectedApplication.location}</SheetDescription></SheetHeader><div className="space-y-5 py-5"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full border px-2 py-1 text-xs font-semibold" style={getResponseStatusBadgeStyle(currentResponseStatus(selectedApplication))}>{currentResponseStatus(selectedApplication)}</span><span className="text-xs text-muted-foreground">Applied {formatDisplayDate(selectedApplication.dateApplied)}</span></div><dl className="grid gap-3 rounded-md border p-4 text-xs sm:grid-cols-2">{[
+          {selectedApplication && <><SheetHeader className="border-b pb-4 pr-8"><SheetTitle>{selectedApplication.jobTitle}</SheetTitle><SheetDescription>{selectedApplication.companyName} · {selectedApplication.location}</SheetDescription></SheetHeader><div className="space-y-5 py-5"><div className="flex flex-wrap items-center gap-2"><ResponseStatusSelect status={currentResponseStatus(selectedApplication)} options={statusOptions} label={`Change status for ${selectedApplication.jobTitle} at ${selectedApplication.companyName}`} disabled={savingStatusIds.has(selectedApplication.id)} readOnly={readOnly || isAttachmentMode} onChange={(status) => void moveApplication(selectedApplication, status)} /><span className="text-xs text-muted-foreground">Applied {formatDisplayDate(selectedApplication.dateApplied)}</span></div><dl className="grid gap-3 rounded-md border p-4 text-xs sm:grid-cols-2">{[
             ["Location", selectedApplication.location], ["Country", selectedApplication.country || "—"], ["Salary", selectedApplication.salary || "—"], ["Follow-up", selectedApplication.followUpDate ? formatDisplayDate(selectedApplication.followUpDate) : "Not scheduled"], ["Recruiter", selectedApplication.recruiterContactName || "—"], ["Tags", selectedApplication.tags || "—"],
           ].map(([label, value]) => <div key={label}><dt className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="mt-1 font-medium">{value}</dd></div>)}</dl>{selectedJobPostingHref && <a href={selectedJobPostingHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">Open job posting <ExternalLink className="h-3.5 w-3.5" /></a>}<section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Notes</h3><p className="rounded-md border bg-muted/20 p-3 text-sm leading-6">{selectedApplication.notes || "No notes added."}</p></section><section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Activity history</h3><div className="space-y-2">{selectedApplication.activityLog?.length ? selectedApplication.activityLog.map((entry) => <div key={entry.id} className="flex gap-3 rounded-md border p-3"><span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-primary" /><div><p className="text-xs font-medium">{entry.message}</p><p className="mt-1 text-[10px] text-muted-foreground">{new Date(entry.date).toLocaleString()}</p></div></div>) : <p className="text-xs text-muted-foreground">No activity recorded.</p>}</div></section><section><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Additional fields</h3><dl className="space-y-2">{Object.entries(selectedApplication.customFields || {}).map(([key, value]) => <div key={key} className="flex justify-between gap-4 border-b pb-2 text-xs"><dt className="text-muted-foreground">{key}</dt><dd className="text-right font-medium">{value || "—"}</dd></div>)}</dl></section></div><SheetFooter>{isAttachmentMode ? <Button disabled={Boolean(attachingApplicationId)} onClick={() => void handleAttachDocuments(selectedApplication)}>{attachingApplicationId === selectedApplication.id ? "Attaching..." : "Attach files to this application"}</Button> : <><Button variant="outline" onClick={() => { setSelectedApplication(null); onSelect(selectedApplication); }}>Open full record</Button><Button asChild><Link to={`/app/applications/${selectedApplication.id}`}>Edit application</Link></Button></>}</SheetFooter></>}
         </SheetContent>
