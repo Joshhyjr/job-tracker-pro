@@ -85,4 +85,17 @@ describe("jobSearchMetrics", () => {
     expect(isIntentionallyDueForFollowUp(application({ followUpDate: "2026-08-24", followUps: true }), NOW)).toBe(false);
     expect(isIntentionallyDueForFollowUp(application({ followUpDate: "2026-08-24", responseStatus: "Rejected", currentStatus: "Rejected" }), NOW)).toBe(false);
   });
+
+  it("excludes ignored reminders while retaining the 30-day boundary and rescheduled dates", () => {
+    const ignored = application({ id: "ignored", followUpDate: "2026-07-25" });
+    const boundary = application({ id: "boundary", followUpDate: "2026-07-26" });
+    const future = application({ id: "future", followUpDate: "2026-08-26" });
+
+    // Reminders expire only after 30 calendar days; a new explicit date restores eligibility.
+    expect(isIntentionallyDueForFollowUp(ignored, NOW)).toBe(false);
+    expect(isIntentionallyDueForFollowUp(boundary, NOW)).toBe(true);
+    expect(isIntentionallyDueForFollowUp(future, NOW)).toBe(false);
+    expect(buildJobSearchMetrics([ignored, boundary, future], NOW).followUpsDue).toBe(1);
+    expect(buildJobSearchMetrics([{ ...ignored, followUpDate: "2026-08-25" }, boundary, future], NOW).followUpsDue).toBe(2);
+  });
 });

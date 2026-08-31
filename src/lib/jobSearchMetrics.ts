@@ -12,6 +12,7 @@ import {
 } from "date-fns";
 import type { JobApplication } from "./types";
 import { normalizeResponseStatus } from "./responseStatus";
+import { isFollowUpIgnored } from "./overdue";
 
 export const MATURE_COHORT_MIN_DAYS = 21;
 export const MATURE_COHORT_MAX_DAYS = 90;
@@ -130,6 +131,8 @@ export function hasReachedOffer(application: JobApplication): boolean {
 export function isIntentionallyDueForFollowUp(application: JobApplication, now = new Date()): boolean {
   if (!application.followUpDate || application.followUps) return false;
   if (TERMINAL_CURRENT_STATUSES.has(normalizeMetricStatus(application.responseStatus))) return false;
+  // Match the Follow-ups page: ignored reminders no longer count as actionable work.
+  if (isFollowUpIgnored(application, now)) return false;
   const dueDate = parseApplicationDate(application.followUpDate);
   return Boolean(dueDate && !isBefore(startOfDay(now), dueDate));
 }

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import Dashboard from "@/pages/Dashboard";
 import type { JobApplication } from "@/lib/types";
 
@@ -26,6 +26,33 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
 }
 
 describe("Dashboard", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("keeps ignored reminders out of the five-item queue and restores rescheduled reminders", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 31, 12));
+    const ignored = Array.from({ length: 5 }, (_, index) => application({
+      id: `ignored-${index}`, companyName: `Ignored ${index}`, followUpDate: "2026-07-31",
+    }));
+    const active = [
+      application({ id: "boundary", companyName: "Thirty days", followUpDate: "2026-08-01" }),
+      application({ id: "future", companyName: "Future reminder", followUpDate: "2026-09-01" }),
+    ];
+    const { rerender } = render(<Dashboard applications={[...ignored, ...active]} />);
+    const queue = screen.getByText("Upcoming Follow-ups").parentElement!.parentElement!;
+    const dueCount = () => screen.getByText("Follow-ups Due").parentElement!;
+
+    // Filtering must happen before the five-row cap so old reminders cannot hide active ones.
+    expect(within(queue).queryByText("Ignored 0")).not.toBeInTheDocument();
+    expect(within(queue).getByText("Thirty days")).toBeInTheDocument();
+    expect(within(queue).getByText("Future reminder")).toBeInTheDocument();
+    expect(within(dueCount()).getByText("1")).toBeInTheDocument();
+
+    rerender(<Dashboard applications={[{ ...ignored[0], followUpDate: "2026-08-31" }, ...ignored.slice(1), ...active]} />);
+    expect(within(queue).getByText("Ignored 0")).toBeInTheDocument();
+    expect(within(dueCount()).getByText("2")).toBeInTheDocument();
+  });
+
   it("shows the six monitoring metrics without dashboard AI recommendations", () => {
     render(<Dashboard applications={[application({ responseStatus: "Pre-screen call" }), application({ id: "app-2", responseStatus: "Rejected" })]} />);
 

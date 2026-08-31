@@ -103,6 +103,16 @@ describe("buildAiInsightSummary", () => {
     expect(summary.statusBreakdown).toEqual(expect.arrayContaining([{ status: "Offer", count: 1 }]));
   });
 
+  it("excludes ignored reminders from follow-up guidance", () => {
+    // The AI receives the same active-reminder count as the dashboard, including the 30-day boundary.
+    const summary = buildAiInsightSummary([
+      application({ followUpDate: "2026-05-02" }),
+      application({ followUpDate: "2026-05-03" }),
+      application({ followUpDate: "2026-06-03" }),
+    ], now);
+    expect(summary.overdueFollowUpCount).toBe(1);
+  });
+
   it("recognizes high-response datasets without low conversion warnings", () => {
     const summary = buildAiInsightSummary([
       application({ currentStatus: "Pre-screen call", responseStatus: "Pre-screen call", dateApplied: "2026-04-01" }),
