@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isApplicationOverdue } from "@/lib/overdue";
+import { isApplicationOverdue, isFollowUpIgnored } from "@/lib/overdue";
 import type { CurrentStatus } from "@/lib/types";
 
 type CaseInput = {
@@ -62,5 +62,25 @@ describe("isApplicationOverdue", () => {
       followUps: false,
       followUpDate: "not-a-date",
     }, NOW)).toBe(true);
+  });
+});
+
+// Calendar boundaries distinguish exactly 30 days late from reminders that should be ignored.
+describe("ignored follow-ups", () => {
+  const now = new Date(2026, 7, 31, 23, 30);
+  it.each([
+    ["2026-08-01", false],
+    ["2026-07-31", true],
+    ["2026-09-01", false],
+  ])("classifies a reminder due %s", (followUpDate, ignored) => {
+    const row = { dateApplied: "2026-01-01", currentStatus: "Applied" as const, followUpDate, followUps: false };
+    expect(isFollowUpIgnored(row, now)).toBe(ignored);
+    expect(isApplicationOverdue(row, now)).toBe(!ignored && followUpDate < "2026-09-01");
+  });
+
+  it("ages unscheduled reminders from the seven-day fallback and tolerates invalid dates", () => {
+    expect(isFollowUpIgnored({ dateApplied: "2026-07-24" }, now)).toBe(true);
+    expect(isFollowUpIgnored({ dateApplied: "2026-07-25" }, now)).toBe(false);
+    expect(isFollowUpIgnored({ dateApplied: "invalid", followUpDate: "invalid" }, now)).toBe(false);
   });
 });

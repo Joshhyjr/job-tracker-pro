@@ -1,4 +1,4 @@
-import { isAfter, isValid, parseISO, subDays } from "date-fns";
+import { addDays, differenceInCalendarDays, isAfter, isValid, parseISO, subDays } from "date-fns";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
 
 type OverdueCandidate = Pick<JobApplication, "dateApplied" | "currentStatus"> & {
@@ -14,9 +14,19 @@ function hasCompletedFollowUp(value: OverdueCandidate["followUps"]): boolean {
   return value === true;
 }
 
+export function isFollowUpIgnored(application: Pick<OverdueCandidate, "dateApplied" | "followUpDate">, now: Date = new Date()): boolean {
+  const scheduledDate = parseISO(application.followUpDate ?? "");
+  const appliedDate = parseISO(application.dateApplied);
+  // Age the reminder from its due date, including the existing seven-day fallback for unscheduled records.
+  const dueDate = isValid(scheduledDate) ? scheduledDate : addDays(appliedDate, 7);
+  return isValid(dueDate) && differenceInCalendarDays(now, dueDate) > 30;
+}
+
 export function isApplicationOverdue(application: OverdueCandidate, now: Date = new Date()): boolean {
   if (!ELIGIBLE_STATUSES.has(application.currentStatus)) return false;
   if (INELIGIBLE_STATUSES.has(application.currentStatus)) return false;
+  // Ignoring stale reminders is derived only: keep records and history intact, and let rescheduling restore them.
+  if (isFollowUpIgnored(application, now)) return false;
 
   const scheduledDate = parseISO(application.followUpDate ?? "");
   if (isValid(scheduledDate)) {
