@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "firebase/auth";
 import Analytics from "@/pages/Analytics";
 import type { JobApplication } from "@/lib/types";
@@ -13,6 +13,7 @@ const app: JobApplication = { id: "1", jobTitle: "Data Analyst", companyName: "A
 
 describe("Analytics", () => {
   beforeEach(() => { buildSummaryMock.mockReset(); generateMock.mockReset(); metadataMock.mockReset(); });
+  afterEach(() => { vi.useRealTimers(); });
 
   it("uses the Firebase ID token for AI guidance and labels it as guidance", async () => {
     buildSummaryMock.mockReturnValue({ totalApplications: 1 });
@@ -37,6 +38,9 @@ describe("Analytics", () => {
   });
 
   it("shows qualified volume and a mature-cohort funnel without a prediction score", () => {
+    // Keep the fixed June/July fixtures inside the 21–90-day cohort as the real calendar advances.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 7, 25, 12));
     const applications: JobApplication[] = [
       { ...app, id: "june-interview", dateApplied: "2026-06-01", currentStatus: "Interview", responseStatus: "Interview", roleFit: "strong", resumeTailored: true },
       { ...app, id: "june-no-response", dateApplied: "2026-06-10", currentStatus: "No Response", responseStatus: "No Response", roleFit: "moderate", resumeTailored: true },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isApplicationOverdue, isFollowUpIgnored } from "@/lib/overdue";
+import { getScheduledFollowUpState, isApplicationOverdue, isFollowUpIgnored } from "@/lib/overdue";
 import type { CurrentStatus } from "@/lib/types";
 
 type CaseInput = {
@@ -7,6 +7,7 @@ type CaseInput = {
   currentStatus: CurrentStatus;
   followUps?: boolean | string | null;
   followUpDate?: string | null;
+  responseStatus?: string | null;
 };
 
 const NOW = new Date("2026-02-17T12:00:00.000Z");
@@ -15,7 +16,7 @@ describe("isApplicationOverdue", () => {
   it("returns true for 3 valid overdue cases", () => {
     const validCases: CaseInput[] = [
       { dateApplied: "2026-02-01", currentStatus: "Applied", followUps: false },
-      { dateApplied: "2026-02-05", currentStatus: "No Response", followUps: "No" },
+      { dateApplied: "2026-02-05", currentStatus: "Applied", responseStatus: "Auto-reply received", followUps: "No" },
       { dateApplied: "2026-02-02", currentStatus: "Applied", followUps: null },
     ];
 
@@ -48,10 +49,10 @@ describe("isApplicationOverdue", () => {
     expect(isApplicationOverdue({
       dateApplied: "2026-02-15",
       currentStatus: "No Response",
-      // A completed earlier follow-up does not suppress a newly scheduled one.
+      // Completion wins until the reschedule workflow explicitly reopens the reminder.
       followUps: true,
       followUpDate: "2026-02-17",
-    }, NOW)).toBe(true);
+    }, NOW)).toBe(false);
   });
 
   it("falls back to application age when the follow-up date is invalid", () => {
@@ -82,5 +83,70 @@ describe("ignored follow-ups", () => {
     expect(isFollowUpIgnored({ dateApplied: "2026-07-24" }, now)).toBe(true);
     expect(isFollowUpIgnored({ dateApplied: "2026-07-25" }, now)).toBe(false);
     expect(isFollowUpIgnored({ dateApplied: "invalid", followUpDate: "invalid" }, now)).toBe(false);
+  });
+});
+
+describe("scheduled follow-up states", () => {
+  const now = new Date(2026, 7, 31, 12);
+
+  it.each([
+    ["response rejection", { currentStatus: "Applied" as const, responseStatus: "Rejected" }],
+    ["current-only rejection", { currentStatus: "Rejected" as const, responseStatus: "Applied" }],
+    ["withdrawal", { currentStatus: "Withdrawn" as const, responseStatus: "Applied" }],
+    ["role cancellation", { currentStatus: "Applied" as const, responseStatus: "Role Cancelled" }],
+    ["offer", { currentStatus: "Offer" as const, responseStatus: "Offer" }],
+  ])("hides pending reminders after %s", (_label, statuses) => {
+    // Both dynamic response labels and fixed current-status fallbacks must close the same derived queue.
+    expect(getScheduledFollowUpState({
+      dateApplied: "2026-08-01",
+      followUpDate: "2026-08-15",
+      followUps: false,
+      ...statuses,
+    }, now)).toBe("hidden");
+  });
+
+  it.each([
+    ["Applied", "Applied"],
+    ["Applied", "Auto-reply received"],
+  ] as const)("keeps %s / %s reminders actionable", (currentStatus, responseStatus) => {
+    expect(getScheduledFollowUpState({
+      dateApplied: "2026-08-01",
+      currentStatus,
+      responseStatus,
+      followUpDate: "2026-08-15",
+      followUps: false,
+    }, now)).toBe("overdue");
+  });
+
+  it.each([
+    ["No Response", "No Response"],
+    ["Pre-screen call", "Pre-screen call"],
+    ["Assessment", "Assessment"],
+    ["Interview", "Interview"],
+    ["Applied", "On Hold"],
+    ["Applied", "Human reply received"],
+  ] as const)("hides %s / %s reminders outside the initial follow-up stages", (currentStatus, responseStatus) => {
+    // Interview-pipeline and later-response work belongs in its application stage rather than the follow-up queue.
+    expect(getScheduledFollowUpState({
+      dateApplied: "2026-08-01",
+      currentStatus,
+      responseStatus,
+      followUpDate: "2026-08-15",
+      followUps: false,
+    }, now)).toBe("hidden");
+  });
+
+  it("keeps terminal completion history and restores a preserved date after reopening", () => {
+    const closed = {
+      dateApplied: "2026-08-01",
+      currentStatus: "Rejected" as const,
+      responseStatus: "Rejected",
+      followUpDate: "2026-08-15",
+      followUps: true,
+    };
+
+    expect(getScheduledFollowUpState(closed, now)).toBe("completed");
+    expect(getScheduledFollowUpState({ ...closed, currentStatus: "Applied", responseStatus: "Applied", followUps: false }, now)).toBe("overdue");
+    expect(closed.followUpDate).toBe("2026-08-15");
   });
 });

@@ -85,4 +85,36 @@ describe("jobSearchMetrics", () => {
     expect(isIntentionallyDueForFollowUp(application({ followUpDate: "2026-08-24", followUps: true }), NOW)).toBe(false);
     expect(isIntentionallyDueForFollowUp(application({ followUpDate: "2026-08-24", responseStatus: "Rejected", currentStatus: "Rejected" }), NOW)).toBe(false);
   });
+
+  it("matches terminal and active follow-up eligibility across imported status shapes", () => {
+    const rows = [
+      application({ id: "response-rejected", followUpDate: "2026-08-24", responseStatus: "Rejected", currentStatus: "Applied" }),
+      application({ id: "current-rejected", followUpDate: "2026-08-24", responseStatus: "Applied", currentStatus: "Rejected" }),
+      application({ id: "withdrawn", followUpDate: "2026-08-24", responseStatus: "Applied", currentStatus: "Withdrawn" }),
+      application({ id: "cancelled", followUpDate: "2026-08-24", responseStatus: "Role Cancelled", currentStatus: "Applied" }),
+      application({ id: "offer", followUpDate: "2026-08-24", responseStatus: "Offer", currentStatus: "Offer" }),
+      application({ id: "applied", followUpDate: "2026-08-24", responseStatus: "Applied", currentStatus: "Applied" }),
+      application({ id: "auto-reply", followUpDate: "2026-08-24", responseStatus: "Auto-reply received", currentStatus: "Applied" }),
+      application({ id: "interview", followUpDate: "2026-08-24", responseStatus: "Interview", currentStatus: "Interview" }),
+      application({ id: "on-hold", followUpDate: "2026-08-24", responseStatus: "On Hold", currentStatus: "Applied" }),
+      application({ id: "no-response", followUpDate: "2026-08-24", responseStatus: "No Response", currentStatus: "No Response" }),
+    ];
+
+    // Only Applied and Auto-reply received reminders should reach the shared due count.
+    expect(rows.map((row) => isIntentionallyDueForFollowUp(row, NOW))).toEqual([false, false, false, false, false, true, true, false, false, false]);
+    expect(buildJobSearchMetrics(rows, NOW).followUpsDue).toBe(2);
+  });
+
+  it("excludes ignored reminders while retaining the 30-day boundary and rescheduled dates", () => {
+    const ignored = application({ id: "ignored", followUpDate: "2026-07-25" });
+    const boundary = application({ id: "boundary", followUpDate: "2026-07-26" });
+    const future = application({ id: "future", followUpDate: "2026-08-26" });
+
+    // Reminders expire only after 30 calendar days; a new explicit date restores eligibility.
+    expect(isIntentionallyDueForFollowUp(ignored, NOW)).toBe(false);
+    expect(isIntentionallyDueForFollowUp(boundary, NOW)).toBe(true);
+    expect(isIntentionallyDueForFollowUp(future, NOW)).toBe(false);
+    expect(buildJobSearchMetrics([ignored, boundary, future], NOW).followUpsDue).toBe(1);
+    expect(buildJobSearchMetrics([{ ...ignored, followUpDate: "2026-08-25" }, boundary, future], NOW).followUpsDue).toBe(2);
+  });
 });

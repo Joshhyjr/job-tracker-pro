@@ -1,17 +1,33 @@
 import { addDays, differenceInCalendarDays, isAfter, isValid, parseISO, subDays } from "date-fns";
 import type { CurrentStatus, JobApplication } from "@/lib/types";
+import { getEffectiveCurrentStatus, normalizeResponseStatus } from "@/lib/responseStatus";
 
 type OverdueCandidate = Pick<JobApplication, "dateApplied" | "currentStatus"> & {
+  responseStatus?: string | null;
   followUps?: boolean | string | null;
   followUpDate?: string | null;
 };
 
-const ELIGIBLE_STATUSES = new Set<CurrentStatus>(["Applied", "No Response"]);
-const INELIGIBLE_STATUSES = new Set<CurrentStatus>(["Rejected", "Withdrawn", "Offer", "Pre-screen call", "Interview"]);
+export type ScheduledFollowUpState = "upcoming" | "overdue" | "ignored" | "completed" | "hidden";
 
 function hasCompletedFollowUp(value: OverdueCandidate["followUps"]): boolean {
   if (typeof value === "string") return value.trim().toLowerCase() === "yes";
   return value === true;
+}
+
+function getFollowUpCurrentStatus(application: OverdueCandidate): CurrentStatus {
+  // Response status normally drives the fixed bucket, while the stored current status remains the fallback for older imports.
+  return getEffectiveCurrentStatus({
+    currentStatus: application.currentStatus,
+    responseStatus: application.responseStatus ?? "",
+  });
+}
+
+function isFollowUpQueueEligible(application: OverdueCandidate): boolean {
+  const responseStatus = normalizeResponseStatus(application.responseStatus);
+  // Follow-up work begins only while an application is newly applied or has an automated acknowledgement.
+  return (responseStatus === "Applied" || responseStatus === "Auto-reply received")
+    && getFollowUpCurrentStatus(application) === "Applied";
 }
 
 export function isFollowUpIgnored(application: Pick<OverdueCandidate, "dateApplied" | "followUpDate">, now: Date = new Date()): boolean {
@@ -22,17 +38,29 @@ export function isFollowUpIgnored(application: Pick<OverdueCandidate, "dateAppli
   return isValid(dueDate) && differenceInCalendarDays(now, dueDate) > 30;
 }
 
+export function getScheduledFollowUpState(application: OverdueCandidate, now: Date = new Date()): ScheduledFollowUpState {
+  const scheduledDate = parseISO(application.followUpDate ?? "");
+
+  // Completion is a recorded user action and remains visible even after the application later reaches a terminal status.
+  if (hasCompletedFollowUp(application.followUps)) return "completed";
+
+  if (!isValid(scheduledDate)) {
+    // Unscheduled pending records do not enter the confirmed-reminder queues.
+    return "hidden";
+  }
+
+  if (!isFollowUpQueueEligible(application)) return "hidden";
+  if (isFollowUpIgnored(application, now)) return "ignored";
+  return isAfter(scheduledDate, now) ? "upcoming" : "overdue";
+}
+
 export function isApplicationOverdue(application: OverdueCandidate, now: Date = new Date()): boolean {
-  if (!ELIGIBLE_STATUSES.has(application.currentStatus)) return false;
-  if (INELIGIBLE_STATUSES.has(application.currentStatus)) return false;
+  const scheduledDate = parseISO(application.followUpDate ?? "");
+  if (isValid(scheduledDate)) return getScheduledFollowUpState(application, now) === "overdue";
+
+  if (!isFollowUpQueueEligible(application)) return false;
   // Ignoring stale reminders is derived only: keep records and history intact, and let rescheduling restore them.
   if (isFollowUpIgnored(application, now)) return false;
-
-  const scheduledDate = parseISO(application.followUpDate ?? "");
-  if (isValid(scheduledDate)) {
-    // An explicit next date stays authoritative even when an earlier follow-up was already completed.
-    return !isAfter(scheduledDate, now);
-  }
 
   // Without a schedule, completed follow-ups leave the queue while untouched applications use the age fallback.
   if ("followUps" in application && hasCompletedFollowUp(application.followUps)) return false;
