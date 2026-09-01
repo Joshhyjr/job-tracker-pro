@@ -1,5 +1,6 @@
 import { useForm } from "react-hook-form";
 import { useRef, useState } from "react";
+import { format } from "date-fns";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useNavigate } from "react-router-dom";
@@ -85,7 +86,8 @@ function getDefaultValues(existing?: JobApplication): FormData {
     // New applications start in the same canonical status bucket used across filters and analytics.
     responseStatus: "Applied",
     followUps: false,
-    dateApplied: new Date().toISOString().split("T")[0],
+    // Date inputs represent local calendar days; UTC formatting can advance the default during evening hours west of UTC.
+    dateApplied: format(new Date(), "yyyy-MM-dd"),
     notes: "",
     followUpDate: "",
   };
