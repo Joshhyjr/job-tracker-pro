@@ -89,15 +89,15 @@ describe("buildAiInsightSummary", () => {
 
   it("summarizes mixed statuses and overdue follow-ups", () => {
     const summary = buildAiInsightSummary([
-      application({ currentStatus: "Interview", responseStatus: "Interview", dateApplied: "2026-04-20", followUps: false, followUpDate: "2026-06-01" }),
-      application({ currentStatus: "No Response", responseStatus: "No Response", dateApplied: "2026-04-21", companyName: "Beta", followUps: true }),
+      application({ currentStatus: "Applied", responseStatus: "Auto-reply received", dateApplied: "2026-04-20", followUps: false, followUpDate: "2026-06-01" }),
+      application({ currentStatus: "No Response", responseStatus: "No Response", dateApplied: "2026-04-21", companyName: "Beta", followUps: true, activityLog: [{ id: "interview-history", date: "2026-05-01", type: "status_change", message: "Interview to No Response", fromStatus: "Interview", toStatus: "No Response" }] }),
       application({ currentStatus: "Offer", responseStatus: "Offer", dateApplied: "2026-04-22", companyName: "Beta", location: "Toronto" }),
     ], now);
 
     expect(summary.interviewCount).toBe(2);
     expect(summary.interviewRate).toBe(67);
     expect(summary.offerCount).toBe(1);
-    // The explicit June 1 schedule is due; the already-completed unscheduled follow-up stays out of the queue.
+    // The eligible auto-reply schedule is due; completed and later-stage reminders stay out of the queue.
     expect(summary.overdueFollowUpCount).toBe(1);
     expect(summary.topCompanies[0]).toEqual({ name: "Beta", count: 2 });
     expect(summary.statusBreakdown).toEqual(expect.arrayContaining([{ status: "Offer", count: 1 }]));

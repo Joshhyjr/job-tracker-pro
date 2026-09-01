@@ -27,7 +27,7 @@ import {
   getResponseStatusColor,
 } from "@/lib/responseStatus";
 import { buildJobSearchMetrics } from "@/lib/jobSearchMetrics";
-import { isFollowUpIgnored } from "@/lib/overdue";
+import { getScheduledFollowUpState } from "@/lib/overdue";
 import { getPreferredResponseStatusOrder } from "@/lib/storage";
 import { formatDisplayDate } from "@/lib/utils";
 import { CompanyLogo } from "@/components/CompanyLogo";
@@ -96,10 +96,11 @@ export default function Dashboard({
   }, [applications]);
 
   const upcomingFollowUps = useMemo(() => applications
-    // Only explicit dates belong in the queue; age-based suggestions are not confirmed follow-up commitments.
-    .filter((application) => Boolean(application.followUpDate) && !application.followUps)
-    // Remove ignored reminders before limiting the list so they cannot hide current commitments.
-    .filter((application) => !isFollowUpIgnored(application, now))
+    // Build the queue from the same derived states as the full page so terminal or ignored reminders cannot leak into summaries.
+    .filter((application) => {
+      const state = getScheduledFollowUpState(application, now);
+      return state === "overdue" || state === "upcoming";
+    })
     .sort((a, b) => (a.followUpDate || "9999").localeCompare(b.followUpDate || "9999"))
     .slice(0, 5), [applications, now]);
 
