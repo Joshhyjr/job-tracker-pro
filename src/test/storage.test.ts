@@ -509,6 +509,24 @@ describe("getApplications", () => {
     expect(getApplications()).toEqual([]);
   });
 
+  it("quarantines blank malformed entries while preserving identifiable legacy records", () => {
+    localStorage.setItem("job-tracker-data", JSON.stringify([
+      null,
+      42,
+      {},
+      { id: "blank-record", currentStatus: "Applied" },
+      { id: "title-only", jobTitle: "Legacy Analyst", currentStatus: "Applied" },
+      { id: "valid-record", jobTitle: "Data Analyst", companyName: "Northstar", currentStatus: "Interview" },
+    ]));
+
+    // Invalid rows stay in raw storage for recovery but cannot become synthetic applications or migrate to Firestore.
+    expect(getApplications()).toMatchObject([
+      { id: "title-only", jobTitle: "Legacy Analyst", companyName: "" },
+      { id: "valid-record", jobTitle: "Data Analyst", companyName: "Northstar" },
+    ]);
+    expect(JSON.parse(localStorage.getItem("job-tracker-data") || "[]")).toHaveLength(6);
+  });
+
   it("preserves optional application fields when creating a new record", () => {
     const created = addApplication({
       jobTitle: " Platform Engineer ",

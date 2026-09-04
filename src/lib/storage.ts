@@ -757,15 +757,19 @@ function getStoredApplications(storageKey: string): JobApplication[] {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
 
-    // Corrupted browser storage should not take down app boot; salvage only array-shaped records.
-    return parsed.map((app) => {
-      const record = typeof app === "object" && app !== null ? app as Partial<JobApplication> : {};
+    return parsed.flatMap((app) => {
+      // Keep malformed values out of the UI and owner migration without rewriting the recoverable raw payload.
+      if (typeof app !== "object" || app === null || Array.isArray(app)) return [];
+      const record = app as Partial<JobApplication>;
       const storedStatus = mapStatus(record.currentStatus);
-      return sanitizeStoredApplication({
+      const application = sanitizeStoredApplication({
         ...record,
         currentStatus: sanitizeCurrentStatus(storedStatus),
         responseStatus: mapResponseStatus(record.responseStatus),
       });
+
+      // Preserve partial legacy rows, but never invent an application when both human identifiers are absent.
+      return application.jobTitle || application.companyName ? [application] : [];
     });
   } catch {
     return [];
