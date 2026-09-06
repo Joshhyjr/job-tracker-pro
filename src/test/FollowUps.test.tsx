@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FollowUps from "@/pages/FollowUps";
@@ -33,7 +33,8 @@ async function openActions(company: string) {
 
 function getTab(name: FollowUpTabName) {
   // Counts are part of each accessible tab name, so tests match the stable label prefix.
-  return screen.getByRole("tab", { name: new RegExp(`^${name} \\(`, "i") });
+  const label = name === "overdue" ? "Needs attention" : name;
+  return screen.getByRole("tab", { name: new RegExp(`^${label} \\(`, "i") });
 }
 
 type FollowUpTabName = "all" | "upcoming" | "overdue" | "completed" | "ignored";
@@ -54,7 +55,8 @@ describe("FollowUps", () => {
       application("Future reminder", "2026-09-01"),
       application("Completed reminder", "2026-07-01", true),
     ]);
-    expect(screen.getByText("Future reminder")).toBeInTheDocument();
+    expect(screen.getByText("Thirty days")).toBeInTheDocument();
+    expect(screen.queryByText("Future reminder")).not.toBeInTheDocument();
     expect(screen.queryByText("Old reminder")).not.toBeInTheDocument();
     fireEvent.click(getTab("overdue"));
     expect(screen.getByText("Thirty days")).toBeInTheDocument();
@@ -94,6 +96,33 @@ describe("FollowUps", () => {
     expect(screen.getByText("In 2 days")).toBeInTheDocument();
   });
 
+  it("snoozes a row exactly one week through the existing update path", async () => {
+    const onUpdate = renderFollowUps([application("Snooze reminder", "2026-08-25")]);
+    fireEvent.click(getTab("overdue"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Snooze 1 week" }));
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ followUps: false, followUpDate: "2026-09-01" })));
+    expect(onUpdate.mock.calls[0][0].activityLog[0]).toMatchObject({ type: "follow_up", message: "Snoozed follow-up with Snooze reminder until 2026-09-01" });
+  });
+
+  it("confirms before rescheduling every overdue row by one week", async () => {
+    const onUpdate = renderFollowUps([
+      application("First overdue", "2026-08-20"),
+      application("Second overdue", "2026-08-25"),
+      application("Future reminder", "2026-09-05"),
+    ]);
+    fireEvent.click(getTab("overdue"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Reschedule all" }));
+    const dialog = screen.getByRole("dialog", { name: "Reschedule all overdue follow-ups?" });
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reschedule all" }));
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(2));
+    expect(onUpdate.mock.calls.map(([saved]) => saved.followUpDate)).toEqual(expect.arrayContaining(["2026-08-27", "2026-09-01"]));
+    expect(onUpdate.mock.calls.some(([saved]) => saved.companyName === "Future reminder")).toBe(false);
+  });
+
   it("preserves ignored reminders when saving fails", async () => {
     const onUpdate = vi.fn(async (_item: JobApplication): Promise<JobApplication> => { throw new Error("offline"); });
     renderFollowUps([application("Old reminder", "2026-07-31")], onUpdate);
@@ -128,7 +157,7 @@ describe("FollowUps", () => {
     const { rerender } = render(<MemoryRouter><FollowUps applications={closed} onUpdate={onUpdate} /></MemoryRouter>);
 
     // Hidden reminders do not inflate any tab count and remain untouched in source data.
-    expect(getTab("all")).toHaveAccessibleName("all (0)");
+    expect(getTab("all")).toHaveAccessibleName("All (0)");
     expect(screen.queryByText("Response rejected")).not.toBeInTheDocument();
     expect(onUpdate).not.toHaveBeenCalled();
     expect(closed[0].followUpDate).toBe("2026-08-15");
@@ -150,7 +179,8 @@ describe("FollowUps", () => {
     ]);
 
     // Later response stages remain stored on their applications but do not compete with initial follow-up work.
-    expect(getTab("all")).toHaveAccessibleName("all (2)");
+    expect(getTab("all")).toHaveAccessibleName("All (2)");
+    fireEvent.click(getTab("upcoming"));
     expect(screen.getByText("Applied job")).toBeInTheDocument();
     expect(screen.getByText("Automated reply")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Actions for No response" })).not.toBeInTheDocument();
@@ -160,6 +190,7 @@ describe("FollowUps", () => {
 
   it("changes application status inline and removes a rejected pending reminder", async () => {
     const onUpdate = renderFollowUps([application("Status company", "2026-09-01")]);
+    fireEvent.click(getTab("upcoming"));
     const statusSelect = screen.getByRole("combobox", { name: "Change status for Analyst at Status company" });
 
     fireEvent.change(statusSelect, { target: { value: "Rejected" } });
@@ -170,19 +201,19 @@ describe("FollowUps", () => {
     expect(saved).toMatchObject({ currentStatus: "Rejected", responseStatus: "Rejected", followUpDate: "2026-09-01" });
     expect(saved.activityLog[0]).toMatchObject({ type: "status_change", fromStatus: "Applied", toStatus: "Rejected" });
     await waitFor(() => expect(screen.queryByText("Status company")).not.toBeInTheDocument());
-    expect(getTab("all")).toHaveAccessibleName("all (0)");
+    expect(getTab("all")).toHaveAccessibleName("All (0)");
   });
 
-  it("keeps completed terminal reminders visible and exposes clear table semantics", () => {
+  it("keeps completed terminal reminders visible in the grouped row layout", () => {
     renderFollowUps([
       application("Completed rejected", "", true, { responseStatus: "Rejected", currentStatus: "Rejected" }),
     ]);
 
     fireEvent.click(getTab("completed"));
     expect(screen.getByText("Completed rejected")).toBeInTheDocument();
-    expect(screen.getByRole("table", { name: "Follow-up reminders by application and due date" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Application Status" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Follow-up" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Completed" })).toBeInTheDocument();
+    expect(screen.getByTestId("follow-up-row")).toHaveTextContent("Follow-up completed");
+    expect(screen.getByRole("combobox", { name: "Change status for Analyst at Completed rejected" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Priority" })).not.toBeInTheDocument();
 
     // Arrow keys move both selection and focus through the ARIA tab set.
@@ -193,20 +224,22 @@ describe("FollowUps", () => {
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "follow-up-tab-ignored");
   });
 
-  it("sorts overdue reminders from oldest due date to newest", () => {
+  it("puts overdue reminders first in All and sorts them oldest to newest", () => {
     renderFollowUps([
       application("Later overdue", "2026-08-20"),
       application("Oldest overdue", "2026-08-01"),
       application("Middle overdue", "2026-08-10"),
+      application("Upcoming reminder", "2026-09-01"),
     ]);
-    fireEvent.click(getTab("overdue"));
+    fireEvent.click(getTab("all"));
 
-    // The header is the first row; actionable reminders follow in urgency order.
-    const reminderRows = screen.getAllByRole("row").slice(1).map((row) => row.textContent);
+    // Grouped cards preserve the same urgency and due-date ordering as the former table.
+    const reminderRows = screen.getAllByTestId("follow-up-row").map((row) => row.textContent);
     expect(reminderRows).toEqual([
       expect.stringContaining("Oldest overdue"),
       expect.stringContaining("Middle overdue"),
       expect.stringContaining("Later overdue"),
+      expect.stringContaining("Upcoming reminder"),
     ]);
   });
 });
