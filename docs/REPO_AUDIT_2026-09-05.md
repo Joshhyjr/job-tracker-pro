@@ -1,5 +1,7 @@
 # Repository audit — September 5, 2026
 
+> Current release status is recorded in [September 6 release preparation](RELEASE_2026-09-06.md), including the patched Browserslist security alert and completed branch cleanup. The publication statements below describe the original audit snapshot.
+
 > Release preparation update — September 6: all **320 tests now pass**, including the five Firestore emulator tests, using a temporary Java 21 runtime and an isolated demo project. TypeScript, lint, and the production build pass. CI actions are pinned to verified commit SHAs, setup-node is updated to v7, and workflow permissions are scoped per job. GitHub dependency graph/alerts are enabled and its dependency-review API responds successfully. Live Vercel inspection found no custom firewall rules; the shared rate-limit follow-up remains open. The npm audit still awaits explicit approval for its metadata transfer. The September 5 findings and validation snapshot below are retained as historical evidence.
 
 Six confirmed correctness bugs and one export hardening gap were fixed locally. The audit covered application persistence, import/export, metrics, forms, document attachment writes, API access controls, browser security boundaries, Firestore rules, and CI configuration. All pre-existing edits were preserved. No commit, push, deployment, production data mutation, or external message was performed.
