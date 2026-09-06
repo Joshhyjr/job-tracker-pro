@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadInitialApplications, useApplications } from "@/hooks/useApplications";
 import { markSeeded, saveApplications } from "@/lib/storage";
 import type { JobApplication } from "@/lib/types";
+import type { User } from "firebase/auth";
+import * as repository from "@/lib/applicationRepository";
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
   return {
@@ -65,6 +67,38 @@ describe("loadInitialApplications", () => {
 });
 
 describe("useApplications", () => {
+  it.each([false, true])("keeps syncing until every concurrent write settles (first fails: %s)", async (failFirst) => {
+    markSeeded();
+    vi.spyOn(repository, "subscribeApplications").mockImplementation((_uid, onData) => {
+      onData([], false);
+      return () => undefined;
+    });
+    vi.spyOn(repository, "mergeLocalApplicationsOnce").mockResolvedValue();
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    const first = new Promise<JobApplication>((resolve, reject) => {
+      finishFirst = () => failFirst ? reject(new Error("First save failed")) : resolve(application());
+    });
+    const second = new Promise<JobApplication>((resolve) => { finishSecond = () => resolve(application()); });
+    vi.spyOn(repository, "updateApplication").mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const user = { uid: "owner" } as User;
+    const { result } = renderHook(() => useApplications(user));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let firstMutation!: Promise<unknown>;
+    let secondMutation!: Promise<unknown>;
+    act(() => {
+      firstMutation = result.current.updateApplication(application()).catch((error) => error);
+      secondMutation = result.current.updateApplication(application());
+    });
+    expect(result.current.syncing).toBe(true);
+    await act(async () => { finishFirst(); await firstMutation; });
+    // Neither a success nor a failure may hide the remaining pending cloud write.
+    expect(result.current.syncing).toBe(true);
+    await act(async () => { finishSecond(); await secondMutation; });
+    expect(result.current.syncing).toBe(false);
+    expect(result.current.syncError).toBe(failFirst ? "First save failed" : "");
+  });
+
   beforeEach(() => {
     localStorage.clear();
   });

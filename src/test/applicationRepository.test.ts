@@ -169,6 +169,13 @@ describe("createApplicationImportBackup", () => {
 });
 
 describe("replaceApplications", () => {
+  it.each(["app-1", "", " app-2 ", "a/b", ".", "..", "__reserved__"])("rejects duplicate or invalid ID %j before touching cloud state", async (id) => {
+    // Validate the entire payload before the first chunk so malformed later rows cannot cause partial replacement.
+    await expect(replaceApplications("user-1", [application(), application({ id })])).rejects.toThrow(/application ID/i);
+    expect(firestoreMocks.getDocs).not.toHaveBeenCalled();
+    expect(firestoreMocks.writeBatch).not.toHaveBeenCalled();
+  });
+
   it("rejects empty datasets before reading or deleting cloud records", async () => {
     await expect(replaceApplications("user-1", [])).rejects.toThrow("empty dataset");
 

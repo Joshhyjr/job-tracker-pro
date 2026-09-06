@@ -23,6 +23,22 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
 }
 
 describe("jobSearchMetrics", () => {
+  it("uses current-status-only imports without treating them as awaiting replies", () => {
+    // The parser supplies Applied when a workbook omits Response Status.
+    const metrics = buildJobSearchMetrics([
+      application({ currentStatus: "Rejected", responseStatus: "Applied" }),
+      application({ currentStatus: "Interview", responseStatus: "" }),
+      application({ currentStatus: "Withdrawn", responseStatus: "Applied" }),
+      application({ currentStatus: "Applied", responseStatus: "Assessment" }),
+      application({ currentStatus: "Interview", responseStatus: "Custom review" }),
+    ], NOW);
+    expect(metrics.rejections).toBe(1);
+    expect(metrics.activeProcess).toBe(2);
+    expect(metrics.stale).toBe(0);
+    expect(metrics.awaitingHumanResponse).toBe(0);
+    expect(metrics.unclassifiedStatusCount).toBe(1);
+  });
+
   it("separates recent acknowledgements from stale applications and excludes future dates", () => {
     const metrics = buildJobSearchMetrics([
       application({ id: "recent", dateApplied: "2026-08-05", responseStatus: "Auto-reply received" }),

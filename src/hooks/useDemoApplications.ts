@@ -8,8 +8,9 @@ import {
   markDemoSeeded,
   saveDemoApplications,
 } from "@/lib/storage";
-import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeSingleLineText } from "@/lib/security";
+import { assertValidApplicationIds, sanitizeActivityLog, sanitizeApplicationInput, sanitizeSingleLineText } from "@/lib/security";
 import type { JobApplication } from "@/lib/types";
+import { useMutationStatus } from "./useMutationStatus";
 
 export async function loadInitialDemoApplications(): Promise<JobApplication[]> {
   const savedApplications = getDemoApplications();
@@ -44,8 +45,8 @@ export function useDemoApplications() {
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const applicationsRef = useRef<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [syncError, setSyncError] = useState("");
+  // Async demo resets can overlap local edits, so they use the same pending-write counter as owner mode.
+  const { syncing, syncError, runMutation } = useMutationStatus("The demo workspace could not be updated.");
 
   const commitApplications = useCallback((nextApplications: JobApplication[]) => {
     // Keep the ref, visible state, and isolated demo storage aligned for rapid consecutive edits.
@@ -65,20 +66,6 @@ export function useDemoApplications() {
     return () => {
       active = false;
     };
-  }, []);
-
-  const runMutation = useCallback(async <T,>(mutation: () => T | Promise<T>): Promise<T> => {
-    setSyncing(true);
-    setSyncError("");
-    try {
-      return await mutation();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "The demo workspace could not be updated.";
-      setSyncError(message);
-      throw error;
-    } finally {
-      setSyncing(false);
-    }
   }, []);
 
   return {
@@ -116,6 +103,7 @@ export function useDemoApplications() {
       return createImportBackup(currentApplications, fileName, "demo");
     }),
     mergeApplications: (changedApplications: JobApplication[]) => runMutation(() => {
+      assertValidApplicationIds(changedApplications);
       // Signed-out merge imports preserve existing demo jobs and apply only additions or stable-ID updates.
       const changesById = new Map(changedApplications.map((application) => [application.id, normalizeDemoApplication(application)]));
       const updated = applicationsRef.current.map((application) => changesById.get(application.id) ?? application);
@@ -125,6 +113,8 @@ export function useDemoApplications() {
     replaceApplications: (nextApplications: JobApplication[]) => runMutation(() => {
       // Replacement is explicit and cannot turn an invalid empty workbook into a silent demo wipe.
       if (nextApplications.length === 0) throw new Error("Cannot replace applications with an empty dataset.");
+      // Demo replacement must reject the same ambiguous identities as the owner cloud writer.
+      assertValidApplicationIds(nextApplications);
       commitApplications(nextApplications.map(normalizeDemoApplication));
     }),
     resetDemo: () => runMutation(async () => {
