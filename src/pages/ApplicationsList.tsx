@@ -79,6 +79,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, string>>({});
   const pendingStatusIds = useRef(new Set<string>());
+  const savedStatusDrafts = useRef(new Map<string, JobApplication>());
   const moveApplicationRef = useRef(moveApplication);
   // Toast actions can outlive a render, so undo must use the latest dataset and save guards.
   moveApplicationRef.current = moveApplication;
@@ -100,14 +101,20 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   const selectedJobPostingHref = sanitizeExternalHttpUrl(selectedApplication?.jobLink);
 
   useEffect(() => {
-    // Release optimistic board labels only after the parent dataset confirms the persisted response status.
+    // Release optimistic board labels and their saved history only after realtime confirms the exact transition.
     setOptimisticStatuses((current) => {
       const next = { ...current };
       let changed = false;
       Object.entries(next).forEach(([id, status]) => {
         const application = applications.find((item) => item.id === id);
-        if (application && normalizeResponseStatus(application.responseStatus) === status) {
+        const savedDraft = savedStatusDrafts.current.get(id);
+        const savedTransitionId = savedDraft?.activityLog?.[0]?.id;
+        const realtimeConfirmed = application
+          && normalizeResponseStatus(application.responseStatus) === status
+          && (!savedTransitionId || application.activityLog?.some((entry) => entry.id === savedTransitionId));
+        if (!application || realtimeConfirmed) {
           delete next[id];
+          savedStatusDrafts.current.delete(id);
           changed = true;
         }
       });
@@ -240,9 +247,11 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
   async function moveApplication(application: JobApplication, responseStatus: string, offerUndo = true) {
     // A per-record guard prevents rapid edits from saving stale status history out of order.
     if (readOnly || isAttachmentMode || pendingStatusIds.current.has(application.id)) return;
-    const latest = applications.find((item) => item.id === application.id);
+    const confirmed = applications.find((item) => item.id === application.id);
     // A lingering undo toast must never recreate a record deleted after the status change.
-    if (!latest) return;
+    if (!confirmed) return;
+    // Firestore can acknowledge a write before its subscription refresh arrives; rebase follow-on edits on that saved draft.
+    const latest = savedStatusDrafts.current.get(application.id) ?? confirmed;
     const previousStatus = currentResponseStatus(latest);
     if (previousStatus === responseStatus) return;
     const updated = buildResponseStatusChangeApplication(latest, responseStatus, generateId(), new Date().toISOString());
@@ -252,6 +261,7 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
     setOptimisticStatuses((current) => ({ ...current, [application.id]: responseStatus }));
     try {
       const persisted = await onUpdate(updated);
+      savedStatusDrafts.current.set(application.id, persisted);
       setSelectedApplication((current) => current?.id === persisted.id ? persisted : current);
       toast({
         title: `${application.companyName} moved to ${responseStatus}.`,
@@ -259,7 +269,15 @@ export default function ApplicationsList({ applications, onSelect, onUpdate, onD
         action: offerUndo ? <ToastAction altText={`Undo move to ${responseStatus}`} onClick={() => void moveApplicationRef.current(updated, previousStatus, false)}>Undo</ToastAction> : undefined,
       });
     } catch {
-      setOptimisticStatuses((current) => { const next = { ...current }; delete next[application.id]; return next; });
+      const lastSavedDraft = savedStatusDrafts.current.get(application.id);
+      setOptimisticStatuses((current) => {
+        const next = { ...current };
+        // A later failure rolls back to the last durable save, not the older realtime snapshot.
+        if (lastSavedDraft) next[application.id] = normalizeResponseStatus(lastSavedDraft.responseStatus);
+        else delete next[application.id];
+        return next;
+      });
+      if (lastSavedDraft) setSelectedApplication((current) => current?.id === application.id ? lastSavedDraft : current);
       toast({ title: "Move not saved", description: `${application.companyName} was restored to ${previousStatus}.`, variant: "destructive" });
     } finally {
       pendingStatusIds.current.delete(application.id);

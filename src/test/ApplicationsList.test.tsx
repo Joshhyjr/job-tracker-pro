@@ -99,6 +99,44 @@ describe("ApplicationsList", () => {
     expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Move not saved" }));
   });
 
+  it("rebases a second status save on the first while realtime data is stale", async () => {
+    const onUpdate = vi.fn().mockImplementation(async (item: JobApplication) => item);
+    renderList({ applications: [application()], onUpdate });
+    const control = screen.getByRole("combobox", { name: "Change status for Frontend Engineer at Acme" });
+
+    fireEvent.change(control, { target: { value: "Interview" } });
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(control).toBeEnabled());
+    fireEvent.change(control, { target: { value: "Offer" } });
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(2));
+
+    // The second save must retain the first transition even before the parent subscription catches up.
+    expect(onUpdate.mock.calls[1][0]).toEqual(expect.objectContaining({
+      responseStatus: "Offer",
+      activityLog: [
+        expect.objectContaining({ fromStatus: "Interview", toStatus: "Offer" }),
+        expect.objectContaining({ fromStatus: "Applied", toStatus: "Interview" }),
+      ],
+    }));
+  });
+
+  it("restores the last successful status when a later save fails before realtime catches up", async () => {
+    const onUpdate = vi.fn()
+      .mockImplementationOnce(async (item: JobApplication) => item)
+      .mockRejectedValueOnce(new Error("offline"));
+    renderList({ applications: [application()], onUpdate });
+    const control = screen.getByRole("combobox", { name: "Change status for Frontend Engineer at Acme" });
+
+    fireEvent.change(control, { target: { value: "Interview" } });
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(control).toBeEnabled());
+    fireEvent.change(control, { target: { value: "Offer" } });
+
+    // A failed follow-on save must not visually undo the already-durable Interview transition.
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Move not saved" })));
+    expect(control).toHaveValue("Interview");
+  });
+
   it("keeps inline status editing unavailable in read-only and attachment modes", () => {
     renderList({ readOnly: true });
     expect(screen.queryByRole("combobox", { name: /Change status/ })).not.toBeInTheDocument();
