@@ -16,4 +16,18 @@ describe("Vercel content security policy", () => {
     // Restrict future form submissions without changing the existing Firebase and map resource allowances.
     expect(contentSecurityPolicy).toContain("form-action 'self'");
   });
+
+  it("allows the configured Sentry ingest origin without widening script execution", () => {
+    // Production diagnostics use this exact origin; unrelated Sentry hosts and inline scripts stay blocked.
+    const policy = vercelConfig.headers.flatMap((route) => route.headers)
+      .find((header) => header.key === "Content-Security-Policy")!.value;
+    const directives = Object.fromEntries(policy.split(";").map((part) => {
+      const [name, ...sources] = part.trim().split(/\s+/);
+      return [name, sources];
+    }));
+    expect(directives["connect-src"]).toContain("https://o4511937385594880.ingest.de.sentry.io");
+    expect(directives["connect-src"]).not.toContain("*");
+    expect(directives["script-src"]).not.toContain("'unsafe-inline'");
+    expect(directives["script-src"]).not.toContain("'unsafe-eval'");
+  });
 });
