@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useMutationStatus } from "./useMutationStatus";
 import type { User } from "firebase/auth";
 import type { JobApplication } from "@/lib/types";
 import { getApplications, loadSeedData, isSeeded, markSeeded, saveApplications } from "@/lib/storage";
@@ -32,9 +33,9 @@ export async function loadInitialApplications(): Promise<JobApplication[]> {
 export function useApplications(user?: User) {
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [offline, setOffline] = useState(!navigator.onLine);
-  const [syncError, setSyncError] = useState("");
+  // Owner and demo writes share the same concurrency-aware status bookkeeping.
+  const { syncing, syncError, setSyncError, runMutation } = useMutationStatus("Cloud synchronization failed.");
 
   useEffect(() => {
     let active = true;
@@ -87,26 +88,12 @@ export function useApplications(user?: User) {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [user]);
+  }, [user, setSyncError]);
 
   useEffect(() => {
     // Cache verified employer domains so a company keeps the same logo on rows without a direct link.
     learnCompanyDomains(applications);
   }, [applications]);
-
-  const runMutation = useCallback(async <T,>(mutation: () => Promise<T>): Promise<T> => {
-    setSyncing(true);
-    setSyncError("");
-    try {
-      return await mutation();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Cloud synchronization failed.";
-      setSyncError(message);
-      throw error;
-    } finally {
-      setSyncing(false);
-    }
-  }, []);
 
   return {
     applications,

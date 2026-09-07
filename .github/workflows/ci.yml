@@ -17,13 +17,13 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # Trusted first-party actions stay on current Node 24-compatible majors.
+      # Pin verified action commits so mutable release tags cannot silently change CI code.
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Match package.json and the Node 22 production runtime.
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm

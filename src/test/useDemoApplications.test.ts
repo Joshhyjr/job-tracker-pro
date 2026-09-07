@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDemoApplications } from "@/hooks/useDemoApplications";
 import { getApplications, getDemoApplications, markDemoSeeded, saveApplications, saveDemoApplications } from "@/lib/storage";
 import type { JobApplication } from "@/lib/types";
+import * as storage from "@/lib/storage";
 
 function application(overrides: Partial<JobApplication> = {}): JobApplication {
   return {
@@ -22,6 +23,38 @@ function application(overrides: Partial<JobApplication> = {}): JobApplication {
 }
 
 describe("useDemoApplications", () => {
+  it("keeps syncing while a reset is pending after a concurrent local edit finishes", async () => {
+    saveDemoApplications([application()]);
+    markDemoSeeded();
+    let finishReset!: (rows: JobApplication[]) => void;
+    vi.spyOn(storage, "loadSeedData").mockImplementation(() => new Promise((resolve) => { finishReset = resolve; }));
+    const { result } = renderHook(() => useDemoApplications());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let reset!: Promise<void>;
+    act(() => { reset = result.current.resetDemo(); });
+    await act(async () => { await result.current.updateApplication(application({ notes: "Edit" })); });
+    // An unrelated synchronous demo mutation cannot hide the outstanding asynchronous seed fetch.
+    expect(result.current.syncing).toBe(true);
+    await act(async () => { finishReset([application()]); await reset; });
+    expect(result.current.syncing).toBe(false);
+  });
+
+  it("preserves the existing demo dataset when replacement IDs collide", async () => {
+    saveDemoApplications([application()]);
+    markDemoSeeded();
+    const { result } = renderHook(() => useDemoApplications());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await expect(result.current.replaceApplications([
+        application({ id: "duplicate", companyName: "First" }),
+        application({ id: "duplicate", companyName: "Second" }),
+      ])).rejects.toThrow("Duplicate application ID");
+    });
+    // Failed validation must leave both rendered and persisted jobs unchanged.
+    expect(result.current.applications[0].companyName).toBe("Sample Company");
+    expect(getDemoApplications()[0].companyName).toBe("Sample Company");
+  });
+
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();

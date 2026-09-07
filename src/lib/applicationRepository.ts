@@ -14,7 +14,7 @@ import {
 import { getFirestoreDatabase } from "./firebase";
 import { generateId, type ImportBackup } from "./storage";
 import type { JobApplication } from "./types";
-import { sanitizeActivityLog, sanitizeApplicationInput, sanitizeSingleLineText } from "./security";
+import { assertValidApplicationIds, sanitizeActivityLog, sanitizeApplicationInput, sanitizeSingleLineText } from "./security";
 
 const BATCH_OPERATION_LIMIT = 450;
 
@@ -171,6 +171,8 @@ async function commitOperations(
 export async function replaceApplications(userId: string, applications: JobApplication[]): Promise<void> {
   // Invalid workbooks can parse to zero rows; never turn that failure into an implicit full cloud deletion.
   if (applications.length === 0) throw new Error("Cannot replace applications with an empty dataset.");
+  // Check every row before cloud reads and chunked writes, especially before any stale records can be deleted.
+  assertValidApplicationIds(applications);
 
   const existing = await getDocs(applicationCollection(userId));
   const now = new Date().toISOString();
@@ -190,6 +192,7 @@ export async function replaceApplications(userId: string, applications: JobAppli
 
 export async function upsertApplications(userId: string, applications: JobApplication[]): Promise<void> {
   if (applications.length === 0) return;
+  assertValidApplicationIds(applications);
   const now = new Date().toISOString();
   // Incremental imports only set additions/explicit-ID updates; they never queue delete operations.
   await commitOperations(applications.map((application) => ({

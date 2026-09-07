@@ -92,6 +92,12 @@ function normalizeMetricStatus(raw: string | null | undefined): string {
   return normalized.toLowerCase() === "final interview" ? "Final Interview" : normalized;
 }
 
+function getCurrentMetricStatus(application: JobApplication): string {
+  const response = normalizeMetricStatus(application.responseStatus);
+  // Applied is also the parser's missing-column default; retain a populated current status in that case.
+  return response === "Applied" ? normalizeMetricStatus(application.currentStatus) : response;
+}
+
 export function getApplicationStages(application: JobApplication): Set<string> {
   const stages = new Set<string>();
   const addStage = (value: string | null | undefined) => {
@@ -189,7 +195,7 @@ export function buildJobSearchMetrics(applications: JobApplication[], now = new 
   let unclassifiedStatusCount = 0;
 
   datedApplications.forEach(({ application, age }) => {
-    const currentStatus = normalizeMetricStatus(application.responseStatus);
+    const currentStatus = getCurrentMetricStatus(application);
     if (AWAITING_HUMAN_STATUSES.has(currentStatus)) {
       if (age >= MATURE_COHORT_MIN_DAYS) stale++;
       else awaitingHumanResponse++;
@@ -216,7 +222,7 @@ export function buildJobSearchMetrics(applications: JobApplication[], now = new 
     followUpsDue: applications.filter((application) => isIntentionallyDueForFollowUp(application, today)).length,
     offersLast90Days: offerWindowCount,
     totalApplications: applications.length,
-    rejections: applications.filter((application) => normalizeMetricStatus(application.responseStatus) === "Rejected").length,
+    rejections: applications.filter((application) => getCurrentMetricStatus(application) === "Rejected").length,
     invalidOrFutureDateCount,
     unclassifiedStatusCount,
     qualityCoverageCount: applications.filter((application) => application.roleFit !== undefined && application.resumeTailored !== undefined).length,

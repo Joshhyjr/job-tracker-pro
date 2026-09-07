@@ -10,6 +10,7 @@ import {
   type WorkbookImportResult,
 } from "./storage";
 import type { JobApplication } from "./types";
+import { assertValidApplicationIds } from "./security";
 
 export type ApplicationImportMode = "merge" | "replace";
 
@@ -40,6 +41,11 @@ export async function applyConfirmedApplicationImport({
   persistReplacement,
   storageScope = "owner",
 }: ApplyConfirmedImportOptions): Promise<ImportBackup> {
+  // Replacement preserves every workbook row, so ambiguous IDs must fail before backup or persistence side effects.
+  if (mode === "replace") {
+    if (result.applications.length === 0) throw new Error("Cannot replace applications with an empty dataset.");
+    assertValidApplicationIds(result.applications);
+  }
   // Ordering is deliberate: a verified owner-cloud or demo-browser backup must exist before records can change.
   const backup = await persistBackup(currentApplications, fileName, mode);
   const nextApplications = mode === "replace" ? result.applications : plan.mergedApplications;

@@ -142,3 +142,40 @@ The status comparison uses `design-qa-dashboard-donut-comparison.jpg` to place t
 - P3: additional exact employer assets can be added to the local override registry as the user supplies them; unknown employers continue to use the safe favicon-or-building fallback.
 
 final result: passed
+
+## Analytics and Follow-ups screenshot redesign — 2026-09-02
+
+### Sources
+
+- Analytics reference: `/var/folders/k5/2mg5wrp13770r6y6gzt894l00000gn/T/TemporaryItems/NSIRD_screencaptureui_XloQzk/Screenshot 2026-09-02 at 13.06.09.png` (2294 × 1434 px)
+- Follow-ups reference: `/var/folders/k5/2mg5wrp13770r6y6gzt894l00000gn/T/TemporaryItems/NSIRD_screencaptureui_mbQ0pe/Screenshot 2026-09-02 at 13.06.23.png` (2310 × 1286 px)
+
+### Implementation evidence
+
+- Desktop browser viewport: 1072 × 1046 CSS px at device-pixel ratio 1.
+- Analytics full-page capture: `/private/tmp/job-tracker-design-qa/analytics-implementation.png` (1057 × 1160 px).
+- Follow-ups All-view capture: `/private/tmp/job-tracker-design-qa/follow-ups-implementation.png` (1057 × 2096 px).
+- Responsive checks used a 390 × 844 CSS px viewport override, then reset the browser to its default size. Captures: `/private/tmp/job-tracker-design-qa/analytics-mobile.png` and `/private/tmp/job-tracker-design-qa/follow-ups-mobile.png`.
+- Reference and implementation captures were inspected side by side on one comparison surface at `http://127.0.0.1:9090/index.html`.
+
+### State and scope
+
+- The implementation uses the app's public demo dataset and existing application shell. The Analytics reference uses different metric values; the Follow-ups reference shows overdue and completed rows while the current demo has completed rows only.
+- Page content, grouping, controls, visual hierarchy, and responsive behavior were compared. Dynamic counts and company names were not treated as fidelity defects.
+
+### Pass history
+
+1. Matched the Analytics header, three-stat summary, two-column chart/funnel row, action list, and role bars. Preserved the truthful `Qualified applications` and `All applications` legend.
+2. Matched Follow-ups with an overdue summary surface, pill tabs, grouped reminder cards, due-state emphasis, inline actions, and compact overflow actions. Preserved search and inline application-status editing.
+3. Tightened desktop breakpoints so Analytics keeps its two-column hierarchy and Follow-ups keeps tabs and search on one row without horizontal overflow.
+4. Verified mobile stacking, readable wrapping, usable actions, keyboard tabs, the Reopen reschedule dialog, filtering, and Add follow-up navigation.
+
+### Findings
+
+- No P0, P1, or P2 fidelity, behavior, accessibility, or responsive issues remain.
+- P3: the existing sidebar, public-demo alert, search field, and inline response-status controls are visible in the implementation but absent from the cropped references. They are intentionally retained product context and working behavior.
+- P3: live demo data differs from the mock reference data. Overdue ordering and mutations are covered by focused tests; no production or demo records were changed for screenshot matching.
+
+### Final result
+
+passed

@@ -43,6 +43,24 @@ function persistBrowserBackup(scope: "owner" | "demo" = "owner") {
 }
 
 describe("applyConfirmedApplicationImport", () => {
+  it("rejects duplicate replacement IDs before creating backups or changing import metadata", async () => {
+    const current = [application()];
+    const imported = [application({ id: "duplicate" }), application({ id: "duplicate", companyName: "Apple" })];
+    const persistBackup = vi.fn();
+    const persistReplacement = vi.fn();
+    saveApplications(current);
+    await expect(applyConfirmedApplicationImport({
+      currentApplications: current, fileName: "duplicate.xlsx", mode: "replace",
+      result: { applications: imported, warnings: [], preferredResponseStatusOrder: [], fieldPresence: noFieldPresence },
+      plan: planApplicationImport(current, imported), persistBackup, persistReplacement, persistMerge: vi.fn(),
+    })).rejects.toThrow("Duplicate application ID");
+    // Stop an ambiguous destructive import before either persistence adapter has side effects.
+    expect(persistBackup).not.toHaveBeenCalled();
+    expect(persistReplacement).not.toHaveBeenCalled();
+    expect(getLastImportMetadata()).toBeNull();
+    expect(getApplications()[0].id).toBe(current[0].id);
+  });
+
   it("creates the backup before writing and keeps existing jobs in the merged dataset", async () => {
     const current = [application()];
     const imported = [application({ id: "apple-application", companyName: "Apple", dateApplied: "2026-08-05" })];

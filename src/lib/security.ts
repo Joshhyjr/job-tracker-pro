@@ -49,6 +49,19 @@ export function sanitizeMultilineText(value: unknown, maxLength = MAX_NOTES_LENG
   return truncate(stripUnsafeControlCharacters(String(value ?? "").normalize("NFKC")).trim(), maxLength);
 }
 
+export function assertValidApplicationIds(applications: Pick<JobApplication, "id">[]): void {
+  const seen = new Set<string>();
+  applications.forEach(({ id }) => {
+    // Reject IDs that change during serialization or address multiple Firestore path segments before any writes begin.
+    if (typeof id !== "string" || !id || id !== sanitizeSingleLineText(id)
+      || id.includes("/") || id === "." || id === ".." || /^__.*__$/.test(id)) {
+      throw new Error("Invalid application ID. Use a non-empty, unmodified single document ID for each row.");
+    }
+    if (seen.has(id)) throw new Error("Duplicate application ID. Each imported row must have a unique application ID.");
+    seen.add(id);
+  });
+}
+
 export function sanitizeDateInput(value: unknown): string {
   const date = sanitizeSingleLineText(value, 10);
   return DATE_PATTERN.test(date) ? date : "";

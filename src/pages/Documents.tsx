@@ -92,6 +92,7 @@ export default function Documents({
   const applicationsRef = useRef(applications);
   const updateApplicationRef = useRef(onUpdateApplication);
   const pendingDocumentLinks = useRef(new Map<string, string>());
+  const applicationAttachmentWrites = useRef(new Map<string, Promise<void>>());
   const { toast } = useToast();
   const visible = useMemo(() => documents.filter((document) => document.category === category), [category, documents]);
   const selectedDocuments = useMemo(
@@ -161,46 +162,63 @@ export default function Documents({
       return;
     }
 
-    const pendingKey = `${match.application.id}\u0000${field}`;
-    const currentDocument = match.application.customFields?.[field] || pendingDocumentLinks.current.get(pendingKey);
-    if (currentDocument === document.name) {
-      if (automatic) return;
-      toast({ title: uploaded ? "Document uploaded" : "Already attached", description: `${document.name} is attached to ${match.application.companyName} — ${match.application.jobTitle}.` });
-      return;
-    }
-    if (currentDocument) {
-      if (automatic) return;
-      toast({
-        title: uploaded ? "Document uploaded — existing attachment kept" : "Existing attachment kept",
-        description: `${match.application.companyName} — ${match.application.jobTitle} already uses ${currentDocument}.`,
-      });
-      return;
-    }
-    const updateApplication = updateApplicationRef.current;
-    if (!updateApplication) {
-      if (automatic) return;
-      toast({ title: "Document not attached", description: "Application updates are not available right now.", variant: "destructive" });
-      return;
-    }
+    const applicationId = match.application.id;
+    const attachAfterPreviousWrite = async () => {
+      // Re-read after the previous save so different document fields preserve each other's links and history.
+      const currentApplication = applicationsRef.current.find((application) => application.id === applicationId);
+      if (!currentApplication) return;
+      const pendingKey = `${currentApplication.id}\u0000${field}`;
+      const currentDocument = currentApplication.customFields?.[field] || pendingDocumentLinks.current.get(pendingKey);
+      if (currentDocument === document.name) {
+        if (automatic) return;
+        toast({ title: uploaded ? "Document uploaded" : "Already attached", description: `${document.name} is attached to ${currentApplication.companyName} — ${currentApplication.jobTitle}.` });
+        return;
+      }
+      if (currentDocument) {
+        if (automatic) return;
+        toast({
+          title: uploaded ? "Document uploaded — existing attachment kept" : "Existing attachment kept",
+          description: `${currentApplication.companyName} — ${currentApplication.jobTitle} already uses ${currentDocument}.`,
+        });
+        return;
+      }
+      const updateApplication = updateApplicationRef.current;
+      if (!updateApplication) {
+        if (automatic) return;
+        toast({ title: "Document not attached", description: "Application updates are not available right now.", variant: "destructive" });
+        return;
+      }
 
-    const now = new Date().toISOString();
-    // Reserve this application field before awaiting Firestore so simultaneous scans cannot overwrite one another.
-    pendingDocumentLinks.current.set(pendingKey, document.name);
-    // Record the automatic link in both the existing document field and the application timeline for traceability.
-    const updatedApplication: JobApplication = {
-      ...match.application,
-      customFields: { ...(match.application.customFields || {}), [field]: document.name },
-      activityLog: [{ id: crypto.randomUUID(), date: now, type: "note", message: `Attached ${document.name} as ${field}` }, ...(match.application.activityLog || [])],
+      const now = new Date().toISOString();
+      // Reserve this application field before awaiting Firestore so simultaneous scans cannot overwrite one another.
+      pendingDocumentLinks.current.set(pendingKey, document.name);
+      // Record the automatic link in both the existing document field and the application timeline for traceability.
+      const updatedApplication: JobApplication = {
+        ...currentApplication,
+        customFields: { ...(currentApplication.customFields || {}), [field]: document.name },
+        activityLog: [{ id: crypto.randomUUID(), date: now, type: "note", message: `Attached ${document.name} as ${field}` }, ...(currentApplication.activityLog || [])],
+      };
+
+      try {
+        const savedApplication = await updateApplication(updatedApplication);
+        // Preserve the first attachment if a second file is uploaded before realtime application props refresh.
+        applicationsRef.current = applicationsRef.current.map((application) => application.id === savedApplication.id ? savedApplication : application);
+        toast({ title: uploaded ? "Document uploaded and attached" : automatic ? "Document attached automatically" : "Document attached", description: `${document.name} is linked to ${currentApplication.companyName} — ${currentApplication.jobTitle}.` });
+      } catch {
+        if (pendingDocumentLinks.current.get(pendingKey) === document.name) pendingDocumentLinks.current.delete(pendingKey);
+        toast({ title: uploaded ? "Document uploaded — attachment failed" : "Document not attached", description: "The file is safe in this browser, but the application update failed. Please retry.", variant: "destructive" });
+      }
     };
-
+    // Full-record saves for one application must be serialized; unrelated applications can still save concurrently.
+    const previousWrite = applicationAttachmentWrites.current.get(applicationId) ?? Promise.resolve();
+    const pendingWrite = previousWrite.then(attachAfterPreviousWrite, attachAfterPreviousWrite);
+    applicationAttachmentWrites.current.set(applicationId, pendingWrite);
     try {
-      const savedApplication = await updateApplication(updatedApplication);
-      // Preserve the first attachment if a second file is uploaded before realtime application props refresh.
-      applicationsRef.current = applicationsRef.current.map((application) => application.id === savedApplication.id ? savedApplication : application);
-      toast({ title: uploaded ? "Document uploaded and attached" : automatic ? "Document attached automatically" : "Document attached", description: `${document.name} is linked to ${match.application.companyName} — ${match.application.jobTitle}.` });
-    } catch {
-      if (pendingDocumentLinks.current.get(pendingKey) === document.name) pendingDocumentLinks.current.delete(pendingKey);
-      toast({ title: uploaded ? "Document uploaded — attachment failed" : "Document not attached", description: "The file is safe in this browser, but the application update failed. Please retry.", variant: "destructive" });
+      await pendingWrite;
+    } finally {
+      if (applicationAttachmentWrites.current.get(applicationId) === pendingWrite) {
+        applicationAttachmentWrites.current.delete(applicationId);
+      }
     }
   }, [toast]);
 

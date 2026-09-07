@@ -1,7 +1,7 @@
 import type { JobApplication } from "./types";
 import { loadExcelJs } from "./exceljs";
 
-const SPREADSHEET_FORMULA_PREFIX = /^[=+\-@\t\r]/;
+const SPREADSHEET_FORMULA_PREFIX = /^[=+\-@\t\r\n]/;
 
 export function neutralizeSpreadsheetFormula(value: unknown): unknown {
   // Office applications can execute formula-like CSV/XLSX cells, so force untrusted leading operators to plain text.
@@ -9,7 +9,7 @@ export function neutralizeSpreadsheetFormula(value: unknown): unknown {
   return typeof cell === "string" && SPREADSHEET_FORMULA_PREFIX.test(cell) ? `'${cell}` : cell;
 }
 
-function toRows(apps: JobApplication[]) {
+function canonicalRows(apps: JobApplication[]) {
   return apps.map((a) => ({
     // Stable IDs let re-imports update the exact exported record without relying on fuzzy identity matching.
     "Application ID": a.id,
@@ -39,12 +39,10 @@ function toRows(apps: JobApplication[]) {
     "Recruiter/Contact Name": a.recruiterContactName ?? "",
     "Interview Date": a.interviewDate ?? "",
     Tags: a.tags ?? "",
-    // Re-export custom spreadsheet columns so flexible imports remain round-trippable.
-    ...(a.customFields ?? {}),
   }));
 }
 
-function getExportHeaders(rows: ReturnType<typeof toRows>) {
+function getExportHeaders(rows: Array<Record<string, unknown>>) {
   const headers = new Set<string>([
     "Application ID",
     "Job Title",
@@ -79,9 +77,30 @@ function getExportHeaders(rows: ReturnType<typeof toRows>) {
   return Array.from(headers);
 }
 
+export function buildApplicationExportRows(apps: JobApplication[]): Array<Record<string, unknown>> {
+  const rows = canonicalRows(apps);
+  const canonicalHeaders = new Set(getExportHeaders([]));
+  const customHeaders = [...new Set(apps.flatMap((app) => Object.keys(app.customFields ?? {})))];
+  // Reserve every original header before allocating aliases so different rows cannot reuse a renamed column.
+  const usedHeaders = new Set([...canonicalHeaders, ...customHeaders]);
+  const aliases = new Map(customHeaders.map((header) => {
+    if (!canonicalHeaders.has(header)) return [header, header];
+    const base = `Custom: ${header}`;
+    let alias = base;
+    let suffix = 2;
+    while (usedHeaders.has(alias)) alias = `${base} (${suffix++})`;
+    usedHeaders.add(alias);
+    return [header, alias];
+  }));
+  return rows.map((row, index) => ({
+    ...row,
+    ...Object.fromEntries(Object.entries(apps[index].customFields ?? {}).map(([key, value]) => [aliases.get(key)!, value])),
+  }));
+}
+
 export function exportCSV(apps: JobApplication[]) {
   // CSV export neutralizes spreadsheet formulas and escapes cells before handing data to the browser download API.
-  const rows = toRows(apps);
+  const rows = buildApplicationExportRows(apps);
   const headers = getExportHeaders(rows);
   const csv = [headers, ...rows.map((row) => headers.map((header) => row[header as keyof typeof row] ?? ""))]
     .map((row) => row.map((cell) => `"${String(neutralizeSpreadsheetFormula(cell)).replace(/"/g, '""')}"`).join(","))
@@ -94,7 +113,7 @@ export async function exportXLSX(apps: JobApplication[]) {
   const ExcelJS = await loadExcelJs();
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Applications");
-  const rows = toRows(apps);
+  const rows = buildApplicationExportRows(apps);
   const headers = getExportHeaders(rows);
 
   worksheet.addRow(headers.map(neutralizeSpreadsheetFormula));

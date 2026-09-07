@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Documents from "@/pages/Documents";
 import { isPreviewableDocumentDataUrl } from "@/lib/documentPreview";
@@ -34,6 +34,28 @@ const marinerApplication: JobApplication = {
 };
 
 describe("Documents", () => {
+  it.each([false, true])("serializes resume and cover-letter links for one application (first fails: %s)", async (failFirst) => {
+    localStorage.setItem("job-tracker-documents-v2:demo", JSON.stringify([
+      { ...privateResume, name: "Mariner Resume.pdf" },
+      { ...privateResume, id: "cover-1", name: "Mariner Cover Letter.pdf", category: "Cover letters" },
+    ]));
+    let finishFirst!: () => void;
+    const onUpdateApplication = vi.fn()
+      .mockImplementationOnce((updated: JobApplication) => new Promise<JobApplication>((resolve, reject) => {
+        finishFirst = () => failFirst ? reject(new Error("Save failed")) : resolve(updated);
+      }))
+      .mockImplementation(async (updated: JobApplication) => updated);
+    render(<Documents applications={[marinerApplication]} mode="demo" onUpdateApplication={onUpdateApplication} />);
+    await waitFor(() => expect(onUpdateApplication).toHaveBeenCalledTimes(1));
+    await act(async () => { finishFirst(); });
+    await waitFor(() => expect(onUpdateApplication).toHaveBeenCalledTimes(2));
+    const second = onUpdateApplication.mock.calls[1][0] as JobApplication;
+    // The second write must include the first durable link/history, or continue cleanly after its failure.
+    expect(second.customFields?.["Cover Letter Used"]).toBe("Mariner Cover Letter.pdf");
+    expect(second.customFields?.["Resume Used"]).toBe(failFirst ? undefined : "Mariner Resume.pdf");
+    expect(second.activityLog).toHaveLength(failFirst ? 1 : 2);
+  });
+
   beforeEach(() => {
     localStorage.clear();
     toastMock.mockReset();

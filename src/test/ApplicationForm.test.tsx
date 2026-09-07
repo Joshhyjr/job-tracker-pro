@@ -38,6 +38,21 @@ function selectRequiredQualityFields() {
 }
 
 describe("ApplicationForm", () => {
+  it("defaults to the local calendar date when UTC has already advanced", () => {
+    // Construct local late evening so this regression works in both Halifax and UTC CI environments.
+    const localEvening = new Date(2026, 8, 5, 22, 30);
+    vi.useFakeTimers();
+    vi.setSystemTime(localEvening);
+    const isoSpy = vi.spyOn(Date.prototype, "toISOString").mockReturnValue("2026-09-06T01:30:00.000Z");
+    try {
+      render(<ApplicationForm />);
+      expect(screen.getByLabelText("Date Applied")).toHaveValue("2026-09-05");
+    } finally {
+      isoSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   beforeEach(() => {
     addApplicationMock.mockReset();
     navigateMock.mockReset();
