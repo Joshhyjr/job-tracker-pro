@@ -5,6 +5,8 @@ const STANDARD_RESPONSE_STATUSES = new Set([
   "Applied",
   "Pre-screen call",
   "Interview",
+  // Final Interview is a known interview stage, so fixed-status edits may advance it to terminal outcomes.
+  "Final Interview",
   "Offer",
   "Rejected",
   "No Response",
@@ -82,6 +84,7 @@ const RESPONSE_STATUS_COLORS: Record<string, string> = {
   "Auto-reply received": "hsl(200 85% 65%)",   // light blue
   "Human reply received": "hsl(271 70% 55%)",  // purple — distinct human reply
   Interview: "hsl(142 65% 45%)",               // green
+  "Final Interview": "hsl(142 65% 45%)",       // green (final-round detail)
   Offer: "hsl(152 75% 40%)",                   // emerald
   "On Hold": "hsl(35 90% 48%)",                // amber
   "No Response": "hsl(215 14% 50%)",           // slate / grey
@@ -125,7 +128,8 @@ export function getResponseStatusBadgeClass(raw: string, active: boolean): strin
 
   if (status === "Rejected") return active ? "bg-red-600 text-white border-red-600" : "bg-red-50 text-red-700 border-red-300";
   if (status === "Assessment") return active ? "bg-yellow-500 text-black border-yellow-500" : "bg-yellow-50 text-yellow-800 border-yellow-300";
-  if (status === "Interview") return active ? "bg-green-600 text-white border-green-600" : "bg-green-50 text-green-700 border-green-300";
+  // Final-round labels share the interview treatment while retaining their more precise text.
+  if (status === "Interview" || status === "Final Interview") return active ? "bg-green-600 text-white border-green-600" : "bg-green-50 text-green-700 border-green-300";
   if (status === "On Hold") return active ? "bg-amber-600 text-white border-amber-600" : "bg-amber-50 text-amber-800 border-amber-300";
   if (status === "No Response") return active ? "bg-slate-700 text-white border-slate-700" : "bg-slate-100 text-slate-700 border-slate-300";
   if (status === "Pre-screen call") return active ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-700 border-blue-300";
@@ -172,7 +176,8 @@ export function mapResponseStatusToCurrentStatus(raw: string | null | undefined)
   if (status === "Offer") return "Offer";
   if (status === "Rejected") return "Rejected";
   if (status === "No Response") return "No Response";
-  if (status === "Interview" || status === "Assessment") return "Interview";
+  // The fixed enum has one interview bucket, but the dynamic response label keeps final-round detail.
+  if (status === "Interview" || status === "Final Interview" || status === "Assessment") return "Interview";
   // On Hold is tracked as a response-stage label while the fixed current-status enum keeps it in the active Applied bucket.
   if (status === "On Hold") return "Applied";
   // Cancelled roles are no longer active, so keep them out of the generic Applied bucket.
@@ -200,7 +205,8 @@ export function mapCurrentStatusToResponseStatus(status: CurrentStatus): string 
 export function isInterviewPipelineResponseStatus(raw: string | null | undefined): boolean {
   const status = normalizeResponseStatus(raw);
   // Keep interview-rate math aligned across the dashboard and AI insights so pre-screens and assessments are counted once everywhere.
-  return status === "Pre-screen call" || status === "Interview" || status === "Assessment" || status === "Offer";
+  // Final Interview is distinct in response history but belongs to the same progression metric as Interview.
+  return status === "Pre-screen call" || status === "Interview" || status === "Final Interview" || status === "Assessment" || status === "Offer";
 }
 
 function isStandardResponseStatus(status: string): boolean {

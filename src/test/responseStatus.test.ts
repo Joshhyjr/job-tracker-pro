@@ -36,6 +36,8 @@ describe("normalizeResponseStatus", () => {
     expect(normalizeResponseStatus(" Offer received ")).toBe("Offer");
     expect(normalizeResponseStatus("Interview ")).toBe("Interview");
     expect(normalizeResponseStatus("interview scheduled")).toBe("Interview");
+    // Final-round stages carry useful pipeline detail and must not be swallowed by the generic interview alias.
+    expect(normalizeResponseStatus("final interview")).toBe("Final Interview");
     expect(normalizeResponseStatus("Rejected")).toBe("Rejected");
     expect(normalizeResponseStatus("No Response")).toBe("No Response");
     expect(normalizeResponseStatus("assessment")).toBe("Assessment");
@@ -114,6 +116,8 @@ describe("syncEditedResponseStatus", () => {
   it("keeps the paired response status aligned during standard status edits", () => {
     expect(syncEditedResponseStatus("Applied", "Interview", "Applied")).toBe("Interview");
     expect(syncEditedResponseStatus("No Response", "Offer", "No Response")).toBe("Offer");
+    // Moving beyond a final round must not leave the response stage stuck in the active pipeline.
+    expect(syncEditedResponseStatus("Interview", "Rejected", "Final Interview")).toBe("Rejected");
   });
 
   it("preserves a deliberate custom response-status override", () => {
@@ -150,6 +154,7 @@ describe("isInterviewPipelineResponseStatus", () => {
     expect(isInterviewPipelineResponseStatus("Pre-screen call")).toBe(true);
     expect(isInterviewPipelineResponseStatus("Assessment")).toBe(true);
     expect(isInterviewPipelineResponseStatus("Interview scheduled")).toBe(true);
+    expect(isInterviewPipelineResponseStatus("Final Interview")).toBe(true);
     expect(isInterviewPipelineResponseStatus("Offer received")).toBe(true);
     expect(isInterviewPipelineResponseStatus("Human reply received")).toBe(false);
     expect(isInterviewPipelineResponseStatus("Applied")).toBe(false);
@@ -176,6 +181,21 @@ describe("buildResponseStatusChangeApplication", () => {
       toStatus: "On Hold",
     });
     expect(mapResponseStatusToCurrentStatus("On Hold")).toBe("Applied");
+  });
+
+  it("preserves final-interview detail while mapping it to the interview bucket", () => {
+    const updated = buildResponseStatusChangeApplication(
+      app("Interview"),
+      "Final Interview",
+      "entry-final",
+      "2026-07-08T12:00:00.000Z",
+    );
+
+    // The dynamic response label stays precise while the fixed current-status enum remains compatible.
+    expect(updated).toMatchObject({
+      currentStatus: "Interview",
+      responseStatus: "Final Interview",
+    });
   });
 });
 

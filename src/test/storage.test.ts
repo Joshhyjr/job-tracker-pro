@@ -207,6 +207,22 @@ describe("mapRowsToApplications", () => {
     });
   });
 
+  it("preserves final-interview response stages during import", () => {
+    const [application] = mapRowsToApplications([
+      {
+        Company: "Northstar Labs",
+        Role: "Senior Analyst",
+        "Response Status": "Final Interview",
+      },
+    ]);
+
+    // The imported label stays precise while the fixed tracker status uses its interview-compatible bucket.
+    expect(application).toMatchObject({
+      currentStatus: "Interview",
+      responseStatus: "Final Interview",
+    });
+  });
+
   it("maps parsed geography fields without replacing the display location", () => {
     const [application] = mapRowsToApplications([
       {

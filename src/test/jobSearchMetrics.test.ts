@@ -67,6 +67,16 @@ describe("jobSearchMetrics", () => {
     expect(metrics.interviews.count).toBe(1);
   });
 
+  it("retains final-interview history as active interview progress", () => {
+    const finalist = application({ responseStatus: "Final Interview", currentStatus: "Interview" });
+
+    // Final Interview should remain a distinct stage without dropping out of active or interview metrics.
+    expect(hasReachedInterview(finalist)).toBe(true);
+    const metrics = buildJobSearchMetrics([finalist], NOW);
+    expect(metrics.activeProcess).toBe(1);
+    expect(metrics.unclassifiedStatusCount).toBe(0);
+  });
+
   it("includes only applications aged 21 through 90 days in conversion denominators", () => {
     const metrics = buildJobSearchMetrics([
       application({ id: "day-20", dateApplied: "2026-08-05", responseStatus: "Interview" }),
