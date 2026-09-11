@@ -18,6 +18,8 @@ import { sanitizeExternalHttpUrl } from "@/lib/security";
 
 export default function ApplicationDetail({ application, onBack, onUpdate, onDelete, isDemo = false }: { application: JobApplication; onBack: () => void; onUpdate: (application?: JobApplication) => void | Promise<JobApplication>; onDelete?: (id: string) => Promise<void>; isDemo?: boolean }) {
   const [app, setApp] = useState<JobApplication>({ ...application });
+  // Successful local writes become the edit baseline before a delayed parent or Firestore refresh arrives.
+  const persistedApplication = useRef<JobApplication>({ ...application });
   const [editing, setEditing] = useState(false);
   const [followNote, setFollowNote] = useState("");
   // The ref closes the same-render gap before disabled controls can block a second mutation.
@@ -32,6 +34,7 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
 
   useEffect(() => {
     // Route changes and parent refreshes can provide a newer record; reset the local draft to avoid saving stale data.
+    persistedApplication.current = { ...application };
     setApp({ ...application });
     setEditing(false);
     setFollowNote("");
@@ -53,31 +56,38 @@ export default function ApplicationDetail({ application, onBack, onUpdate, onDel
 
   // Keep optimistic detail state honest by restoring the last durable draft when persistence fails.
   async function persistApplication(next: JobApplication): Promise<boolean> {
-    const previous = app;
+    const previousVisible = app;
+    const previousPersisted = persistedApplication.current;
     let localFallbackWritten = false;
+    let savedApplication = next;
 
     try {
-      return await runExclusiveMutation(async () => {
+      const persisted = await runExclusiveMutation(async () => {
         setApp(next);
-        if (onDelete) await onUpdate(next);
+        if (onDelete) savedApplication = (await onUpdate(next)) || next;
         else {
           // The local fallback keeps this reusable page compatible with isolated previews and legacy tests.
           updateLocalApplication(next);
           localFallbackWritten = true;
-          await onUpdate(next);
+          savedApplication = (await onUpdate(next)) || next;
         }
       });
+      if (persisted) {
+        persistedApplication.current = savedApplication;
+        setApp(savedApplication);
+      }
+      return persisted;
     } catch (error) {
-      setApp(previous);
+      setApp(previousVisible);
       // A rejected preview callback must not leave browser storage ahead of the visible detail state.
-      if (localFallbackWritten) updateLocalApplication(previous);
+      if (localFallbackWritten) updateLocalApplication(previousPersisted);
       throw error;
     }
   }
 
   async function save() {
     // Manual edits must produce the same durable status history as one-click Quick Actions.
-    const updated = buildEditedApplicationWithStatusHistory(application, app, generateId(), new Date().toISOString());
+    const updated = buildEditedApplicationWithStatusHistory(persistedApplication.current, app, generateId(), new Date().toISOString());
     try {
       const persisted = await persistApplication(updated);
       if (!persisted) return;

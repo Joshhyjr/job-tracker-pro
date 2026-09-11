@@ -227,6 +227,51 @@ describe("ApplicationDetail", () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
+  it("does not duplicate a saved status transition before the parent refreshes", async () => {
+    const onUpdate = vi.fn().mockImplementation(async (updated: JobApplication) => updated);
+
+    render(
+      <ApplicationDetail
+        application={application({ currentStatus: "Applied", responseStatus: "Applied" })}
+        onBack={vi.fn()}
+        onUpdate={onUpdate}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Interview" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByDisplayValue("Frontend Engineer"), { target: { value: "Senior Frontend Engineer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(2));
+    const statusApplication = onUpdate.mock.calls[0][0] as JobApplication;
+    const editedApplication = onUpdate.mock.calls[1][0] as JobApplication;
+    // The successful quick action is already durable even when the incoming prop still has the old status.
+    expect(editedApplication.activityLog.filter((entry) => entry.type === "status_change"))
+      .toEqual(statusApplication.activityLog.filter((entry) => entry.type === "status_change"));
+  });
+
+  it("restores the durable browser record when a preview callback rejects an edit", async () => {
+    const onUpdate = vi.fn().mockRejectedValue(new Error("preview rejected"));
+
+    render(
+      <ApplicationDetail application={application()} onBack={vi.fn()} onUpdate={onUpdate} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByDisplayValue("Frontend Engineer"), { target: { value: "Senior Frontend Engineer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+    // Keep the visible draft retryable, but roll browser storage back to the last successful version.
+    expect(screen.getByDisplayValue("Senior Frontend Engineer")).toBeInTheDocument();
+    expect(updateApplicationMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ jobTitle: "Senior Frontend Engineer" }));
+    expect(updateApplicationMock).toHaveBeenNthCalledWith(2, expect.objectContaining({ jobTitle: "Frontend Engineer" }));
+  });
+
   it("refreshes the local draft when the selected application changes", () => {
     const onBack = vi.fn();
     const onUpdate = vi.fn();
