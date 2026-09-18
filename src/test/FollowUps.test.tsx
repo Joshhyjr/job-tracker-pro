@@ -204,6 +204,28 @@ describe("FollowUps", () => {
     expect(getTab("all")).toHaveAccessibleName("All (0)");
   });
 
+  it("rebases an immediate follow-up save on the last durable status change", async () => {
+    const onUpdate = vi.fn(async (item: JobApplication) => item);
+    // Keep parent props stale to reproduce the gap between a Firestore acknowledgement and its realtime refresh.
+    render(<MemoryRouter><FollowUps applications={[application("Rapid actions", "2026-09-01")]} onUpdate={onUpdate} /></MemoryRouter>);
+    fireEvent.click(getTab("upcoming"));
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Change status for Analyst at Rapid actions" }), { target: { value: "Auto-reply received" } });
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Mark done" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(2));
+
+    // The second write must retain the acknowledged status and its transition event despite stale parent data.
+    expect(onUpdate.mock.calls[1][0]).toEqual(expect.objectContaining({
+      responseStatus: "Auto-reply received",
+      activityLog: [
+        expect.objectContaining({ type: "follow_up", message: "Completed follow-up with Rapid actions" }),
+        expect.objectContaining({ type: "status_change", fromStatus: "Applied", toStatus: "Auto-reply received" }),
+      ],
+    }));
+  });
+
   it("keeps completed terminal reminders visible in the grouped row layout", () => {
     renderFollowUps([
       application("Completed rejected", "", true, { responseStatus: "Rejected", currentStatus: "Rejected" }),

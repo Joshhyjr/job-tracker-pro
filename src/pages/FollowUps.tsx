@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { addDays, differenceInCalendarDays, format, isValid, parseISO } from "date-fns";
 import { AlertTriangle, CalendarClock, Check, Mail, MoreHorizontal, Plus, Search } from "lucide-react";
@@ -55,6 +55,10 @@ export default function FollowUps({ applications, onUpdate }: { applications: Jo
   const [confirmBulkReschedule, setConfirmBulkReschedule] = useState(false);
   const [bulkRescheduling, setBulkRescheduling] = useState(false);
   const pendingIds = useRef(new Set<string>());
+  const applicationsRef = useRef(applications);
+  applicationsRef.current = applications;
+  // Keep acknowledged writes available until the realtime subscription confirms their newest activity entry.
+  const savedApplicationDrafts = useRef(new Map<string, JobApplication>());
   const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
   const { toast } = useToast();
   const now = useMemo(() => new Date(), []);
@@ -96,17 +100,48 @@ export default function FollowUps({ applications, onUpdate }: { applications: Jo
   }), [rows, search, tab]);
   const overdueRows = useMemo(() => rows.filter((row) => row.state === "overdue"), [rows]);
 
+  useEffect(() => {
+    savedApplicationDrafts.current.forEach((savedApplication, applicationId) => {
+      const confirmed = applications.find((application) => application.id === applicationId);
+      const latestSavedActivityId = savedApplication.activityLog[0]?.id;
+      // Deleted rows and realtime snapshots containing the saved event no longer need the local bridge.
+      if (!confirmed || (latestSavedActivityId && confirmed.activityLog.some((entry) => entry.id === latestSavedActivityId))) {
+        savedApplicationDrafts.current.delete(applicationId);
+      }
+    });
+  }, [applications]);
+
+  function rememberSavedApplication(savedApplication: JobApplication) {
+    const confirmed = applicationsRef.current.find((application) => application.id === savedApplication.id);
+    const latestSavedActivityId = savedApplication.activityLog[0]?.id;
+    // A fast subscription callback can confirm the write before its promise resolves; avoid retaining a stale bridge.
+    if (confirmed && latestSavedActivityId && confirmed.activityLog.some((entry) => entry.id === latestSavedActivityId)) {
+      savedApplicationDrafts.current.delete(savedApplication.id);
+    } else {
+      savedApplicationDrafts.current.set(savedApplication.id, savedApplication);
+    }
+  }
+
   async function save(application: JobApplication, changes: Partial<JobApplication>, message: string, showToast = true) {
     if (!onUpdate || pendingIds.current.has(application.id)) return false;
+    const confirmed = applicationsRef.current.find((item) => item.id === application.id);
+    if (!confirmed) return false;
+    // Firestore can acknowledge a write before props refresh, so follow-on actions must use the durable draft.
+    const latest = savedApplicationDrafts.current.get(application.id) ?? confirmed;
     pendingIds.current.add(application.id);
     setSavingIds(new Set(pendingIds.current));
     // Completing clears the active schedule; the activity entry preserves the completion history.
     const updated: JobApplication = {
-      ...application,
+      ...latest,
       ...changes,
-      activityLog: [{ id: generateId(), date: new Date().toISOString(), type: "follow_up", message }, ...(application.activityLog || [])],
+      activityLog: [{ id: generateId(), date: new Date().toISOString(), type: "follow_up", message }, ...(latest.activityLog || [])],
     };
-    try { await onUpdate(updated); if (showToast) toast({ title: "Follow-up updated", description: message }); return true; }
+    try {
+      const savedApplication = await onUpdate(updated);
+      rememberSavedApplication(savedApplication || updated);
+      if (showToast) toast({ title: "Follow-up updated", description: message });
+      return true;
+    }
     catch { if (showToast) toast({ title: "Update not saved", description: "The existing follow-up was kept. Please retry.", variant: "destructive" }); return false; }
     finally { pendingIds.current.delete(application.id); setSavingIds(new Set(pendingIds.current)); }
   }
@@ -142,14 +177,17 @@ export default function FollowUps({ applications, onUpdate }: { applications: Jo
 
   async function changeApplicationStatus(application: JobApplication, responseStatus: string) {
     if (!onUpdate || pendingIds.current.has(application.id)) return;
-    const current = applications.find((item) => item.id === application.id);
-    if (!current) return;
+    const confirmed = applicationsRef.current.find((item) => item.id === application.id);
+    if (!confirmed) return;
+    // Status changes share the same durable baseline as reminder actions on this row.
+    const current = savedApplicationDrafts.current.get(application.id) ?? confirmed;
     pendingIds.current.add(application.id);
     setSavingIds(new Set(pendingIds.current));
     // Reuse the application-list transition so both status fields and structured history stay synchronized.
     const updated = buildResponseStatusChangeApplication(current, responseStatus, generateId(), new Date().toISOString());
     try {
-      await onUpdate(updated);
+      const savedApplication = await onUpdate(updated);
+      rememberSavedApplication(savedApplication || updated);
       toast({ title: `${application.companyName} moved to ${responseStatus}.`, description: "The application status was saved." });
     } catch {
       toast({ title: "Status not saved", description: "The application kept its existing status. Please retry.", variant: "destructive" });
