@@ -132,6 +132,7 @@ describe("Documents", () => {
     blockScopedWrites = false;
     fireEvent.pointerDown(screen.getByRole("button", { name: "Actions for private-resume.pdf" }), { button: 0, ctrlKey: false });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete permanently" }));
 
     // The successful scoped mutation becomes the recovery point before the privacy-sensitive shared key is removed.
     await waitFor(() => expect(screen.queryByText("private-resume.pdf")).not.toBeInTheDocument());
@@ -151,11 +152,45 @@ describe("Documents", () => {
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Actions for private-resume.pdf" }), { button: 0, ctrlKey: false });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete permanently" }));
 
     // Failed writes leave both the current UI and the last durable browser copy unchanged.
     expect(screen.getByText("private-resume.pdf")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem(storageKey) || "[]")).toEqual([privateResume]);
     expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Document not saved", variant: "destructive" }));
+  });
+
+  it("renames a document through an in-page dialog", async () => {
+    const storageKey = "job-tracker-documents-v2:owner:owner-a";
+    localStorage.setItem(storageKey, JSON.stringify([privateResume]));
+    const promptSpy = vi.spyOn(window, "prompt");
+    render(<Documents applications={[]} mode="owner" ownerId="owner-a" />);
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Actions for private-resume.pdf" }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Document name" }), { target: { value: " tailored-resume.pdf " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+
+    // Embedded browsers do not need native prompt support, and only the trimmed name is persisted.
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText("tailored-resume.pdf")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(storageKey) || "[]")[0]).toEqual(expect.objectContaining({ name: "tailored-resume.pdf" }));
+  });
+
+  it("requires confirmation before permanently deleting a local document", async () => {
+    const storageKey = "job-tracker-documents-v2:owner:owner-a";
+    localStorage.setItem(storageKey, JSON.stringify([privateResume]));
+    render(<Documents applications={[]} mode="owner" ownerId="owner-a" />);
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Actions for private-resume.pdf" }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+    // Opening the destructive action must not mutate the only browser-local copy.
+    expect(screen.getByText("private-resume.pdf")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(storageKey) || "[]")).toEqual([privateResume]);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("button", { name: "Delete permanently" })).not.toBeInTheDocument();
+    expect(screen.getByText("private-resume.pdf")).toBeInTheDocument();
   });
 
   it("uses an exact inert MIME allowlist for document previews", () => {

@@ -1,9 +1,12 @@
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Eye, FileText, Link2, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import type { JobApplication } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from "@/lib/browserStorage";
@@ -86,6 +89,9 @@ export default function Documents({
   const [documents, setDocuments] = useState<StoredDocument[]>(() => loadDocuments(storageKey, mode === "owner"));
   const [category, setCategory] = useState<DocumentCategory>("Resumes");
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(() => new Set());
+  const [renamingDocument, setRenamingDocument] = useState<StoredDocument | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deletingDocument, setDeletingDocument] = useState<StoredDocument | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const activeStorageKey = useRef(storageKey);
   const documentsRef = useRef(documents);
@@ -118,6 +124,9 @@ export default function Documents({
     const scopedDocuments = loadDocuments(storageKey, mode === "owner");
     documentsRef.current = scopedDocuments;
     setDocuments(scopedDocuments);
+    // Account switches also dismiss actions for documents that no longer belong to the active scope.
+    setRenamingDocument(null);
+    setDeletingDocument(null);
   }, [mode, storageKey]);
 
   function persist(next: StoredDocument[]): boolean {
@@ -137,6 +146,44 @@ export default function Documents({
     // Keep rapid consecutive uploads based on the latest durable list instead of a stale render closure.
     documentsRef.current = next;
     setDocuments(next);
+    return true;
+  }
+
+  function openRenameDialog(document: StoredDocument) {
+    setRenamingDocument(document);
+    setRenameValue(document.name);
+  }
+
+  function renameDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!renamingDocument) return;
+    const nextName = renameValue.trim();
+    if (!nextName) return;
+    if (nextName === renamingDocument.name) {
+      setRenamingDocument(null);
+      return;
+    }
+
+    // Build from the latest durable list so a preceding upload cannot disappear during a rename.
+    const renamed = documentsRef.current.map((document) => document.id === renamingDocument.id
+      ? { ...document, name: nextName, updatedAt: new Date().toISOString() }
+      : document);
+    if (!persist(renamed)) return;
+    setRenamingDocument(null);
+    toast({ title: "Document renamed", description: `${nextName} is saved in this browser.` });
+  }
+
+  function deleteDocument(): boolean {
+    if (!deletingDocument) return false;
+    // Persistence is verified before the UI closes so quota failures keep the file visible and retryable.
+    if (!persist(documentsRef.current.filter((document) => document.id !== deletingDocument.id))) return false;
+    setSelectedDocumentIds((current) => {
+      const next = new Set(current);
+      next.delete(deletingDocument.id);
+      return next;
+    });
+    setDeletingDocument(null);
+    toast({ title: "Document deleted", description: `${deletingDocument.name} was removed from this browser.` });
     return true;
   }
 
@@ -290,10 +337,37 @@ export default function Documents({
           const usedByLabel = usedBy.length === 1 ? `${usedBy[0].companyName} — ${usedBy[0].jobTitle}` : usedBy.length > 1 ? `${usedBy.length} applications` : "Not attached";
           const attachmentField = getApplicationDocumentField(document.category);
           const canPreview = isPreviewableDocumentDataUrl(document.dataUrl);
-          return <div key={document.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 border-b px-4 py-3 last:border-b-0"><Checkbox disabled={!attachmentField} aria-label={`Select ${document.name}`} checked={selectedDocumentIds.has(document.id)} onCheckedChange={(checked) => setSelectedDocumentIds((current) => { const next = new Set(current); if (checked === true) next.add(document.id); else next.delete(document.id); return next; })} /><div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><FileText className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-xs font-semibold">{document.name}</span><span className="text-[10px] text-muted-foreground">{Math.max(1, Math.round(document.size / 1024))} KB · {new Date(document.updatedAt).toLocaleDateString()}</span></span></div><span className="max-w-64 truncate whitespace-nowrap text-[11px] text-muted-foreground" title={usedByLabel}>{usedByLabel}</span><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${document.name}`}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{canPreview && <DropdownMenuItem asChild><a href={document.dataUrl} target="_blank" rel="noreferrer"><Eye className="mr-2 h-4 w-4" />Preview</a></DropdownMenuItem>}<DropdownMenuItem asChild><a href={document.dataUrl} download={document.name}><Download className="mr-2 h-4 w-4" />Download</a></DropdownMenuItem><DropdownMenuItem onClick={() => { const name = window.prompt("Rename document", document.name)?.trim(); if (name) persist(documents.map((item) => item.id === document.id ? { ...item, name, updatedAt: new Date().toISOString() } : item)); }}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem>{attachmentField && <DropdownMenuItem onClick={() => chooseApplication([document])}><Link2 className="mr-2 h-4 w-4" />Choose existing application</DropdownMenuItem>}<DropdownMenuItem className="text-destructive" onClick={() => persist(documents.filter((item) => item.id !== document.id))}><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>;
+          return <div key={document.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 border-b px-4 py-3 last:border-b-0"><Checkbox disabled={!attachmentField} aria-label={`Select ${document.name}`} checked={selectedDocumentIds.has(document.id)} onCheckedChange={(checked) => setSelectedDocumentIds((current) => { const next = new Set(current); if (checked === true) next.add(document.id); else next.delete(document.id); return next; })} /><div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><FileText className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-xs font-semibold">{document.name}</span><span className="text-[10px] text-muted-foreground">{Math.max(1, Math.round(document.size / 1024))} KB · {new Date(document.updatedAt).toLocaleDateString()}</span></span></div><span className="max-w-64 truncate whitespace-nowrap text-[11px] text-muted-foreground" title={usedByLabel}>{usedByLabel}</span><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${document.name}`}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{canPreview && <DropdownMenuItem asChild><a href={document.dataUrl} target="_blank" rel="noreferrer"><Eye className="mr-2 h-4 w-4" />Preview</a></DropdownMenuItem>}<DropdownMenuItem asChild><a href={document.dataUrl} download={document.name}><Download className="mr-2 h-4 w-4" />Download</a></DropdownMenuItem><DropdownMenuItem onClick={() => openRenameDialog(document)}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem>{attachmentField && <DropdownMenuItem onClick={() => chooseApplication([document])}><Link2 className="mr-2 h-4 w-4" />Choose existing application</DropdownMenuItem>}<DropdownMenuItem className="text-destructive" onClick={() => setDeletingDocument(document)}><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>;
         })}
       </section>
       <p className="text-[10px] text-muted-foreground">Files stay in this browser. Resume and cover-letter filenames are matched to a single clear company/job, and only the filename link is synced to that application.</p>
+      <Dialog open={Boolean(renamingDocument)} onOpenChange={(open) => { if (!open) setRenamingDocument(null); }}>
+        <DialogContent>
+          <form className="space-y-4" onSubmit={renameDocument}>
+            <DialogHeader>
+              <DialogTitle>Rename document</DialogTitle>
+              <DialogDescription>Change the local filename. Existing application links keep their current filename.</DialogDescription>
+            </DialogHeader>
+            <Input aria-label="Document name" value={renameValue} onChange={(event) => setRenameValue(event.target.value)} autoFocus />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setRenamingDocument(null)}>Cancel</Button>
+              <Button type="submit" disabled={!renameValue.trim()}>Save name</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={Boolean(deletingDocument)} onOpenChange={(open) => { if (!open) setDeletingDocument(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deletingDocument?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>This permanently removes the browser-local file and cannot be undone. Any application link keeps its current filename.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={(event) => { if (!deleteDocument()) event.preventDefault(); }}>Delete permanently</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
