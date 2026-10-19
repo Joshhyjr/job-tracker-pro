@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-labelledby="title desc">
+  <title id="title">E-commerce Profitability Analysis</title>
+  <desc id="desc">Illustrated project placeholder with a shopping bag and chart bars, without reported metrics.</desc>
+  <!-- Use an illustration rather than implying that placeholder bars are measured results. -->
+  <rect width="640" height="360" rx="16" fill="#edf4fc"/>
+  <circle cx="520" cy="60" r="130" fill="#dce9fa"/>
+  <rect x="44" y="44" width="552" height="272" rx="12" fill="#fff" stroke="#c7d7ec" stroke-width="2"/>
+  <path d="M44 86h552" stroke="#c7d7ec" stroke-width="2"/>
+  <circle cx="64" cy="65" r="5" fill="#93b2dd"/>
+  <circle cx="82" cy="65" r="5" fill="#b9cde8"/>
+  <circle cx="100" cy="65" r="5" fill="#d9e3f1"/>
+  <rect x="80" y="129" width="118" height="116" rx="12" fill="#e7effb"/>
+  <path d="M108 161h62l9 60H99z M122 163v-12a17 17 0 0 1 34 0v12" fill="none" stroke="#315f9e" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M260 225h264" stroke="#d9e3f1" stroke-width="3"/>
+  <rect x="276" y="177" width="42" height="48" rx="5" fill="#b4cbed"/>
+  <rect x="344" y="149" width="42" height="76" rx="5" fill="#789fd3"/>
+  <rect x="412" y="121" width="42" height="104" rx="5" fill="#315f9e"/>
+  <text x="80" y="282" font-family="Arial,sans-serif" font-size="21" font-weight="700" fill="#203b64">E-commerce Profitability</text>
+  <text x="80" y="303" font-family="Arial,sans-serif" font-size="12" fill="#62748e">SQL · Python · Excel · Power BI  /  Project illustration</text>
+</svg>

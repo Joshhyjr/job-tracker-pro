@@ -87,6 +87,28 @@ describe("portfolio repository", () => {
     await expect(loadPortfolioContent()).resolves.toBeNull();
   });
 
+  it("restores local artwork for editor-created project IDs using verified repository links", async () => {
+    firestoreMocks.getDocFromServer.mockResolvedValue({
+      exists: () => true,
+      data: () => FALLBACK_PORTFOLIO_CONTENT.profile,
+    });
+    firestoreMocks.getDocsFromServer.mockImplementation(async (reference: { path: keyof typeof collectionContent }) => (
+      snapshot(reference.path === "portfolioProjects"
+        ? collectionContent.portfolioProjects.map((project, index) => ({
+          ...project,
+          id: `editor-project-${index}`,
+          preview: "https://untrusted.example/preview.png",
+        }))
+        : collectionContent[reference.path])
+    ));
+
+    const content = await loadPortfolioContent();
+
+    // Publishing through the editor must retain checked-in previews without trusting cloud image URLs.
+    expect(content?.projects[0].id).toBe("editor-project-0");
+    expect(content?.projects[0].preview).toBe(FALLBACK_PORTFOLIO_CONTENT.projects[0].preview);
+  });
+
   it("publishes every page section and removal in one atomic batch", async () => {
     const set = vi.fn();
     const remove = vi.fn();

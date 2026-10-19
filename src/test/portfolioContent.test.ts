@@ -12,7 +12,10 @@ describe("portfolio content validation", () => {
     // The fallback must remain independently publishable when Firestore has no usable snapshot.
     const result = portfolioPageContentSchema.safeParse(FALLBACK_PORTFOLIO_CONTENT);
     expect(result.success).toBe(true);
-    expect(FALLBACK_PORTFOLIO_PROJECTS.map((project) => project.order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    // Check ordering independently of how many projects are currently featured.
+    expect(FALLBACK_PORTFOLIO_PROJECTS.map((project) => project.order)).toEqual(
+      Array.from({ length: FALLBACK_PORTFOLIO_PROJECTS.length }, (_, index) => index),
+    );
   });
 
   it("rejects unsafe social links in otherwise valid page content", () => {

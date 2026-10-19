@@ -31,7 +31,7 @@ describe("Portfolio", () => {
     portfolioMocks.save.mockReset().mockImplementation(async (content) => content);
   });
 
-  it("publishes the three repository-grounded data projects", () => {
+  it("publishes the latest repository-grounded data projects", () => {
     // This regression check keeps every requested project and its primary destination visible on the public page.
     render(
       <MemoryRouter>
@@ -48,11 +48,18 @@ describe("Portfolio", () => {
     expect(screen.getByRole("heading", { name: "Quantium Retail Analytics" })).toBeInTheDocument();
 
     const projectWindow = screen.getByRole("list", { name: "Featured projects" });
+    // The latest public repositories lead the existing project collection.
+    expect(within(projectWindow).getAllByRole("heading").slice(0, 2).map((heading) => heading.textContent)).toEqual([
+      "E-commerce Profitability Analysis",
+      "Nova Scotia Action for Health Analysis",
+    ]);
     expect(projectWindow).toHaveClass("retro-projects-scroll");
     expect(projectWindow).toHaveAttribute("tabindex", "0");
     expect(screen.getByText("Scroll to explore ↓")).toBeInTheDocument();
 
     const requestedRepositories = [
+      "https://github.com/Joshhyjr/ecommerce-profitability-analysis",
+      "https://github.com/Joshhyjr/nova-scotia-action-for-health-analysis",
       "https://github.com/Joshhyjr/Covid_19_Analysis_SQL",
       "https://github.com/Joshhyjr/Movie-Industry-Analysis",
       "https://github.com/Joshhyjr/Quantium-Retail-Analytics",

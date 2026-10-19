@@ -40,7 +40,13 @@ function serializeRecord(record: { id: string; order: number } & Record<string, 
 }
 
 function deserializeProject(id: string, data: DocumentData): PortfolioProject {
-  const fallbackAsset = FALLBACK_PORTFOLIO_PROJECTS.find((project) => project.id === id);
+  // Editor-created projects use random IDs; verified repository links also identify local artwork.
+  const fallbackAsset = FALLBACK_PORTFOLIO_PROJECTS.find((project) => project.id === id)
+    ?? FALLBACK_PORTFOLIO_PROJECTS.find((project) => project.links.some((knownLink) => (
+      knownLink.label === "GitHub Repo"
+      && Array.isArray(data.links)
+      && data.links.some((link) => link?.href === knownLink.href)
+    )));
   // Only checked-in local assets are joined back onto otherwise public Firestore content.
   return portfolioProjectSchema.parse({
     id,
