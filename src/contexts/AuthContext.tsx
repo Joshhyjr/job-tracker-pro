@@ -23,12 +23,24 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function getSignInErrorMessage(error: unknown): string {
+function getAuthErrorMessage(error: unknown, action = "Google sign-in"): string {
+  // Network failures are recoverable; give users a retry path without exposing SDK internals.
+  if (error instanceof FirebaseError && error.code === "auth/network-request-failed") {
+    return `${action} could not reach Firebase. Check your connection and browser blocking settings, then retry.`;
+  }
   // Firebase reports blocked helper frames and API requests as an internal error, so surface a deploy-actionable message.
   if (error instanceof FirebaseError && error.code === "auth/internal-error") {
     return "Google sign-in could not start. Verify the deployed Firebase settings and Content Security Policy, then retry.";
   }
   return error instanceof Error ? error.message : "Google sign-in failed. Please retry.";
+}
+
+function logAuthError(action: string, error: unknown) {
+  // Provider errors can contain account details, so log only the diagnostic code.
+  const code = error instanceof FirebaseError && /^auth\/[a-z-]+$/.test(error.code)
+    ? error.code
+    : "auth/unknown";
+  console.error(`[firebase-auth] ${action}`, code);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -38,20 +50,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
-    const auth = getFirebaseAuth();
-
-    // The observer is the single source of truth for restored and newly created auth sessions.
-    return onAuthStateChanged(auth, async (nextUser) => {
-      if (nextUser && nextUser.email?.toLowerCase() !== ALLOWED_EMAIL) {
-        await firebaseSignOut(auth);
-        setUser(null);
-        setError(`Access is restricted to ${ALLOWED_EMAIL}.`);
-      } else {
-        setUser(nextUser);
-        setError("");
-      }
+    try {
+      const auth = getFirebaseAuth();
+      // Keep the observer synchronous: Firebase does not await promises returned by listeners.
+      return onAuthStateChanged(auth, (nextUser) => {
+        if (nextUser && nextUser.email?.toLowerCase() !== ALLOWED_EMAIL) {
+          // Deny local access immediately, even if clearing the Firebase session fails.
+          setUser(null);
+          setError(`Access is restricted to ${ALLOWED_EMAIL}.`);
+          void firebaseSignOut(auth).catch((signOutError: unknown) => {
+            logAuthError("Restricted session cleanup failed", signOutError);
+            setError(`Access is restricted to ${ALLOWED_EMAIL}. ${getAuthErrorMessage(signOutError, "Session cleanup")}`);
+          });
+        } else {
+          setUser(nextUser);
+          setError("");
+        }
+        setLoading(false);
+      });
+    } catch (initializationError) {
+      // Leave the public app usable if local auth initialization cannot complete.
+      logAuthError("Session initialization failed", initializationError);
+      setError(getAuthErrorMessage(initializationError, "Session initialization"));
       setLoading(false);
-    });
+    }
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
@@ -74,12 +96,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (signInError) {
         // Popup cancellation and provider failures should remain recoverable from the login screen.
-        console.error("[firebase-auth] Google sign-in failed", signInError);
-        setError(getSignInErrorMessage(signInError));
+        logAuthError("Google sign-in failed", signInError);
+        setError(getAuthErrorMessage(signInError));
       }
     },
     signOut: async () => {
-      if (isFirebaseConfigured) await firebaseSignOut(getFirebaseAuth());
+      if (!isFirebaseConfigured) return;
+      setError("");
+      try {
+        await firebaseSignOut(getFirebaseAuth());
+      } catch (signOutError) {
+        // Menu handlers discard this promise, so report failures here and preserve the active session.
+        logAuthError("Sign-out failed", signOutError);
+        setError(getAuthErrorMessage(signOutError, "Sign-out"));
+      }
     },
   }), [error, loading, user]);
 

@@ -254,9 +254,10 @@ function JobTrackerShell({
 }
 
 function OwnerJobTracker({ user }: { user: User }) {
-  const { signOut } = useAuth();
+  const { signOut, error } = useAuth();
   const data = useApplications(user);
-  return <JobTrackerShell {...data} mode="owner" user={user} onSignOut={signOut} />;
+  // Sign-out failures must remain visible while the owner session is still active.
+  return <JobTrackerShell {...data} mode="owner" user={user} authError={error} onSignOut={signOut} />;
 }
 
 function DemoJobTracker({ authError, onSignIn }: { authError: string; onSignIn: () => Promise<void> }) {
