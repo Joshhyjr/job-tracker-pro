@@ -1,3 +1,4 @@
+import { resolvePortfolioLink, trackerUrl } from "@/lib/siteDomains";
 import { lazy, Suspense, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -262,7 +263,7 @@ function CenterColumn({ content, onEdit }: { content: PortfolioPageContent; onEd
               <FileText className="h-3.5 w-3.5" /> View Resume
             </a>
             <Link
-              to="/app"
+              to={trackerUrl()}
               className="inline-flex items-center gap-1.5 rounded-sm border border-[hsl(var(--retro-border))] bg-[hsl(var(--retro-soft))] px-2.5 py-1 text-[12px] font-semibold text-[hsl(var(--retro-navy))] hover:bg-white"
             >
               <Briefcase className="h-3.5 w-3.5" /> Launch Job Tracker
@@ -385,11 +386,12 @@ function CenterColumn({ content, onEdit }: { content: PortfolioPageContent; onEd
                 </div>
                 <p className="mt-0.5 text-[12px] text-[hsl(var(--retro-text))]">{p.description}</p>
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px]">
+                  {/* Resolve checked-in and published tracker links against the current production host. */}
                   {(Array.isArray(p.links) ? p.links : []).map((l, linkIndex) =>
-                    l.href.startsWith("/") ? (
-                      <Link key={`${p.id}-link-${linkIndex}`} to={l.href} className="retro-link">{l.label}</Link>
+                    resolvePortfolioLink(l.href).startsWith("/") ? (
+                      <Link key={`${p.id}-link-${linkIndex}`} to={resolvePortfolioLink(l.href)} className="retro-link">{l.label}</Link>
                     ) : (
-                      <a key={`${p.id}-link-${linkIndex}`} href={l.href} className="retro-link" target="_blank" rel="noreferrer">
+                      <a key={`${p.id}-link-${linkIndex}`} href={resolvePortfolioLink(l.href)} className="retro-link" target="_blank" rel="noreferrer">
                         {l.label}
                       </a>
                     ),

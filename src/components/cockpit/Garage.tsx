@@ -1,3 +1,5 @@
+// Use the same destination for this alternate portfolio and the main page.
+import { trackerUrl } from "@/lib/siteDomains";
 import { ArrowUpRight, Github } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -33,7 +35,7 @@ const projects: Project[] = [
     stack: "React · Vite · TypeScript · Recharts",
     role: "Designer & Developer",
     status: "Live",
-    open: { href: "/app", label: "Launch", internal: true },
+    open: { href: trackerUrl(), label: "Launch", internal: true },
     source: "https://github.com/Joshhyjr/job-tracker-pro",
   },
   {

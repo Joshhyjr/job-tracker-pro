@@ -5,7 +5,21 @@
 
 A modern job application tracking platform designed to help users organise applications, monitor progress, and gain intelligent insights into their job search.
 
-Production: [www.jkivaria.com](https://www.jkivaria.com)
+Portfolio: [www.jkivaria.com](https://www.jkivaria.com) (the apex domain redirects to www)
+
+Job Tracker: [job-tracker-pro-joshhyjr-s-projects.vercel.app](https://job-tracker-pro-joshhyjr-s-projects.vercel.app)
+
+### Moving browser data between domains
+
+Both sites use one Vercel project and the same Firebase database. The tracker domain opens `/app`; `/app/*` deep links remain supported. Local development and branch previews retain the portfolio at `/` and tracker at `/app`.
+
+On the old portfolio domain, visit `/app/transfer`, sign in to include private data, and **Export local data**. Open the new tracker, sign in with the same owner account, then choose **Settings → Transfer browser data**. Choose the JSON file, review the replacement preview, and restore it. The transfer excludes Firebase sessions and unrelated browser storage. It retains the source data and verifies each destination write; failed writes attempt to restore previous destination values.
+
+Verify your documents on the tracker before returning to the old domain's recovery page and choosing **Confirm move for this browser**. That enables redirects only in that browser, preserving requested paths, queries and fragments. `/app/transfer` always stays available for recovery. Repeat the transfer for other browsers with local data. The downloaded file contains private data; delete it after verification.
+
+Legacy local application rows remain recovery copies: if Firebase already completed its initial migration, export their recovery workbook from the transfer page and merge it using the tracker's existing spreadsheet import. Transfer itself does not overwrite Firebase records.
+
+Production configuration requires the stable tracker hostname in Firebase Authentication's authorized domains. API calls stay same-origin (`/api/contact` on the portfolio and `/api/ai-insights` on the tracker); the existing Vercel security headers and secrets are shared. The hostname constants live in `src/lib/siteDomains.ts`.
 
 ## Features
 

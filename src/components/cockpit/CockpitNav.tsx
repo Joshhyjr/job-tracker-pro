@@ -1,3 +1,5 @@
+// Centralized links keep the tracker on its own production domain.
+import { trackerUrl } from "@/lib/siteDomains";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
@@ -70,7 +72,7 @@ export default function CockpitNav() {
         <div className="flex items-center gap-3">
           <StatusBar />
           <Button asChild size="sm" variant="outline" className="hidden md:inline-flex">
-            <Link to="/app">Launch Job Tracker</Link>
+            <Link to={trackerUrl()}>Launch Job Tracker</Link>
           </Button>
           <Button
             variant="ghost"
@@ -102,7 +104,7 @@ export default function CockpitNav() {
               </a>
             ))}
             <Button asChild size="sm" variant="outline" className="mt-2">
-              <Link to="/app" onClick={() => setOpen(false)}>
+              <Link to={trackerUrl()} onClick={() => setOpen(false)}>
                 Launch Job Tracker
               </Link>
             </Button>

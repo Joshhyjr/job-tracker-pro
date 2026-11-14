@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useParams, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { useMemo, useState } from "react";
 import AppNavbar from "@/components/AppNavbar";
 import JobTrackerSidebar from "@/components/JobTrackerSidebar";
@@ -37,6 +37,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { User } from "firebase/auth";
 import { SentryRoutes } from "@/instrument";
+
+import { getSiteKind, RECOVERY_PATH } from "@/lib/siteDomains";
+import DomainTransferGate from "@/components/DomainTransferGate";
+import LocalDataTransfer from "@/components/LocalDataTransfer";
 
 const queryClient = new QueryClient();
 
@@ -276,6 +280,12 @@ function PublicJobTracker() {
 
 function AppContent() {
   const location = useLocation();
+  const site = getSiteKind();
+  // Production hosts separate the experiences while previews and localhost retain both entry points.
+  if (site === "portfolio" && (location.pathname === "/app" || location.pathname.startsWith("/app/"))) return <DomainTransferGate />;
+  if (site === "tracker" && location.pathname === "/") return <Navigate replace to={`/app${location.search}${location.hash}`} />;
+  // Recovery/import stays outside the tracker shell so restoring storage cannot race cloud hydration.
+  if (location.pathname === RECOVERY_PATH) return <main className="mx-auto max-w-3xl space-y-5 p-5 py-12"><LocalDataTransfer /><a href="/app" className="underline">Open Job Tracker</a></main>;
   // Portfolio is the public site; everything under /app/* is the Job Tracker app.
   const isPortfolio = location.pathname === "/" || location.pathname === "";
 

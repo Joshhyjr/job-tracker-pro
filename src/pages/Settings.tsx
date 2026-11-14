@@ -1,6 +1,6 @@
 import type { User } from "firebase/auth";
 import { Bug, Cloud, CloudOff, Database, ExternalLink, ShieldCheck } from "lucide-react";
-import { Link } from "react-router-dom";
+import { portfolioUrl, RECOVERY_PATH } from "@/lib/siteDomains";
 import PageHeader from "@/components/PageHeader";
 import { SentryErrorButton } from "@/components/SentryErrorButton";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +11,15 @@ export default function Settings({ mode, user, syncing, offline }: { mode: "demo
       <PageHeader title="Settings" description="Workspace identity, data mode, and privacy details." />
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="app-panel overflow-hidden"><div className="app-panel-title flex items-center gap-2"><Database className="h-4 w-4 text-primary" />Workspace</div><dl className="divide-y text-xs"><div className="flex items-center justify-between gap-4 p-4"><dt className="text-muted-foreground">Mode</dt><dd><Badge variant="secondary">{mode === "owner" ? "Private owner" : "Public demo"}</Badge></dd></div><div className="flex items-center justify-between gap-4 p-4"><dt className="text-muted-foreground">Account</dt><dd className="max-w-[65%] truncate font-medium">{user?.email || "Not signed in"}</dd></div><div className="flex items-center justify-between gap-4 p-4"><dt className="text-muted-foreground">Sync</dt><dd className="flex items-center gap-1.5 font-medium">{offline ? <CloudOff className="h-4 w-4 text-amber-600" /> : <Cloud className="h-4 w-4 text-emerald-600" />}{syncing ? "Syncing" : offline ? "Offline" : mode === "owner" ? "Firestore synced" : "Browser local"}</dd></div></dl></section>
-        <section className="app-panel overflow-hidden"><div className="app-panel-title flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" />Privacy boundaries</div><div className="space-y-3 p-4 text-xs leading-5 text-muted-foreground"><p>Demo data is synthetic and isolated to this browser. Owner records use the authenticated cloud repository.</p><p>AI summaries exclude notes, job links, recruiter details, and custom field values.</p><Link to="/" className="inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">View JK.space portfolio <ExternalLink className="h-3.5 w-3.5" /></Link></div></section>
+        <section className="app-panel overflow-hidden"><div className="app-panel-title flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" />Privacy boundaries</div><div className="space-y-3 p-4 text-xs leading-5 text-muted-foreground"><p>Demo data is synthetic and isolated to this browser. Owner records use the authenticated cloud repository.</p><p>AI summaries exclude notes, job links, recruiter details, and custom field values.</p><a href={portfolioUrl()} className="inline-flex items-center gap-1.5 font-semibold text-primary hover:underline">View JK.space portfolio <ExternalLink className="h-3.5 w-3.5" /></a></div></section>
       </div>
+      {/* A manual transfer keeps browser-only files recoverable across domain changes. */}
+      <section className="app-panel space-y-3 p-5">
+        <h2 className="text-lg font-semibold">Transfer browser data</h2>
+        <p className="text-sm text-muted-foreground">Export or restore browser-only documents, local data and preferences when moving domains.</p>
+        {/* A full navigation unmounts active data hooks before restoring their browser storage. */}
+        <a href={RECOVERY_PATH} className="text-sm font-medium underline">Transfer browser data</a>
+      </section>
       {import.meta.env.VITE_SENTRY_TEST_MODE === "true" && import.meta.env.VITE_SENTRY_DSN && (
         // Require both an explicit diagnostic flag and a DSN so this deliberate failure cannot appear accidentally.
         <section className="app-panel overflow-hidden">
