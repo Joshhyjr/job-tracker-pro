@@ -1,3 +1,5 @@
+// Portfolio escape links must leave the tracker origin in production.
+import { portfolioUrl } from "@/lib/siteDomains";
 import { ChangeEvent, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -88,7 +90,7 @@ export default function AppNavbar({
 
         <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Job Tracker utilities">
           <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 hover:text-white" asChild>
-            <Link to="/" className="gap-1.5"><ExternalLink className="h-3.5 w-3.5" />JK.space</Link>
+            <Link to={portfolioUrl()} className="gap-1.5"><ExternalLink className="h-3.5 w-3.5" />JK.space</Link>
           </Button>
           <Button variant="ghost" size="icon" className="h-9 w-9 text-white hover:bg-white/10 hover:text-white" aria-label="Notifications">
             <Bell className="h-4 w-4" />
@@ -151,7 +153,7 @@ export default function AppNavbar({
       {mobileOpen && (
         <div id="mobile-navigation" className="border-t border-white/15 bg-primary px-4 py-3 md:hidden">
           <div className="grid gap-1 text-sm">
-            <Link to="/" onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">Back to JK.space</Link>
+            <Link to={portfolioUrl()} onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">Back to JK.space</Link>
             <Link to="/app/applications" onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">Applications</Link>
             <Link to="/app/follow-ups" onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">Follow-ups</Link>
             <Link to="/app/analytics" onClick={() => setMobileOpen(false)} className="rounded-md px-3 py-2 hover:bg-white/10">AI &amp; Analytics</Link>

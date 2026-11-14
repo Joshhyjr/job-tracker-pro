@@ -1,3 +1,5 @@
+// Portfolio escape links must leave the tracker origin in production.
+import { portfolioUrl } from "@/lib/siteDomains";
 import { ChangeEvent, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -56,7 +58,7 @@ export default function JobTrackerSidebar({ onExportCSV, onExportXLSX, onImportX
             <div className="min-w-0">
               <p className="truncate text-sm font-bold">Joshua Kivaria</p>
               <p className="text-[11px] text-muted-foreground">Halifax, Nova Scotia</p>
-              <Link to="/" className="mt-1 inline-block text-[11px] font-semibold text-primary hover:underline">Back to JK.space</Link>
+              <Link to={portfolioUrl()} className="mt-1 inline-block text-[11px] font-semibold text-primary hover:underline">Back to JK.space</Link>
             </div>
           </div>
           <p className="mt-3 text-xs leading-5 text-muted-foreground">Your job search, organized.</p>
